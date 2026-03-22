@@ -1,0 +1,14 @@
+node_modules
+dist
+.turbo
+.expo
+.expo-shared
+coverage
+*.tsbuildinfo
+.DS_Store
+apps/mobile/.expo
+apps/mobile/.expo-shared
+apps/mobile/node_modules
+supabase/.temp
+*.db
+*.db-journal

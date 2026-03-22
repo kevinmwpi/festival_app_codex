@@ -1,0 +1,17 @@
+{
+  "name": "@festival/notification-utils",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "node -e \"console.log('No notification-utils tests configured')\"",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@festival/domain": "*",
+    "expo-notifications": "~55.0.13",
+    "react-native-mmkv": "^4.3.0"
+  }
+}

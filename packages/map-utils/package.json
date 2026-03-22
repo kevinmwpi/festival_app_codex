@@ -1,0 +1,15 @@
+{
+  "name": "@festival/map-utils",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "node -e \"console.log('No map-utils tests configured')\"",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@festival/domain": "*"
+  }
+}

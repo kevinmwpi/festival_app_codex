@@ -1,0 +1,12 @@
+{
+  "name": "@festival/transport",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "node -e \"console.log('No transport tests configured')\"",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  }
+}
