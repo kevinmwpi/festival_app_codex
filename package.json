@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "start": "npm run start --workspace=@festival/admin-tools",
     "build": "turbo run build",
     "test": "turbo run test",
     "lint": "turbo run lint"
