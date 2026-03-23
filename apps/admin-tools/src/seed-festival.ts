@@ -9,7 +9,7 @@ interface SeedPayload {
   artists: Array<Record<string, unknown>>;
   sets: Array<Record<string, unknown>>;
 }
-
+ 
 const defaultSeedPath = path.resolve(__dirname, '../../../seed-data/sample-festival.json');
 const supabaseUrl = process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
