@@ -3,10 +3,13 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
+    "build:workspace-deps": "npm run build -w @festival/domain -w @festival/sync-engine -w @festival/ui -w @festival/map-utils -w @festival/notification-utils -w @festival/data-access",
+    "prestart": "npm run build:workspace-deps",
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "prebuild": "npm run build:workspace-deps",
     "build": "tsc --noEmit",
     "test": "node -e \"console.log('No mobile tests configured')\"",
     "lint": "tsc --noEmit"

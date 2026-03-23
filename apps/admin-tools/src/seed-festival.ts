@@ -10,6 +10,7 @@ interface SeedPayload {
   sets: Array<Record<string, unknown>>;
 }
 
+const defaultSeedPath = path.resolve(__dirname, '../../../seed-data/sample-festival.json');
 const supabaseUrl = process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -39,11 +40,7 @@ async function upsertTable(table: string, rows: Array<Record<string, unknown>>):
 }
 
 async function main(): Promise<void> {
-  const inputPath = process.argv[2];
-  if (!inputPath) {
-    throw new Error('Usage: npx ts-node apps/admin-tools/src/seed-festival.ts <seed-file.json>');
-  }
-
+  const inputPath = process.argv[2] ?? defaultSeedPath;
   const payload = loadPayload(inputPath);
 
   const festivalCount = await upsertTable('festivals', [payload.festival]);

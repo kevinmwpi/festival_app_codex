@@ -3,7 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/seed-festival.js",
     "test": "node -e \"console.log('No admin-tools tests configured')\"",
     "lint": "tsc -p tsconfig.json --noEmit"
   },
