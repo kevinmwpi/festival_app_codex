@@ -16,7 +16,7 @@ interface AppStoreState {
 type AppStore = StoreApi<AppStoreState>;
 
 const AppStoreContext = createContext<AppStore | null>(null);
-
+ 
 function createAppStore() {
   return createStore<AppStoreState>((set) => ({
     activeFestivalId: DEFAULT_FESTIVAL_ID,
