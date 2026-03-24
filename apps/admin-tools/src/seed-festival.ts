@@ -11,6 +11,11 @@ interface SeedPayload {
   sets: Array<Record<string, unknown>>;
 }
 
+interface PostgrestLikeError {
+  code?: string;
+  message?: string;
+}
+
 const defaultSeedPath = path.resolve(__dirname, '../../../seed-data/sample-festival.json');
 const repoRoot = path.resolve(__dirname, '../../..');
 
@@ -71,6 +76,17 @@ function formatError(error: unknown): string {
   }
 
   if (typeof error === 'object' && error !== null) {
+    const maybePostgrestError = error as PostgrestLikeError;
+
+    if (maybePostgrestError.code === 'PGRST205') {
+      return [
+        maybePostgrestError.message ?? "Could not find the table 'public.festivals' in the schema cache",
+        'The target Supabase project is missing this repo\'s expected public tables, or PostgREST has not refreshed its schema cache yet.',
+        'Apply the repo migrations first: supabase/migrations/001_initial_schema.sql, 002_rls.sql, and 003_supporting_tables.sql.',
+        'If you already applied them, run `select pg_notification_queue_usage();` in the Supabase SQL Editor to refresh the schema cache.',
+      ].join('\n');
+    }
+
     return inspect(error, { depth: 5, colors: false });
   }
 
