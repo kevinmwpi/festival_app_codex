@@ -5,8 +5,11 @@ import { createMMKV } from 'react-native-mmkv';
 import type { Database } from './database.types';
 import type { UserRow } from './models';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? 'https://example.supabase.co';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? 'development-anon-key';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://example.supabase.co';
+const supabaseAnonKey =
+  process.env.EXPO_PUBLIC_SUPABASE_KEY ??
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
+  'development-anon-key';
 
 const storage = createMMKV({ id: 'festival-auth' });
 
