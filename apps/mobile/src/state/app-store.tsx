@@ -2,7 +2,7 @@ import React, { createContext, useContext, useRef } from 'react';
 import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
 
-export const DEFAULT_FESTIVAL_ID = 'festival-sunstream-2026';
+export const DEFAULT_FESTIVAL_ID = '11111111-1111-4111-8111-111111111111';
 
 interface AppStoreState {
   activeFestivalId: string;
