@@ -83,7 +83,7 @@ function formatError(error: unknown): string {
         maybePostgrestError.message ?? "Could not find the table 'public.festivals' in the schema cache",
         'The target Supabase project is missing this repo\'s expected public tables, or PostgREST has not refreshed its schema cache yet.',
         'Apply the repo migrations first: supabase/migrations/001_initial_schema.sql, 002_rls.sql, and 003_supporting_tables.sql.',
-        'If you already applied them, run `select pg_notification_queue_usage();` in the Supabase SQL Editor to refresh the schema cache.',
+        "If you already applied them, run `NOTIFY pgrst, 'reload schema';` in the Supabase SQL Editor to refresh the schema cache.",
       ].join('\n');
     }
 
