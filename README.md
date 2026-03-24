@@ -144,12 +144,6 @@ npx ts-node apps/admin-tools/src/seed-festival.ts seed-data/sample-festival.json
 
 The seed flow is written to be idempotent through Supabase upserts.
 
-For deployed or CI seed runs, the admin tool also supports:
-
-```bash
-SUPABASE_SEED_FILE=seed-data/sample-festival.json
-```
-
 ### Railway Admin Tools Setup
 
 `apps/admin-tools` is a one-off seed job, not a long-running web server.
@@ -161,9 +155,9 @@ For Railway, configure the `festival/admin-tools` service with:
 - Variables:
   - `SUPABASE_URL`
   - `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SECRET_KEY`
-  - optional `SUPABASE_SEED_FILE`
 
 The admin seed job only reads server-side vars and does not fall back to `EXPO_PUBLIC_*` values.
+It uses the bundled sample seed file by default, unless you pass an explicit CLI file path.
 The mobile app only reads `EXPO_PUBLIC_*` values.
 This repo also accepts Supabase's newer mobile env name `EXPO_PUBLIC_SUPABASE_KEY` as an alias for `EXPO_PUBLIC_SUPABASE_ANON_KEY`.
 If you want this to run on a schedule, use a Railway cron job or manual redeploy instead of treating it like an always-on service.

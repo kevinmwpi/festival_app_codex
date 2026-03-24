@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { inspect } from 'node:util';
 
@@ -12,6 +12,7 @@ interface SeedPayload {
 }
 
 const defaultSeedPath = path.resolve(__dirname, '../../../seed-data/sample-festival.json');
+const repoRoot = path.resolve(__dirname, '../../..');
 
 function getSupabaseConfig(): { url: string; key: string } {
   const url = process.env.SUPABASE_URL;
@@ -38,8 +39,30 @@ function getSupabaseConfig(): { url: string; key: string } {
   );
 }
 
+function resolveSeedFilePath(inputPath: string): string {
+  if (path.isAbsolute(inputPath)) {
+    return inputPath;
+  }
+
+  const candidates = [...new Set([path.resolve(process.cwd(), inputPath), path.resolve(repoRoot, inputPath)])];
+  const existingPath = candidates.find((candidate) => existsSync(candidate));
+  if (existingPath) {
+    return existingPath;
+  }
+
+  throw new Error(
+    [
+      `Unable to find seed file: ${inputPath}`,
+      'Checked these locations:',
+      ...candidates.map((candidate) => `- ${candidate}`),
+      'Use an absolute path or a repo-root-relative path such as seed-data/sample-festival.json.',
+    ].join('\n'),
+  );
+}
+
 function getSeedFilePath(): string {
-  return process.argv[2] ?? process.env.SUPABASE_SEED_FILE ?? defaultSeedPath;
+  const requestedPath = process.argv[2];
+  return requestedPath ? resolveSeedFilePath(requestedPath) : defaultSeedPath;
 }
 
 function formatError(error: unknown): string {
