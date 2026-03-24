@@ -1,0 +1,35 @@
+{
+  "cli": {
+    "version": ">= 16.18.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal"
+    },
+    "production": {
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "preview": {
+      "ios": {
+        "ascAppId": "YOUR_ASC_APP_ID"
+      },
+      "android": {
+        "track": "internal"
+      }
+    },
+    "production": {
+      "ios": {
+        "ascAppId": "YOUR_ASC_APP_ID"
+      },
+      "android": {
+        "track": "internal"
+      }
+    }
+  }
+}
