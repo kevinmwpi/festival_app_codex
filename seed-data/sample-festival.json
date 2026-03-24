@@ -1,6 +1,6 @@
 {
   "festival": {
-    "id": "festival-sunstream-2026",
+    "id": "11111111-1111-4111-8111-111111111111",
     "name": "Sunstream Festival",
     "start_date": "2026-08-21",
     "end_date": "2026-08-22",
@@ -11,24 +11,24 @@
   },
   "stages": [
     {
-      "id": "stage-aurora",
-      "festival_id": "festival-sunstream-2026",
+      "id": "22222222-2222-4222-8222-222222222221",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
       "name": "Aurora Stage",
       "map_x": 0.18,
       "map_y": 0.34,
       "zone": "North"
     },
     {
-      "id": "stage-canopy",
-      "festival_id": "festival-sunstream-2026",
+      "id": "22222222-2222-4222-8222-222222222222",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
       "name": "Canopy Grove",
       "map_x": 0.58,
       "map_y": 0.28,
       "zone": "East"
     },
     {
-      "id": "stage-midnight",
-      "festival_id": "festival-sunstream-2026",
+      "id": "22222222-2222-4222-8222-222222222223",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
       "name": "Midnight Hangar",
       "map_x": 0.71,
       "map_y": 0.69,
@@ -36,37 +36,247 @@
     }
   ],
   "artists": [
-    { "id": "artist-01", "name": "Kite Theory", "genre": "Indie Electronic", "image_url": null },
-    { "id": "artist-02", "name": "Nova Bloom", "genre": "Dream Pop", "image_url": null },
-    { "id": "artist-03", "name": "Static Harbor", "genre": "Alt Rock", "image_url": null },
-    { "id": "artist-04", "name": "Dusk Supply", "genre": "House", "image_url": null },
-    { "id": "artist-05", "name": "Velvet Relay", "genre": "Disco", "image_url": null },
-    { "id": "artist-06", "name": "Saffron City", "genre": "Neo Soul", "image_url": null },
-    { "id": "artist-07", "name": "Pilot Light", "genre": "Synthwave", "image_url": null },
-    { "id": "artist-08", "name": "Wild Meridian", "genre": "Folk Pop", "image_url": null },
-    { "id": "artist-09", "name": "Current Frame", "genre": "Techno", "image_url": null },
-    { "id": "artist-10", "name": "Low Tide Club", "genre": "Indie Pop", "image_url": null }
+    {
+      "id": "33333333-3333-4333-8333-333333333301",
+      "name": "Kite Theory",
+      "genre": "Indie Electronic",
+      "image_url": null
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333302",
+      "name": "Nova Bloom",
+      "genre": "Dream Pop",
+      "image_url": null
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333303",
+      "name": "Static Harbor",
+      "genre": "Alt Rock",
+      "image_url": null
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333304",
+      "name": "Dusk Supply",
+      "genre": "House",
+      "image_url": null
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333305",
+      "name": "Velvet Relay",
+      "genre": "Disco",
+      "image_url": null
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333306",
+      "name": "Saffron City",
+      "genre": "Neo Soul",
+      "image_url": null
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333307",
+      "name": "Pilot Light",
+      "genre": "Synthwave",
+      "image_url": null
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333308",
+      "name": "Wild Meridian",
+      "genre": "Folk Pop",
+      "image_url": null
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333309",
+      "name": "Current Frame",
+      "genre": "Techno",
+      "image_url": null
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333310",
+      "name": "Low Tide Club",
+      "genre": "Indie Pop",
+      "image_url": null
+    }
   ],
   "sets": [
-    { "id": "set-01", "festival_id": "festival-sunstream-2026", "artist_id": "artist-01", "stage_id": "stage-aurora", "start_time": "2026-08-21T19:00:00-07:00", "end_time": "2026-08-21T19:45:00-07:00", "set_type": "performance" },
-    { "id": "set-02", "festival_id": "festival-sunstream-2026", "artist_id": "artist-02", "stage_id": "stage-canopy", "start_time": "2026-08-21T19:15:00-07:00", "end_time": "2026-08-21T20:00:00-07:00", "set_type": "performance" },
-    { "id": "set-03", "festival_id": "festival-sunstream-2026", "artist_id": "artist-03", "stage_id": "stage-midnight", "start_time": "2026-08-21T19:30:00-07:00", "end_time": "2026-08-21T20:20:00-07:00", "set_type": "performance" },
-    { "id": "set-04", "festival_id": "festival-sunstream-2026", "artist_id": "artist-04", "stage_id": "stage-aurora", "start_time": "2026-08-21T20:15:00-07:00", "end_time": "2026-08-21T21:00:00-07:00", "set_type": "performance" },
-    { "id": "set-05", "festival_id": "festival-sunstream-2026", "artist_id": "artist-05", "stage_id": "stage-canopy", "start_time": "2026-08-21T20:30:00-07:00", "end_time": "2026-08-21T21:15:00-07:00", "set_type": "performance" },
-    { "id": "set-06", "festival_id": "festival-sunstream-2026", "artist_id": "artist-06", "stage_id": "stage-midnight", "start_time": "2026-08-21T20:45:00-07:00", "end_time": "2026-08-21T21:35:00-07:00", "set_type": "performance" },
-    { "id": "set-07", "festival_id": "festival-sunstream-2026", "artist_id": "artist-07", "stage_id": "stage-aurora", "start_time": "2026-08-21T21:30:00-07:00", "end_time": "2026-08-21T22:20:00-07:00", "set_type": "performance" },
-    { "id": "set-08", "festival_id": "festival-sunstream-2026", "artist_id": "artist-08", "stage_id": "stage-canopy", "start_time": "2026-08-21T21:40:00-07:00", "end_time": "2026-08-21T22:25:00-07:00", "set_type": "performance" },
-    { "id": "set-09", "festival_id": "festival-sunstream-2026", "artist_id": "artist-09", "stage_id": "stage-midnight", "start_time": "2026-08-21T22:00:00-07:00", "end_time": "2026-08-21T23:00:00-07:00", "set_type": "performance" },
-    { "id": "set-10", "festival_id": "festival-sunstream-2026", "artist_id": "artist-10", "stage_id": "stage-aurora", "start_time": "2026-08-21T23:05:00-07:00", "end_time": "2026-08-21T23:50:00-07:00", "set_type": "performance" },
-    { "id": "set-11", "festival_id": "festival-sunstream-2026", "artist_id": "artist-02", "stage_id": "stage-midnight", "start_time": "2026-08-22T13:00:00-07:00", "end_time": "2026-08-22T13:45:00-07:00", "set_type": "performance" },
-    { "id": "set-12", "festival_id": "festival-sunstream-2026", "artist_id": "artist-04", "stage_id": "stage-canopy", "start_time": "2026-08-22T13:15:00-07:00", "end_time": "2026-08-22T14:00:00-07:00", "set_type": "performance" },
-    { "id": "set-13", "festival_id": "festival-sunstream-2026", "artist_id": "artist-06", "stage_id": "stage-aurora", "start_time": "2026-08-22T13:30:00-07:00", "end_time": "2026-08-22T14:20:00-07:00", "set_type": "performance" },
-    { "id": "set-14", "festival_id": "festival-sunstream-2026", "artist_id": "artist-08", "stage_id": "stage-midnight", "start_time": "2026-08-22T14:15:00-07:00", "end_time": "2026-08-22T15:00:00-07:00", "set_type": "performance" },
-    { "id": "set-15", "festival_id": "festival-sunstream-2026", "artist_id": "artist-10", "stage_id": "stage-canopy", "start_time": "2026-08-22T14:30:00-07:00", "end_time": "2026-08-22T15:15:00-07:00", "set_type": "performance" },
-    { "id": "set-16", "festival_id": "festival-sunstream-2026", "artist_id": "artist-01", "stage_id": "stage-aurora", "start_time": "2026-08-22T15:05:00-07:00", "end_time": "2026-08-22T15:50:00-07:00", "set_type": "performance" },
-    { "id": "set-17", "festival_id": "festival-sunstream-2026", "artist_id": "artist-03", "stage_id": "stage-midnight", "start_time": "2026-08-22T15:20:00-07:00", "end_time": "2026-08-22T16:10:00-07:00", "set_type": "performance" },
-    { "id": "set-18", "festival_id": "festival-sunstream-2026", "artist_id": "artist-05", "stage_id": "stage-canopy", "start_time": "2026-08-22T16:00:00-07:00", "end_time": "2026-08-22T16:45:00-07:00", "set_type": "performance" },
-    { "id": "set-19", "festival_id": "festival-sunstream-2026", "artist_id": "artist-07", "stage_id": "stage-aurora", "start_time": "2026-08-22T16:15:00-07:00", "end_time": "2026-08-22T17:00:00-07:00", "set_type": "performance" },
-    { "id": "set-20", "festival_id": "festival-sunstream-2026", "artist_id": "artist-09", "stage_id": "stage-midnight", "start_time": "2026-08-22T16:30:00-07:00", "end_time": "2026-08-22T17:30:00-07:00", "set_type": "performance" }
+    {
+      "id": "44444444-4444-4444-8444-444444444401",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333301",
+      "stage_id": "22222222-2222-4222-8222-222222222221",
+      "start_time": "2026-08-21T19:00:00-07:00",
+      "end_time": "2026-08-21T19:45:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444402",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333302",
+      "stage_id": "22222222-2222-4222-8222-222222222222",
+      "start_time": "2026-08-21T19:15:00-07:00",
+      "end_time": "2026-08-21T20:00:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444403",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333303",
+      "stage_id": "22222222-2222-4222-8222-222222222223",
+      "start_time": "2026-08-21T19:30:00-07:00",
+      "end_time": "2026-08-21T20:20:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444404",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333304",
+      "stage_id": "22222222-2222-4222-8222-222222222221",
+      "start_time": "2026-08-21T20:15:00-07:00",
+      "end_time": "2026-08-21T21:00:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444405",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333305",
+      "stage_id": "22222222-2222-4222-8222-222222222222",
+      "start_time": "2026-08-21T20:30:00-07:00",
+      "end_time": "2026-08-21T21:15:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444406",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333306",
+      "stage_id": "22222222-2222-4222-8222-222222222223",
+      "start_time": "2026-08-21T20:45:00-07:00",
+      "end_time": "2026-08-21T21:35:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444407",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333307",
+      "stage_id": "22222222-2222-4222-8222-222222222221",
+      "start_time": "2026-08-21T21:30:00-07:00",
+      "end_time": "2026-08-21T22:20:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444408",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333308",
+      "stage_id": "22222222-2222-4222-8222-222222222222",
+      "start_time": "2026-08-21T21:40:00-07:00",
+      "end_time": "2026-08-21T22:25:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444409",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333309",
+      "stage_id": "22222222-2222-4222-8222-222222222223",
+      "start_time": "2026-08-21T22:00:00-07:00",
+      "end_time": "2026-08-21T23:00:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444410",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333310",
+      "stage_id": "22222222-2222-4222-8222-222222222221",
+      "start_time": "2026-08-21T23:05:00-07:00",
+      "end_time": "2026-08-21T23:50:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444411",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333302",
+      "stage_id": "22222222-2222-4222-8222-222222222223",
+      "start_time": "2026-08-22T13:00:00-07:00",
+      "end_time": "2026-08-22T13:45:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444412",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333304",
+      "stage_id": "22222222-2222-4222-8222-222222222222",
+      "start_time": "2026-08-22T13:15:00-07:00",
+      "end_time": "2026-08-22T14:00:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444413",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333306",
+      "stage_id": "22222222-2222-4222-8222-222222222221",
+      "start_time": "2026-08-22T13:30:00-07:00",
+      "end_time": "2026-08-22T14:20:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444414",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333308",
+      "stage_id": "22222222-2222-4222-8222-222222222223",
+      "start_time": "2026-08-22T14:15:00-07:00",
+      "end_time": "2026-08-22T15:00:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444415",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333310",
+      "stage_id": "22222222-2222-4222-8222-222222222222",
+      "start_time": "2026-08-22T14:30:00-07:00",
+      "end_time": "2026-08-22T15:15:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444416",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333301",
+      "stage_id": "22222222-2222-4222-8222-222222222221",
+      "start_time": "2026-08-22T15:05:00-07:00",
+      "end_time": "2026-08-22T15:50:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444417",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333303",
+      "stage_id": "22222222-2222-4222-8222-222222222223",
+      "start_time": "2026-08-22T15:20:00-07:00",
+      "end_time": "2026-08-22T16:10:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444418",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333305",
+      "stage_id": "22222222-2222-4222-8222-222222222222",
+      "start_time": "2026-08-22T16:00:00-07:00",
+      "end_time": "2026-08-22T16:45:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444419",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333307",
+      "stage_id": "22222222-2222-4222-8222-222222222221",
+      "start_time": "2026-08-22T16:15:00-07:00",
+      "end_time": "2026-08-22T17:00:00-07:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444420",
+      "festival_id": "11111111-1111-4111-8111-111111111111",
+      "artist_id": "33333333-3333-4333-8333-333333333309",
+      "stage_id": "22222222-2222-4222-8222-222222222223",
+      "start_time": "2026-08-22T16:30:00-07:00",
+      "end_time": "2026-08-22T17:30:00-07:00",
+      "set_type": "performance"
+    }
   ]
 }

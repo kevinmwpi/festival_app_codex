@@ -87,6 +87,14 @@ function formatError(error: unknown): string {
       ].join('\n');
     }
 
+    if (maybePostgrestError.code === '22P02' && maybePostgrestError.message?.includes('invalid input syntax for type uuid')) {
+      return [
+        maybePostgrestError.message,
+        'The seed payload is sending a non-UUID id into a table that expects UUID primary and foreign keys.',
+        'Use the bundled sample seed file from this repo, or update any custom seed file so every `id`, `festival_id`, `artist_id`, and `stage_id` is a valid UUID.',
+      ].join('\n');
+    }
+
     return inspect(error, { depth: 5, colors: false });
   }
 
