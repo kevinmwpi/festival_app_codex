@@ -95,6 +95,8 @@ npm --workspace @festival/mobile run android
 npm --workspace @festival/mobile run web
 ```
 
+`web` is available for local debugging only; native iOS/Android builds are the acceptance target.
+
 The current mobile scaffold includes:
 
 - email OTP auth and profile setup
@@ -104,6 +106,17 @@ The current mobile scaffold includes:
 - groups, invite flow, combined schedule, and meetup creation
 - notification service and map screen shell
 - chat placeholder for a later phase
+
+MVP phase boundaries:
+
+- In MVP now: OTP auth/profile, personal schedule + conflicts, groups/invites, combined schedule, meetup coordination (optional totem), offline cache/sync, local notifications, map support for meetup/schedule coordination.
+- Phase 2+: live friend location.
+- Phase 2b+: session recap/stats.
+- Not MVP: BLE/local mesh chat.
+
+Manual device QA checklist for MVP acceptance:
+
+- [`docs/mvp-acceptance-checklist.md`](docs/mvp-acceptance-checklist.md)
 
 ## Native Beta Delivery (EAS)
 
