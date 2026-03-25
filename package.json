@@ -11,7 +11,15 @@
     "start": "npm run start --workspace=@festival/admin-tools",
     "build": "turbo run build",
     "test": "turbo run test",
-    "lint": "turbo run lint"
+    "lint": "turbo run lint",
+    "supabase:status": "supabase status",
+    "supabase:db:push": "supabase db push",
+    "supabase:db:test": "supabase test db",
+    "supabase:db:pull:linked": "supabase db pull --linked",
+    "supabase:db:diff:linked": "supabase db diff --linked --schema public,storage",
+    "supabase:functions:serve": "supabase functions serve",
+    "supabase:functions:deploy": "supabase functions deploy create_group_invite && supabase functions deploy join_group_from_invite && supabase functions deploy upload_totem_photo",
+    "supabase:seed:festival": "npx ts-node apps/admin-tools/src/seed-festival.ts seed-data/sample-festival.json"
   },
   "devDependencies": {
     "@types/node": "^22.14.1",

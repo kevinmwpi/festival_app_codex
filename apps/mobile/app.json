@@ -14,10 +14,12 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.festival.app"
+      "bundleIdentifier": "com.festival.app",
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.festival.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#f6efe7",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -37,7 +39,7 @@
       "expo-notifications"
     ],
     "extra": {
-      "defaultFestivalId": "festival-sunstream-2026"
+      "defaultFestivalId": "11111111-1111-4111-8111-111111111111"
     },
     "experiments": {
       "typedRoutes": true

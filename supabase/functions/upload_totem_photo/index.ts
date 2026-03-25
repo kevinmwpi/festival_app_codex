@@ -13,6 +13,23 @@ Deno.serve(async (request) => {
 
   const { appUser, serviceClient } = auth;
   const { meetup_id, totem_image_url } = await request.json();
+  const expectedPathPrefix = `/storage/v1/object/public/totems/${meetup_id}/`;
+  let hasExpectedPath = false;
+  if (typeof totem_image_url === 'string') {
+    try {
+      const parsedUrl = new URL(totem_image_url);
+      hasExpectedPath = parsedUrl.pathname.startsWith(expectedPathPrefix);
+    } catch {
+      hasExpectedPath = false;
+    }
+  }
+
+  if (!hasExpectedPath) {
+    return new Response(JSON.stringify({ error: 'Totem image URL must match meetup upload path' }), {
+      status: 400,
+      headers: corsHeaders,
+    });
+  }
 
   const { data: meetup, error: meetupError } = await serviceClient.from('meetups').select('*').eq('id', meetup_id).single();
   if (meetupError || !meetup) {
