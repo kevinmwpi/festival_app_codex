@@ -118,22 +118,32 @@ For setup and release commands, see [`docs/native-beta-release.md`](docs/native-
 
 ## Supabase
 
+Primary runbook for hosted/local Supabase operations:
+
+- [`docs/supabase-operations.md`](docs/supabase-operations.md)
+
 Apply migrations:
 
 ```bash
-supabase db push
+npm run supabase:db:push
 ```
 
 Run DB policy tests:
 
 ```bash
-supabase test db
+npm run supabase:db:test
 ```
 
 Serve edge functions locally:
 
 ```bash
-supabase functions serve
+npm run supabase:functions:serve
+```
+
+Deploy all MVP edge functions:
+
+```bash
+npm run supabase:functions:deploy
 ```
 
 Supabase assets included here:
@@ -151,7 +161,7 @@ Sample festival data lives in [`seed-data/sample-festival.json`](seed-data/sampl
 Run the seed script with:
 
 ```bash
-npx ts-node apps/admin-tools/src/seed-festival.ts seed-data/sample-festival.json
+npm run supabase:seed:festival
 ```
 
 The seed flow is written to be idempotent through Supabase upserts.
