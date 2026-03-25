@@ -65,6 +65,11 @@ async function scheduleReminder(
   body: string,
 ): Promise<string> {
   await ensurePermissions();
+  const existingNotificationId = storage.getString(entityStorageKey(entityType, entityId));
+  if (existingNotificationId) {
+    await Notifications.cancelScheduledNotificationAsync(existingNotificationId);
+    forgetByNotificationId(existingNotificationId);
+  }
 
   const target = new Date(new Date(startsAt).getTime() - minutesBefore * 60_000);
   const fireDate = target.getTime() > Date.now() ? target : new Date(Date.now() + 5_000);
@@ -116,6 +121,15 @@ export async function scheduleMeetupReminder(meetup: Meetup, minutesBefore = 20)
 export async function cancelReminder(notificationId: string): Promise<void> {
   await Notifications.cancelScheduledNotificationAsync(notificationId);
   forgetByNotificationId(notificationId);
+}
+
+export async function cancelReminderForEntity(entityType: 'set' | 'meetup', entityId: string): Promise<void> {
+  const notificationId = storage.getString(entityStorageKey(entityType, entityId));
+  if (!notificationId) {
+    return;
+  }
+
+  await cancelReminder(notificationId);
 }
 
 export async function rescheduleAll(sets: Set[], meetups: Meetup[]): Promise<void> {
