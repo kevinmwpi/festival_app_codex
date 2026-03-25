@@ -105,24 +105,45 @@ The current mobile scaffold includes:
 - notification service and map screen shell
 - chat placeholder for a later phase
 
+## Native Beta Delivery (EAS)
+
+Native distribution target for this repo is:
+
+- iOS: EAS Build → TestFlight
+- Android: EAS Build → Play internal testing
+
+EAS build/submit profiles live in [`apps/mobile/eas.json`](apps/mobile/eas.json), with `development`, `preview`, and `production` profiles.
+
+For setup and release commands, see [`docs/native-beta-release.md`](docs/native-beta-release.md).
+
 ## Supabase
+
+Primary runbook for hosted/local Supabase operations:
+
+- [`docs/supabase-operations.md`](docs/supabase-operations.md)
 
 Apply migrations:
 
 ```bash
-supabase db push
+npm run supabase:db:push
 ```
 
 Run DB policy tests:
 
 ```bash
-supabase test db
+npm run supabase:db:test
 ```
 
 Serve edge functions locally:
 
 ```bash
-supabase functions serve
+npm run supabase:functions:serve
+```
+
+Deploy all MVP edge functions:
+
+```bash
+npm run supabase:functions:deploy
 ```
 
 Supabase assets included here:
@@ -130,6 +151,7 @@ Supabase assets included here:
 - initial schema: [`supabase/migrations/001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql)
 - RLS policies: [`supabase/migrations/002_rls.sql`](supabase/migrations/002_rls.sql)
 - support tables/storage setup: [`supabase/migrations/003_supporting_tables.sql`](supabase/migrations/003_supporting_tables.sql)
+- security hardening: [`supabase/migrations/004_security_hardening.sql`](supabase/migrations/004_security_hardening.sql)
 - DB tests: [`supabase/tests/rls.sql`](supabase/tests/rls.sql)
 
 ## Seed Data
@@ -139,7 +161,7 @@ Sample festival data lives in [`seed-data/sample-festival.json`](seed-data/sampl
 Run the seed script with:
 
 ```bash
-npx ts-node apps/admin-tools/src/seed-festival.ts seed-data/sample-festival.json
+npm run supabase:seed:festival
 ```
 
 The seed flow is written to be idempotent through Supabase upserts.

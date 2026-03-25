@@ -5,10 +5,10 @@ import { inspect } from 'node:util';
 import { createClient } from '@supabase/supabase-js';
 
 interface SeedPayload {
-  festival: Record<string, unknown>;
-  stages: Array<Record<string, unknown>>;
+  festival: Record<string, unknown> & { id: string };
+  stages: Array<Record<string, unknown> & { festival_id: string }>;
   artists: Array<Record<string, unknown>>;
-  sets: Array<Record<string, unknown>>;
+  sets: Array<Record<string, unknown> & { festival_id: string }>;
 }
 
 interface PostgrestLikeError {
@@ -82,7 +82,7 @@ function formatError(error: unknown): string {
       return [
         maybePostgrestError.message ?? "Could not find the table 'public.festivals' in the schema cache",
         'The target Supabase project is missing this repo\'s expected public tables, or PostgREST has not refreshed its schema cache yet.',
-        'Apply the repo migrations first: supabase/migrations/001_initial_schema.sql, 002_rls.sql, and 003_supporting_tables.sql.',
+        'Apply the repo migrations first: supabase/migrations/001_initial_schema.sql, 002_rls.sql, 003_supporting_tables.sql, and 004_security_hardening.sql.',
         "If you already applied them, run `NOTIFY pgrst, 'reload schema';` in the Supabase SQL Editor to refresh the schema cache.",
       ].join('\n');
     }
@@ -107,6 +107,27 @@ function loadPayload(filePath: string): SeedPayload {
   return JSON.parse(raw) as SeedPayload;
 }
 
+function validatePayload(payload: SeedPayload): void {
+  if (!payload.festival || typeof payload.festival.id !== 'string') {
+    throw new Error('Seed payload must include `festival.id` as a UUID string.');
+  }
+
+  if (!Array.isArray(payload.stages) || !Array.isArray(payload.artists) || !Array.isArray(payload.sets)) {
+    throw new Error('Seed payload must include array fields: `stages`, `artists`, and `sets`.');
+  }
+
+  const festivalId = payload.festival.id;
+  const invalidStage = payload.stages.find((stage) => stage.festival_id !== festivalId);
+  if (invalidStage) {
+    throw new Error('Every stage row must reference `festival.id` via `festival_id`.');
+  }
+
+  const invalidSet = payload.sets.find((setRow) => setRow.festival_id !== festivalId);
+  if (invalidSet) {
+    throw new Error('Every set row must reference `festival.id` via `festival_id`.');
+  }
+}
+
 async function upsertTable(
   supabase: ReturnType<typeof createClient<any>> | any,
   table: string,
@@ -129,6 +150,7 @@ async function main(): Promise<void> {
   const supabase = createClient(url, key) as any;
   const inputPath = getSeedFilePath();
   const payload = loadPayload(inputPath);
+  validatePayload(payload);
 
   const festivalCount = await upsertTable(supabase, 'festivals', [payload.festival]);
   const stageCount = await upsertTable(supabase, 'stages', payload.stages);
