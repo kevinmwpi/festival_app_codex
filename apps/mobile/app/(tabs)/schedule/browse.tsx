@@ -1,4 +1,5 @@
 import { fetchAndCacheFestival, getLineupWithConflicts, toggleSetSelection } from '@festival/data-access';
+import { cancelReminderForEntity, scheduleSetReminder } from '@festival/notification-utils';
 import { Chip, Screen, SecondaryButton, SegmentedControl, SectionCard } from '@festival/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import React from 'react';
@@ -77,7 +78,21 @@ export default function BrowseScheduleScreen() {
 
       setError(null);
       try {
-        await toggleSetSelection(festivalId, userId, setId);
+        const isSelected = await toggleSetSelection(festivalId, userId, setId);
+        const row = lineupQuery.data?.find((candidate) => candidate.id === setId);
+
+        if (row) {
+          try {
+            if (isSelected) {
+              await scheduleSetReminder(row);
+            } else {
+              await cancelReminderForEntity('set', setId);
+            }
+          } catch (reminderError) {
+            setError(reminderError instanceof Error ? reminderError.message : 'Selection saved but reminder could not be updated.');
+          }
+        }
+
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ['browse-schedule', festivalId, userId] }),
           queryClient.invalidateQueries({ queryKey: ['schedule', festivalId, userId] }),

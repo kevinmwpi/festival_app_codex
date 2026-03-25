@@ -1,4 +1,5 @@
 import { createMeetup, getLocalFestivalBundle, uploadTotemPhoto } from '@festival/data-access';
+import { scheduleMeetupReminder } from '@festival/notification-utils';
 import { FieldInput, FieldLabel, InlineMessage, PrimaryButton, Screen, SectionCard } from '@festival/ui';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useQuery } from '@tanstack/react-query';
@@ -76,6 +77,15 @@ export default function CreateMeetupScreen() {
           },
           meetup.id,
         );
+      }
+      try {
+        await scheduleMeetupReminder({
+          id: meetup.id,
+          title: meetup.title,
+          starts_at: meetup.starts_at,
+        });
+      } catch {
+        // Do not block meetup creation when notification permissions are not granted.
       }
       router.replace(`/(tabs)/group/${groupId}`);
     } catch (saveError) {
