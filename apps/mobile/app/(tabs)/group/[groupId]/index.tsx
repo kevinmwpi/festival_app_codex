@@ -1,5 +1,5 @@
 import { getGroupDetail } from '@festival/data-access';
-import { AvatarStack, GroupHeroCard, HeroHeader, LoadingState, MeetupCard, PrimaryButton, Screen, SectionCard } from '@festival/ui';
+import { AvatarStack, GroupHeroCard, HeroHeader, LoadingState, PersonListCard, PrimaryButton, Screen, SectionCard } from '@festival/ui';
 import { useQuery } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
@@ -50,10 +50,12 @@ export default function GroupDetailScreen() {
           toAvatarLabel(member.user?.display_name ?? 'Festival Friend', member.user?.avatar_type ?? 'initials', member.user?.avatar_value ?? ''),
         )}
       />
-      <SectionCard>
+      <SectionCard title="Crew media + actions" subtitle="Review your totem and jump into coordination flows.">
         {totemUrl ? <Image source={{ uri: totemUrl }} style={styles.totem} /> : <Text style={styles.emptyMedia}>No totem photo yet.</Text>}
-        <PrimaryButton label="View combined schedule" onPress={() => router.push(`/(tabs)/group/${groupId}/schedule`)} />
-        <PrimaryButton label="Create meetup" onPress={() => router.push(`/(tabs)/group/${groupId}/meetup/create`)} />
+        <View style={styles.actionRow}>
+          <PrimaryButton label="View combined schedule" onPress={() => router.push(`/(tabs)/group/${groupId}/schedule`)} />
+          <PrimaryButton label="Create meetup" onPress={() => router.push(`/(tabs)/group/${groupId}/meetup/create`)} />
+        </View>
       </SectionCard>
 
       <SectionCard title="Members" subtitle="Everyone in this group is cached locally once they sync.">
@@ -63,11 +65,11 @@ export default function GroupDetailScreen() {
           )}
         />
         {detailQuery.data.members.map((member) => (
-          <MeetupCard
+          <PersonListCard
             key={member.id}
             title={member.user?.display_name ?? 'Festival friend'}
             subtitle={member.role}
-            meta={member.user?.avatar_type === 'emoji' ? member.user?.avatar_value : undefined}
+            trailing={member.user?.avatar_type === 'emoji' ? member.user?.avatar_value : undefined}
           />
         ))}
       </SectionCard>
@@ -76,6 +78,9 @@ export default function GroupDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  actionRow: {
+    gap: 10,
+  },
   emptyMedia: {
     color: '#64748b',
   },

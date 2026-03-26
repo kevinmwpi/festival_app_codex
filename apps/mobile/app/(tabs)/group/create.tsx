@@ -36,7 +36,7 @@ export default function CreateGroupScreen() {
   return (
     <Screen scroll>
       <HeroHeader eyebrow="New crew" title="Create group" subtitle="Generate a shareable code for your festival crew in seconds." />
-      <SectionCard>
+      <SectionCard title="Crew details" subtitle="Pick a recognizable name before creating your invite code.">
         <FieldLabel>Group name</FieldLabel>
         <FieldInput onChangeText={setName} placeholder="Campfire Friends" value={name} />
         <InlineMessage message={error} />

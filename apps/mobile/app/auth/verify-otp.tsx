@@ -50,7 +50,7 @@ export default function VerifyOtpScreen() {
   return (
     <Screen scroll>
       <HeroHeader eyebrow="Check inbox" title="Verify your code" subtitle={email ? `We sent a six-digit code to ${email}.` : 'Enter the six-digit code from your inbox.'} />
-      <SectionCard>
+      <SectionCard title="Enter verification code" subtitle="Codes expire quickly. Request a new one if needed.">
         <View style={styles.otpRow}>
           {Array.from({ length: 6 }).map((_, index) => (
             <View key={index} style={styles.otpCell}>

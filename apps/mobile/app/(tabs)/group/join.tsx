@@ -24,7 +24,7 @@ export default function JoinGroupScreen() {
   return (
     <Screen scroll>
       <HeroHeader eyebrow="Join crew" title="Enter invite code" subtitle="Codes are case-insensitive, so paste exactly what your friend sent." />
-      <SectionCard>
+      <SectionCard title="Join with invite" subtitle="Paste or type the six-character code your crew shared.">
         <FieldLabel>Invite code</FieldLabel>
         <FieldInput autoCapitalize="characters" onChangeText={setInviteCode} placeholder="AB12CD" value={inviteCode} />
         <InlineMessage message={error} />
