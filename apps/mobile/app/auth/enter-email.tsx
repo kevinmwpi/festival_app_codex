@@ -1,5 +1,5 @@
 import { signInWithOTP } from '@festival/data-access';
-import { FieldInput, FieldLabel, InlineMessage, PrimaryButton, Screen, SectionCard } from '@festival/ui';
+import { FieldInput, FieldLabel, HeroHeader, InlineMessage, PrimaryButton, Screen, SectionCard } from '@festival/ui';
 import { router } from 'expo-router';
 import React from 'react';
 import { Text } from 'react-native';
@@ -27,7 +27,12 @@ export default function EnterEmailScreen() {
 
   return (
     <Screen scroll>
-      <SectionCard title="Festival-ready sign in" subtitle="Use a one-time email code so your plans sync across devices.">
+      <HeroHeader
+        eyebrow="Welcome"
+        title="Festival-ready sign in"
+        subtitle="One-time email sign-in keeps your schedule, groups, and offline cache synced."
+      />
+      <SectionCard>
         <Text style={{ color: '#64748b', lineHeight: 21 }}>
           Enter the email you want tied to your festival schedule, group invites, and offline sync queue.
         </Text>

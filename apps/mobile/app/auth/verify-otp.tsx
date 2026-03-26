@@ -1,5 +1,5 @@
 import { getCurrentProfile, verifyOTP } from '@festival/data-access';
-import { FieldInput, InlineMessage, Screen, SectionCard } from '@festival/ui';
+import { FieldInput, HeroHeader, InlineMessage, Screen, SectionCard } from '@festival/ui';
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -49,7 +49,8 @@ export default function VerifyOtpScreen() {
 
   return (
     <Screen scroll>
-      <SectionCard title="Verify your code" subtitle={email ? `We sent a six-digit code to ${email}.` : 'Enter the six-digit code from your inbox.'}>
+      <HeroHeader eyebrow="Check inbox" title="Verify your code" subtitle={email ? `We sent a six-digit code to ${email}.` : 'Enter the six-digit code from your inbox.'} />
+      <SectionCard>
         <View style={styles.otpRow}>
           {Array.from({ length: 6 }).map((_, index) => (
             <View key={index} style={styles.otpCell}>

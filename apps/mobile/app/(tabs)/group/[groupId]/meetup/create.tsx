@@ -1,6 +1,6 @@
 import { createMeetup, getLocalFestivalBundle, uploadTotemPhoto } from '@festival/data-access';
 import { scheduleMeetupReminder } from '@festival/notification-utils';
-import { FieldInput, FieldLabel, InlineMessage, PrimaryButton, Screen, SectionCard } from '@festival/ui';
+import { FieldInput, FieldLabel, HeroHeader, InlineMessage, MapOverlayCard, PrimaryButton, Screen, SectionCard } from '@festival/ui';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useQuery } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
@@ -97,7 +97,8 @@ export default function CreateMeetupScreen() {
 
   return (
     <Screen scroll>
-      <SectionCard title="Create meetup" subtitle="Meetups save to the local queue first, then sync when you reconnect.">
+      <HeroHeader eyebrow="Meetup" title="Create meetup" subtitle="Saved locally first, then synced when signal returns." />
+      <SectionCard>
         <FieldLabel>Title</FieldLabel>
         <FieldInput onChangeText={setTitle} placeholder="Sunset regroup" value={title} />
         <FieldLabel>Date and time</FieldLabel>
@@ -138,7 +139,7 @@ export default function CreateMeetupScreen() {
           }
           style={styles.mapPlaceholder}
         >
-          <Text style={styles.mapText}>Tap anywhere on the festival map to place the meetup pin.</Text>
+          <MapOverlayCard title="Tap to drop pin" subtitle="Choose where your crew should regroup on the grounds." />
           {pin ? <View style={[styles.pin, { left: `${pin.x * 100}%`, top: `${pin.y * 100}%` }]} /> : null}
         </Pressable>
         <PrimaryButton label={imageAsset ? 'Replace totem photo' : 'Add totem photo'} onPress={() => void handlePickImage()} />
@@ -152,18 +153,13 @@ export default function CreateMeetupScreen() {
 
 const styles = StyleSheet.create({
   mapPlaceholder: {
-    backgroundColor: '#efe4d8',
+    backgroundColor: '#e7efff',
     borderRadius: 18,
-    height: 220,
+    gap: 10,
+    minHeight: 220,
     overflow: 'hidden',
+    padding: 14,
     position: 'relative',
-  },
-  mapText: {
-    color: '#5a483c',
-    left: 16,
-    position: 'absolute',
-    right: 16,
-    top: 16,
   },
   pin: {
     backgroundColor: '#e85d3f',
@@ -183,16 +179,16 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   stageChip: {
-    backgroundColor: '#efe4d8',
+    backgroundColor: '#e8f0ff',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   stageChipSelected: {
-    backgroundColor: '#20352f',
+    backgroundColor: '#203b72',
   },
   stageChipText: {
-    color: '#5a483c',
+    color: '#1e3a8a',
     fontWeight: '600',
   },
   stageChipTextSelected: {

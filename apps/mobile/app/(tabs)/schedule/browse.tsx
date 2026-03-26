@@ -1,6 +1,6 @@
 import { fetchAndCacheFestival, getLineupWithConflicts, toggleSetSelection } from '@festival/data-access';
 import { cancelReminderForEntity, scheduleSetReminder } from '@festival/notification-utils';
-import { Chip, Screen, SecondaryButton, SegmentedControl, SectionCard } from '@festival/ui';
+import { ArtistLineupCard, Chip, HeroHeader, LoadingState, Screen, SecondaryButton, SegmentedControl, SectionCard } from '@festival/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -106,7 +106,8 @@ export default function BrowseScheduleScreen() {
 
   return (
     <Screen scroll>
-      <SectionCard title="Browse the lineup" subtitle="Stage, artist, and day filters all read from the local festival cache.">
+      <HeroHeader eyebrow="Lineup" title="Browse schedule" subtitle="Filter by day, stage, or artist and build your plan in real time." />
+      <SectionCard>
         <SegmentedControl
           value={filterKind}
           options={[
@@ -139,60 +140,27 @@ export default function BrowseScheduleScreen() {
 
       {filteredRows.map((row: (typeof filteredRows)[number]) => (
         <Pressable key={row.id} onPress={() => void handleToggle(row.id)}>
-          <SectionCard>
-            <View style={styles.rowHeader}>
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text style={styles.artist}>{row.artist_name}</Text>
-                <Text style={styles.meta}>
-                  {row.stage_name} • {formatTimeRange(row.start_time, row.end_time)}
-                </Text>
-              </View>
-              <View style={styles.badgeColumn}>
-                {row.is_conflicting ? <View style={styles.conflictDot} /> : null}
-                <SecondaryButton label={row.selection_id ? 'Selected' : 'Pick'} onPress={() => void handleToggle(row.id)} />
-              </View>
-            </View>
-          </SectionCard>
+          <ArtistLineupCard
+            title={row.artist_name}
+            subtitle={`${row.stage_name} • ${formatTimeRange(row.start_time, row.end_time)}`}
+            conflict={row.is_conflicting}
+            badge={row.is_conflicting ? 'Conflict' : 'Set'}
+            action={<SecondaryButton label={row.selection_id ? 'Selected' : 'Pick'} onPress={() => void handleToggle(row.id)} />}
+          />
         </Pressable>
       ))}
 
-      {lineupQuery.isLoading ? (
-        <SectionCard title="Loading lineup" subtitle="Checking cached festival data and refreshing the newest version." />
-      ) : null}
+      {lineupQuery.isLoading ? <LoadingState title="Loading lineup" description="Checking cached festival data and refreshing the newest version." /> : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  artist: {
-    color: '#111827',
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  badgeColumn: {
-    alignItems: 'flex-end',
-    gap: 12,
-  },
-  conflictDot: {
-    backgroundColor: '#f97316',
-    borderRadius: 999,
-    height: 12,
-    width: 12,
-  },
   error: {
     color: '#b42318',
   },
   filterRow: {
     flexDirection: 'row',
     gap: 8,
-  },
-  meta: {
-    color: '#64748b',
-    fontSize: 14,
-  },
-  rowHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
   },
 });

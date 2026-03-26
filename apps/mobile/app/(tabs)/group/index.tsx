@@ -1,8 +1,8 @@
 import { useGroups } from '@festival/data-access';
-import { PrimaryButton, Screen, SectionCard } from '@festival/ui';
+import { GroupHeroCard, HeroHeader, LoadingState, PrimaryButton, Screen, SectionCard } from '@festival/ui';
 import { router } from 'expo-router';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useAppStore } from '@/src/state/app-store';
 
@@ -12,7 +12,8 @@ export default function GroupsScreen() {
 
   return (
     <Screen scroll>
-      <SectionCard title="Crew planning" subtitle="Create a group to compare schedules, drop meetup pins, and share your invite code.">
+      <HeroHeader eyebrow="Crew mode" title="Group planning" subtitle="Create or join a crew to compare schedules and coordinate meetups." />
+      <SectionCard>
         <View style={styles.actionRow}>
           <PrimaryButton label="Create group" onPress={() => router.push('/(tabs)/group/create')} />
           <PrimaryButton label="Join group" onPress={() => router.push('/(tabs)/group/join')} />
@@ -27,14 +28,11 @@ export default function GroupsScreen() {
             router.push(`/(tabs)/group/${group.id}`);
           }}
         >
-          <SectionCard>
-            <Text style={styles.title}>{group.name}</Text>
-            <Text style={styles.meta}>Invite code: {group.invite_code}</Text>
-          </SectionCard>
+          <GroupHeroCard title={group.name} subtitle="Tap to open group details and schedule" inviteCode={group.invite_code} />
         </Pressable>
       ))}
 
-      {groupsQuery.isLoading ? <SectionCard title="Loading groups" subtitle="Checking your local cache and latest memberships." /> : null}
+      {groupsQuery.isLoading ? <LoadingState title="Loading groups" description="Checking your local cache and latest memberships." /> : null}
     </Screen>
   );
 }
@@ -42,14 +40,5 @@ export default function GroupsScreen() {
 const styles = StyleSheet.create({
   actionRow: {
     gap: 12,
-  },
-  meta: {
-    color: '#64748b',
-    fontSize: 14,
-  },
-  title: {
-    color: '#111827',
-    fontSize: 18,
-    fontWeight: '800',
   },
 });

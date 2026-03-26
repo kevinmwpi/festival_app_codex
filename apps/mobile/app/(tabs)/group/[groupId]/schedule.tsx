@@ -1,5 +1,5 @@
 import { getCombinedSelections, getLocalMeetups } from '@festival/data-access';
-import { Chip, Screen, SegmentedControl, SectionCard } from '@festival/ui';
+import { Chip, HeroHeader, LoadingState, MeetupCard, ScheduleSetCard, Screen, SegmentedControl, SectionCard } from '@festival/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import React from 'react';
@@ -57,7 +57,8 @@ export default function CombinedScheduleScreen() {
 
   return (
     <Screen scroll>
-      <SectionCard title="Combined group schedule" subtitle="Switch perspectives after the shared data bundle has been cached locally.">
+      <HeroHeader eyebrow="Group timing" title="Combined schedule" subtitle="Compare overlap and divergence to keep everyone coordinated." />
+      <SectionCard>
         <SegmentedControl
           value={view}
           options={[
@@ -71,25 +72,24 @@ export default function CombinedScheduleScreen() {
 
       {view === 'overlap'
         ? overlapRows.map((entry) => (
-            <SectionCard key={entry.row.set_id}>
-              <View style={styles.rowHeader}>
-                <Text style={styles.title}>{entry.row.artist_name}</Text>
-                <Chip active label={`${entry.count} members`} />
-              </View>
-              <Text style={styles.meta}>
-                {entry.row.stage_name} • {formatTime(entry.row.start_time)} - {formatTime(entry.row.end_time)}
-              </Text>
-            </SectionCard>
+            <View key={entry.row.set_id} style={styles.rowWrap}>
+              <ScheduleSetCard
+                title={entry.row.artist_name}
+                subtitle={`${entry.row.stage_name} • ${formatTime(entry.row.start_time)} - ${formatTime(entry.row.end_time)}`}
+                tone="success"
+              />
+              <Chip active label={`${entry.count} members`} />
+            </View>
           ))
         : null}
 
       {view === 'per-person'
         ? (selectionsQuery.data ?? []).map((row) => (
             <SectionCard key={row.id}>
-              <Text style={styles.title}>{row.artist_name}</Text>
-              <Text style={styles.meta}>
-                {row.stage_name} • {formatTime(row.start_time)} - {formatTime(row.end_time)}
-              </Text>
+              <ScheduleSetCard
+                title={row.artist_name}
+                subtitle={`${row.stage_name} • ${formatTime(row.start_time)} - ${formatTime(row.end_time)}`}
+              />
               <Chip label={row.member_display_name} />
             </SectionCard>
           ))
@@ -100,40 +100,20 @@ export default function CombinedScheduleScreen() {
             const meetup = nextMeetup(entry.row.start_time);
             return (
               <SectionCard key={entry.row.set_id}>
-                <Text style={styles.title}>{entry.row.artist_name}</Text>
-                <Text style={styles.meta}>
-                  {entry.row.stage_name} • {entry.names.join(', ')}
-                </Text>
-                {meetup ? <Text style={styles.meetup}>Next meetup: {meetup.title} at {formatTime(meetup.starts_at)}</Text> : null}
+                <ScheduleSetCard title={entry.row.artist_name} subtitle={`${entry.row.stage_name} • ${entry.names.join(', ')}`} tone="conflict" />
+                {meetup ? <MeetupCard title="Next meetup" subtitle={meetup.title} meta={formatTime(meetup.starts_at)} /> : null}
               </SectionCard>
             );
           })
         : null}
 
-      {selectionsQuery.isLoading ? <SectionCard title="Loading combined picks" subtitle="Reading the cached group bundle." /> : null}
+      {selectionsQuery.isLoading ? <LoadingState title="Loading combined picks" description="Reading the cached group bundle." /> : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  meetup: {
-    color: '#204d43',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  meta: {
-    color: '#5a483c',
-    fontSize: 14,
-  },
-  rowHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
+  rowWrap: {
     gap: 8,
-    justifyContent: 'space-between',
-  },
-  title: {
-    color: '#241812',
-    fontSize: 17,
-    fontWeight: '700',
   },
 });

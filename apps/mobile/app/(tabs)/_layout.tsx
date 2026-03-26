@@ -26,14 +26,21 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#1e3a8a',
+        tabBarActiveTintColor: '#0f172a',
         tabBarInactiveTintColor: '#64748b',
         tabBarStyle: {
           backgroundColor: '#ffffff',
           borderTopColor: '#dbe7ff',
-          height: 74,
+          borderTopWidth: 1,
+          height: 82,
           paddingBottom: 10,
-          paddingTop: 10,
+          paddingTop: 12,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '700',
+          marginTop: 2,
+          textTransform: 'uppercase',
         },
       }}
     >
@@ -71,17 +78,27 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
+  disabledLabel: {
+    color: '#64748b',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  disabledTab: {
+    alignItems: 'center',
+    opacity: 0.55,
+  },
   icon: {
     alignItems: 'center',
     backgroundColor: '#edf3ff',
     borderRadius: 999,
     justifyContent: 'center',
-    minWidth: 44,
-    paddingHorizontal: 10,
+    minWidth: 48,
+    paddingHorizontal: 12,
     paddingVertical: 6,
   },
   iconFocused: {
     backgroundColor: '#b2cefe',
+    transform: [{ scale: 1.05 }],
   },
   iconText: {
     color: '#1e3a8a',
@@ -91,14 +108,5 @@ const styles = StyleSheet.create({
   },
   iconTextFocused: {
     color: '#0f172a',
-  },
-  disabledTab: {
-    alignItems: 'center',
-    opacity: 0.55,
-  },
-  disabledLabel: {
-    color: '#64748b',
-    fontSize: 12,
-    marginTop: 4,
   },
 });

@@ -1,5 +1,5 @@
 import { joinGroupFromInvite } from '@festival/data-access';
-import { FieldInput, FieldLabel, InlineMessage, PrimaryButton, Screen, SectionCard } from '@festival/ui';
+import { FieldInput, FieldLabel, HeroHeader, InlineMessage, PrimaryButton, Screen, SectionCard } from '@festival/ui';
 import { router } from 'expo-router';
 import React from 'react';
 
@@ -23,7 +23,8 @@ export default function JoinGroupScreen() {
 
   return (
     <Screen scroll>
-      <SectionCard title="Join by invite code" subtitle="Invite codes are case-insensitive, so paste or type whatever you received.">
+      <HeroHeader eyebrow="Join crew" title="Enter invite code" subtitle="Codes are case-insensitive, so paste exactly what your friend sent." />
+      <SectionCard>
         <FieldLabel>Invite code</FieldLabel>
         <FieldInput autoCapitalize="characters" onChangeText={setInviteCode} placeholder="AB12CD" value={inviteCode} />
         <InlineMessage message={error} />
