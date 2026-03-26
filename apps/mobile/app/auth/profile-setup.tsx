@@ -78,8 +78,8 @@ const styles = StyleSheet.create({
   },
   emojiCell: {
     alignItems: 'center',
-    backgroundColor: '#fffaf6',
-    borderColor: '#e2d4c6',
+    backgroundColor: '#f8fbff',
+    borderColor: '#cfe0ff',
     borderRadius: 16,
     borderWidth: 1,
     justifyContent: 'center',
@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
     width: '18%',
   },
   emojiCellSelected: {
-    borderColor: '#e85d3f',
+    borderColor: '#b2cefe',
     borderWidth: 2,
   },
   emojiGrid: {
@@ -97,18 +97,18 @@ const styles = StyleSheet.create({
   },
   initialsCard: {
     alignItems: 'center',
-    backgroundColor: '#efe4d8',
+    backgroundColor: '#e8f0ff',
     borderRadius: 16,
     gap: 4,
     padding: 14,
   },
   initialsLabel: {
-    color: '#4e3b2f',
+    color: '#1e3a8a',
     fontSize: 13,
     fontWeight: '600',
   },
   initialsValue: {
-    color: '#1d1712',
+    color: '#111827',
     fontSize: 24,
     fontWeight: '700',
   },

@@ -165,16 +165,16 @@ export default function BrowseScheduleScreen() {
 
 const styles = StyleSheet.create({
   artist: {
-    color: '#241812',
+    color: '#111827',
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   badgeColumn: {
     alignItems: 'flex-end',
     gap: 12,
   },
   conflictDot: {
-    backgroundColor: '#c62828',
+    backgroundColor: '#f97316',
     borderRadius: 999,
     height: 12,
     width: 12,
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   meta: {
-    color: '#5a483c',
+    color: '#64748b',
     fontSize: 14,
   },
   rowHeader: {

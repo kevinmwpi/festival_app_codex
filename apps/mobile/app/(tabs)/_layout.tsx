@@ -26,11 +26,11 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#20352f',
-        tabBarInactiveTintColor: '#735d4f',
+        tabBarActiveTintColor: '#1e3a8a',
+        tabBarInactiveTintColor: '#64748b',
         tabBarStyle: {
-          backgroundColor: '#fffaf6',
-          borderTopColor: '#eaded0',
+          backgroundColor: '#ffffff',
+          borderTopColor: '#dbe7ff',
           height: 74,
           paddingBottom: 10,
           paddingTop: 10,
@@ -73,7 +73,7 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   icon: {
     alignItems: 'center',
-    backgroundColor: '#efe4d8',
+    backgroundColor: '#edf3ff',
     borderRadius: 999,
     justifyContent: 'center',
     minWidth: 44,
@@ -81,22 +81,23 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   iconFocused: {
-    backgroundColor: '#20352f',
+    backgroundColor: '#b2cefe',
   },
   iconText: {
-    color: '#6a5a4d',
+    color: '#1e3a8a',
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
+    textTransform: 'uppercase',
   },
   iconTextFocused: {
-    color: '#f4efe8',
+    color: '#0f172a',
   },
   disabledTab: {
     alignItems: 'center',
     opacity: 0.55,
   },
   disabledLabel: {
-    color: '#735d4f',
+    color: '#64748b',
     fontSize: 12,
     marginTop: 4,
   },

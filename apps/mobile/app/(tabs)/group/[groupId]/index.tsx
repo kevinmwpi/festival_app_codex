@@ -78,7 +78,7 @@ export default function GroupDetailScreen() {
 const styles = StyleSheet.create({
   avatar: {
     alignItems: 'center',
-    backgroundColor: '#efe4d8',
+    backgroundColor: '#e8f0ff',
     borderRadius: 999,
     height: 42,
     justifyContent: 'center',
@@ -89,15 +89,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   emptyMedia: {
-    color: '#6a5a4d',
+    color: '#64748b',
   },
   memberName: {
-    color: '#241812',
+    color: '#111827',
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   memberRole: {
-    color: '#6a5a4d',
+    color: '#64748b',
     fontSize: 13,
     textTransform: 'capitalize',
   },

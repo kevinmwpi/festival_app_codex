@@ -22,7 +22,7 @@ function RootShell() {
     <SafeAreaView style={styles.safeArea}>
       <OfflineBanner visible={isOffline} />
       <View style={styles.content}>
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#f6efe7' } }}>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#f4f7ff' } }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="auth/enter-email" />
           <Stack.Screen name="auth/verify-otp" />
@@ -37,7 +37,7 @@ function RootShell() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f6efe7',
+    backgroundColor: '#f4f7ff',
   },
   content: {
     flex: 1,

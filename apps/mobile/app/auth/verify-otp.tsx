@@ -67,15 +67,15 @@ export default function VerifyOtpScreen() {
 
 const styles = StyleSheet.create({
   helper: {
-    color: '#6a5a4d',
+    color: '#64748b',
     lineHeight: 20,
   },
   otpCell: {
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#e2d4c6',
-    borderRadius: 14,
-    borderWidth: 1,
+    backgroundColor: '#f8fbff',
+    borderColor: '#cfe0ff',
+    borderRadius: 16,
+    borderWidth: 2,
     flex: 1,
     paddingVertical: 12,
   },
@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   otpText: {
-    color: '#1d1712',
+    color: '#1e3a8a',
     fontSize: 22,
     fontWeight: '700',
   },

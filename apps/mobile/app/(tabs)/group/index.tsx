@@ -44,12 +44,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   meta: {
-    color: '#5a483c',
+    color: '#64748b',
     fontSize: 14,
   },
   title: {
-    color: '#241812',
+    color: '#111827',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
   },
 });

@@ -19,7 +19,13 @@
     "supabase:db:diff:linked": "supabase db diff --linked --schema public,storage",
     "supabase:functions:serve": "supabase functions serve",
     "supabase:functions:deploy": "supabase functions deploy create_group_invite && supabase functions deploy join_group_from_invite && supabase functions deploy upload_totem_photo",
-    "supabase:seed:festival": "npx ts-node apps/admin-tools/src/seed-festival.ts seed-data/sample-festival.json"
+    "supabase:seed:festival": "npx ts-node apps/admin-tools/src/seed-festival.ts seed-data/sample-festival.json",
+    "mobile:start": "npm --workspace @festival/mobile run start",
+    "mobile:ios": "npm --workspace @festival/mobile run ios",
+    "mobile:android": "npm --workspace @festival/mobile run android",
+    "mobile:web": "npm --workspace @festival/mobile run web",
+    "mobile:start:tunnel": "npm --workspace @festival/mobile run start -- --tunnel",
+    "mobile:start:lan": "npm --workspace @festival/mobile run start -- --lan"
   },
   "devDependencies": {
     "@types/node": "^22.14.1",

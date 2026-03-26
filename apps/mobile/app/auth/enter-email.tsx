@@ -28,7 +28,7 @@ export default function EnterEmailScreen() {
   return (
     <Screen scroll>
       <SectionCard title="Festival-ready sign in" subtitle="Use a one-time email code so your plans sync across devices.">
-        <Text style={{ color: '#5a483c', lineHeight: 21 }}>
+        <Text style={{ color: '#64748b', lineHeight: 21 }}>
           Enter the email you want tied to your festival schedule, group invites, and offline sync queue.
         </Text>
         <FieldLabel>Email</FieldLabel>

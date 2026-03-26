@@ -98,24 +98,24 @@ export default function PersonalScheduleScreen() {
 
 const styles = StyleSheet.create({
   artist: {
-    color: '#241812',
+    color: '#111827',
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   content: {
     gap: 16,
     padding: 20,
   },
   helper: {
-    color: '#6a5a4d',
+    color: '#64748b',
     lineHeight: 20,
   },
   meta: {
-    color: '#5a483c',
+    color: '#475569',
     fontSize: 14,
   },
   row: {
-    borderTopColor: '#efe4d8',
+    borderTopColor: '#dbe7ff',
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 4,
     paddingTop: 12,
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   scroll: {
-    backgroundColor: '#f6efe7',
+    backgroundColor: '#f4f7ff',
     flex: 1,
   },
 });

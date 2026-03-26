@@ -118,6 +118,27 @@ Manual device QA checklist for MVP acceptance:
 
 - [`docs/mvp-acceptance-checklist.md`](docs/mvp-acceptance-checklist.md)
 
+
+## Front-End design integration (AI Studio workflow)
+
+If you are importing a visual design from AI Studio or other web-first generators, use the validation guide:
+
+- [`docs/frontend-aistudio-validation.md`](docs/frontend-aistudio-validation.md)
+
+
+For distributing to test users (Expo dev sessions vs TestFlight/Play), see:
+
+- [`docs/test-user-simulation.md`](docs/test-user-simulation.md)
+
+Quick local simulation commands:
+
+```bash
+npm run mobile:start
+npm run mobile:ios
+npm run mobile:android
+npm run mobile:web
+```
+
 ## Native Beta Delivery (EAS)
 
 Native distribution target for this repo is:
