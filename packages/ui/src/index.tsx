@@ -118,23 +118,29 @@ export function ArtistLineupCard({
   badge,
   action,
   conflict,
+  eyebrow,
+  meta,
 }: {
   title: string;
   subtitle: string;
   badge?: string;
   action?: React.ReactNode;
   conflict?: boolean;
+  eyebrow?: string;
+  meta?: string;
 }) {
   return (
     <View style={[styles.lineupCard, conflict ? styles.lineupCardConflict : null]}>
+      {eyebrow ? <Text style={styles.lineupEyebrow}>{eyebrow}</Text> : null}
       <View style={styles.lineupHeader}>
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={styles.lineupTitle}>{title}</Text>
           <Text style={styles.lineupSubtitle}>{subtitle}</Text>
+          {meta ? <Text style={styles.lineupMeta}>{meta}</Text> : null}
         </View>
         {badge ? <Chip label={badge} active={conflict} /> : null}
       </View>
-      {action}
+      {action ? <View style={styles.lineupAction}>{action}</View> : null}
     </View>
   );
 }
@@ -144,14 +150,19 @@ export function ScheduleSetCard({
   subtitle,
   tone = 'default',
   detail,
+  label,
 }: {
   title: string;
   subtitle: string;
   tone?: 'default' | 'conflict' | 'success';
   detail?: React.ReactNode;
+  label?: string;
 }) {
+  const toneLabel = label ?? (tone === 'conflict' ? 'Overlap risk' : tone === 'success' ? 'Group overlap' : undefined);
+
   return (
     <View style={[styles.scheduleCard, tone === 'conflict' ? styles.scheduleCardConflict : null, tone === 'success' ? styles.scheduleCardSuccess : null]}>
+      {toneLabel ? <Text style={[styles.scheduleToneLabel, tone === 'conflict' ? styles.scheduleToneConflict : tone === 'success' ? styles.scheduleToneSuccess : null]}>{toneLabel}</Text> : null}
       <Text style={styles.scheduleTitle}>{title}</Text>
       <Text style={styles.scheduleSubtitle}>{subtitle}</Text>
       {detail}
@@ -209,6 +220,18 @@ export function MeetupCard({ title, subtitle, meta }: { title: string; subtitle:
       <Text style={styles.meetupTitle}>{title}</Text>
       <Text style={styles.meetupSubtitle}>{subtitle}</Text>
       {meta ? <Text style={styles.meetupMeta}>{meta}</Text> : null}
+    </View>
+  );
+}
+
+export function PersonListCard({ title, subtitle, trailing }: { title: string; subtitle: string; trailing?: string }) {
+  return (
+    <View style={styles.personCard}>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text style={styles.personTitle}>{title}</Text>
+        <Text style={styles.personSubtitle}>{subtitle}</Text>
+      </View>
+      {trailing ? <Text style={styles.personTrailing}>{trailing}</Text> : null}
     </View>
   );
 }
@@ -346,6 +369,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#b2cefe',
     borderRadius: 18,
+    minHeight: 48,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
@@ -383,6 +407,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     backgroundColor: '#eef4ff',
     borderRadius: 999,
+    minHeight: 30,
+    justifyContent: 'center',
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
@@ -501,21 +527,40 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   lineupCard: {
-    backgroundColor: '#fff',
-    borderColor: '#dbe7ff',
+    backgroundColor: '#ffffff',
+    borderColor: '#cfe0ff',
     borderRadius: 24,
     borderWidth: 1,
     gap: 12,
     padding: 16,
+    shadowColor: '#93b4ef',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
   },
   lineupCardConflict: {
-    borderColor: '#fdba74',
-    backgroundColor: '#fff7ed',
+    borderColor: '#fb923c',
+    backgroundColor: '#fff8f1',
+  },
+  lineupAction: {
+    marginTop: 2,
+  },
+  lineupEyebrow: {
+    color: '#3b82f6',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
   lineupHeader: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 10,
+  },
+  lineupMeta: {
+    color: '#1e3a8a',
+    fontSize: 12,
+    fontWeight: '700',
   },
   lineupSubtitle: {
     color: '#475569',
@@ -548,6 +593,31 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     gap: 4,
     padding: 14,
+  },
+  personCard: {
+    alignItems: 'center',
+    backgroundColor: '#f8fbff',
+    borderColor: '#dbe7ff',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+    padding: 12,
+  },
+  personSubtitle: {
+    color: '#475569',
+    fontSize: 12,
+    textTransform: 'capitalize',
+  },
+  personTitle: {
+    color: '#0f172a',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  personTrailing: {
+    color: '#1e3a8a',
+    fontSize: 18,
   },
   meetupMeta: {
     color: '#1e3a8a',
@@ -587,6 +657,27 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontSize: 14,
   },
+  scheduleToneConflict: {
+    backgroundColor: '#ffedd5',
+    color: '#9a3412',
+  },
+  scheduleToneLabel: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#eff6ff',
+    borderRadius: 999,
+    color: '#1d4ed8',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    textTransform: 'uppercase',
+  },
+  scheduleToneSuccess: {
+    backgroundColor: '#cffafe',
+    color: '#155e75',
+  },
   scheduleTitle: {
     color: '#0f172a',
     fontSize: 18,
@@ -605,6 +696,7 @@ const styles = StyleSheet.create({
     borderColor: '#b2cefe',
     borderRadius: 18,
     borderWidth: 2,
+    minHeight: 44,
     paddingHorizontal: 16,
     paddingVertical: 12,
   },

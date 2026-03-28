@@ -121,3 +121,28 @@ npm run mobile:web
 ### 4) Validate MVP manually
 
 Run through `docs/mvp-acceptance-checklist.md` on physical/simulator devices after style integration.
+
+## Native refinement QA notes (PR follow-up to structural adaptation)
+
+Manual smoke coverage for the refined native pass should include the complete primary journey:
+
+- `auth/enter-email` → `auth/verify-otp` → `auth/profile-setup`
+- `/(tabs)/schedule/browse` and `/(tabs)/schedule`
+- `/(tabs)/group/index`, `/create`, `/join`
+- `/(tabs)/group/[groupId]/index`, `/schedule`, `/meetup/create`
+- `/(tabs)/map/index`
+
+### What to verify quickly on device/emulator
+
+1. **Hierarchy + spacing rhythm:** hero, section titles, and card density feel consistent page-to-page.
+2. **Browse + schedule legibility:** lineup cards, selected states, and conflict treatment are easy to scan in bright conditions.
+3. **Group semantics:** member rows look like member records (not meetup cards), while meetup surfaces remain meetup-specific.
+4. **Map overlays on small screens:** top and bottom overlays do not block key stage pins or user panning.
+5. **Offline and loading clarity:** loading/empty/offline cards are visible and actionable on every route listed above.
+
+### Suggested screenshots for review comments
+
+- Auth: `enter-email`, `verify-otp`, and `profile-setup` (one each).
+- Schedule: browse list with at least one conflict card and one selected card.
+- Group: group detail with members + combined schedule split/overlap examples.
+- Map: map view with overlay(s) and visible pins.

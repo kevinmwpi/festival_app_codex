@@ -1,6 +1,6 @@
 import { getLocalFestivalBundle, getLocalMeetups } from '@festival/data-access';
 import { getMeetupMapPoint, getNextStageSet, normaliseMapPoint } from '@festival/map-utils';
-import { EmptyState, HeroHeader, LoadingState, MapOverlayCard, PrimaryButton, Screen } from '@festival/ui';
+import { EmptyState, LoadingState, MapOverlayCard, PrimaryButton, Screen } from '@festival/ui';
 import { useQuery } from '@tanstack/react-query';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -102,15 +102,17 @@ export default function MapScreen() {
   return (
     <Screen style={{ padding: 0 }}>
       <View style={styles.topOverlay}>
-        <HeroHeader eyebrow="Map" title="Festival grounds" subtitle="Stage and meetup pins stay available offline." />
-        {!mapDownloaded ? (
+        <MapOverlayCard title="Festival grounds" subtitle="Stage and meetup pins stay available offline." />
+      </View>
+      {!mapDownloaded ? (
+        <View style={styles.bottomOverlay}>
           <MapOverlayCard
             title="Download map for offline use"
             subtitle="Wi-Fi is recommended for the first tile pack download."
             action={<PrimaryButton label="Download map" onPress={() => void handleDownload()} />}
           />
-        ) : null}
-      </View>
+        </View>
+      ) : null}
 
       <Mapbox.MapView style={styles.map} styleURL={Mapbox.StyleURL?.Outdoors ?? Mapbox.StyleURL?.Street}>
         <Mapbox.Camera zoomLevel={13.5} centerCoordinate={MAP_CENTER} animationMode="flyTo" />
@@ -139,6 +141,13 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   map: {
     flex: 1,
+  },
+  bottomOverlay: {
+    bottom: 16,
+    left: 12,
+    position: 'absolute',
+    right: 12,
+    zIndex: 3,
   },
   meetupPin: {
     alignItems: 'center',
@@ -171,7 +180,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   topOverlay: {
-    gap: 10,
     left: 12,
     position: 'absolute',
     right: 12,

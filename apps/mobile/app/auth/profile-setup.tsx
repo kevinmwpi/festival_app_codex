@@ -44,7 +44,7 @@ export default function ProfileSetupScreen() {
   return (
     <Screen scroll>
       <HeroHeader eyebrow="Last step" title="Set up your profile" subtitle="Pick a name and avatar so your crew can spot you quickly." />
-      <SectionCard>
+      <SectionCard title="Public profile" subtitle="This appears in groups and meetup planning.">
         <FieldLabel>Display name</FieldLabel>
         <FieldInput onChangeText={setDisplayName} placeholder="Festival alias" value={displayName} />
         <FieldLabel>Emoji avatar</FieldLabel>
@@ -58,7 +58,7 @@ export default function ProfileSetupScreen() {
             );
           })}
         </View>
-        <Pressable onPress={() => setSelectedEmoji(null)} style={styles.initialsCard}>
+        <Pressable onPress={() => setSelectedEmoji(null)} style={[styles.initialsCard, selectedEmoji ? null : styles.initialsCardSelected]}>
           <Text style={styles.initialsLabel}>Use initials instead</Text>
           <Text style={styles.initialsValue}>{initials || 'FA'}</Text>
         </Pressable>
@@ -99,9 +99,14 @@ const styles = StyleSheet.create({
   initialsCard: {
     alignItems: 'center',
     backgroundColor: '#e8f0ff',
+    borderColor: '#e8f0ff',
     borderRadius: 16,
+    borderWidth: 2,
     gap: 4,
     padding: 14,
+  },
+  initialsCardSelected: {
+    borderColor: '#1d4ed8',
   },
   initialsLabel: {
     color: '#1e3a8a',
