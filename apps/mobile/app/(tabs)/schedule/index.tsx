@@ -1,9 +1,9 @@
 import { getConflictSetIds, primeScheduleCache, refreshSchedule, useSchedule } from '@festival/data-access';
-import { Chip, EmptyState, PrimaryButton, Screen, SectionCard } from '@festival/ui';
+import { EmptyState, HeroHeader, LoadingState, PrimaryButton, ScheduleSetCard, Screen, SectionCard } from '@festival/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import React from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text } from 'react-native';
 
 import { useCurrentProfile } from '@/src/hooks/use-current-profile';
 import { useAppStore } from '@/src/state/app-store';
@@ -55,7 +55,7 @@ export default function PersonalScheduleScreen() {
   if (profileQuery.isLoading) {
     return (
       <Screen>
-        <SectionCard title="Loading your schedule" subtitle="Checking your local cache and profile." />
+        <LoadingState title="Loading your schedule" description="Checking your local cache and profile." />
       </Screen>
     );
   }
@@ -66,9 +66,12 @@ export default function PersonalScheduleScreen() {
       style={styles.scroll}
       contentContainerStyle={styles.content}
     >
-      <SectionCard title="Your timeline" subtitle="This view reads from SQLite first, so it opens fast even without signal.">
-        <Text style={styles.helper}>Pull to refresh when you reconnect and the sync queue will flush in the background.</Text>
-      </SectionCard>
+      <HeroHeader
+        eyebrow="My plan"
+        title="Your timeline"
+        subtitle="Fast from local SQLite first, then refreshed from sync when connected."
+        rightSlot={<PrimaryButton label="Browse" onPress={() => router.push('/(tabs)/schedule/browse')} />}
+      />
 
       {(scheduleQuery.data ?? []).length === 0 ? (
         <EmptyState
@@ -80,14 +83,13 @@ export default function PersonalScheduleScreen() {
         Object.entries(grouped).map(([day, sets]) => (
           <SectionCard key={day} title={new Date(`${day}T12:00:00`).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}>
             {sets?.map((set) => (
-              <View key={set.id} style={styles.row}>
-                <View style={styles.rowHeader}>
-                  <Text style={styles.artist}>{set.artist_name}</Text>
-                  {conflictIds.has(set.id) ? <Chip label="Conflict" active /> : null}
-                </View>
-                <Text style={styles.meta}>{set.stage_name}</Text>
-                <Text style={styles.meta}>{formatTimeRange(set.start_time, set.end_time)}</Text>
-              </View>
+              <ScheduleSetCard
+                key={set.id}
+                title={set.artist_name}
+                subtitle={`${set.stage_name} • ${formatTimeRange(set.start_time, set.end_time)}`}
+                tone={conflictIds.has(set.id) ? 'conflict' : 'default'}
+                detail={conflictIds.has(set.id) ? <Text style={styles.conflict}>Conflicts with another selected set</Text> : undefined}
+              />
             ))}
           </SectionCard>
         ))
@@ -97,34 +99,14 @@ export default function PersonalScheduleScreen() {
 }
 
 const styles = StyleSheet.create({
-  artist: {
-    color: '#111827',
-    fontSize: 17,
-    fontWeight: '800',
+  conflict: {
+    color: '#c2410c',
+    fontSize: 12,
+    fontWeight: '700',
   },
   content: {
     gap: 16,
     padding: 20,
-  },
-  helper: {
-    color: '#64748b',
-    lineHeight: 20,
-  },
-  meta: {
-    color: '#475569',
-    fontSize: 14,
-  },
-  row: {
-    borderTopColor: '#dbe7ff',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 4,
-    paddingTop: 12,
-  },
-  rowHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'space-between',
   },
   scroll: {
     backgroundColor: '#f4f7ff',

@@ -1,5 +1,5 @@
 import { saveProfile } from '@festival/data-access';
-import { FieldInput, FieldLabel, InlineMessage, PrimaryButton, Screen, SectionCard } from '@festival/ui';
+import { FieldInput, FieldLabel, HeroHeader, InlineMessage, PrimaryButton, Screen, SectionCard } from '@festival/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import React from 'react';
@@ -43,7 +43,8 @@ export default function ProfileSetupScreen() {
 
   return (
     <Screen scroll>
-      <SectionCard title="Set up your festival profile" subtitle="Pick a name and a quick avatar so your group can spot you fast.">
+      <HeroHeader eyebrow="Last step" title="Set up your profile" subtitle="Pick a name and avatar so your crew can spot you quickly." />
+      <SectionCard>
         <FieldLabel>Display name</FieldLabel>
         <FieldInput onChangeText={setDisplayName} placeholder="Festival alias" value={displayName} />
         <FieldLabel>Emoji avatar</FieldLabel>

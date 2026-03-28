@@ -1,8 +1,8 @@
 import { createGroup } from '@festival/data-access';
-import { FieldInput, FieldLabel, InlineMessage, PrimaryButton, Screen, SectionCard, SecondaryButton } from '@festival/ui';
+import { FieldInput, FieldLabel, HeroHeader, InlineMessage, InviteCodeCard, PrimaryButton, Screen, SectionCard, SecondaryButton } from '@festival/ui';
 import { router } from 'expo-router';
 import React from 'react';
-import { Share, Text } from 'react-native';
+import { Share } from 'react-native';
 
 import { useAppStore } from '@/src/state/app-store';
 
@@ -35,7 +35,8 @@ export default function CreateGroupScreen() {
 
   return (
     <Screen scroll>
-      <SectionCard title="Create a planning crew" subtitle="Give the group a name and we will generate a fresh six-character invite code.">
+      <HeroHeader eyebrow="New crew" title="Create group" subtitle="Generate a shareable code for your festival crew in seconds." />
+      <SectionCard>
         <FieldLabel>Group name</FieldLabel>
         <FieldInput onChangeText={setName} placeholder="Campfire Friends" value={name} />
         <InlineMessage message={error} />
@@ -43,11 +44,10 @@ export default function CreateGroupScreen() {
       </SectionCard>
 
       {inviteCode ? (
-        <SectionCard title="Invite ready" subtitle="Share this code with the rest of your crew.">
-          <Text style={{ color: '#241812', fontSize: 34, fontWeight: '800', letterSpacing: 4, textAlign: 'center' }}>{inviteCode}</Text>
-          <SecondaryButton
-            label="Open share sheet"
-            onPress={() =>
+        <SectionCard title="Invite ready" subtitle="Share this with your group so everyone lands in the same plan.">
+          <InviteCodeCard
+            code={inviteCode}
+            onShare={() =>
               void Share.share({
                 message: `Join our festival group with code ${inviteCode}${deepLink ? `\n${deepLink}` : ''}`,
               })

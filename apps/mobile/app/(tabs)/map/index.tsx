@@ -1,6 +1,6 @@
 import { getLocalFestivalBundle, getLocalMeetups } from '@festival/data-access';
 import { getMeetupMapPoint, getNextStageSet, normaliseMapPoint } from '@festival/map-utils';
-import { EmptyState, PrimaryButton, Screen, SectionCard } from '@festival/ui';
+import { EmptyState, HeroHeader, LoadingState, MapOverlayCard, PrimaryButton, Screen } from '@festival/ui';
 import { useQuery } from '@tanstack/react-query';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -54,7 +54,7 @@ export default function MapScreen() {
   if (!festivalQuery.data) {
     return (
       <Screen>
-        <SectionCard title="Loading map data" subtitle="Reading the cached festival bundle and meetup pins." />
+        <LoadingState title="Loading map data" description="Reading the cached festival bundle and meetup pins." />
       </Screen>
     );
   }
@@ -101,13 +101,16 @@ export default function MapScreen() {
 
   return (
     <Screen style={{ padding: 0 }}>
-      {!mapDownloaded ? (
-        <View style={styles.prompt}>
-          <Text style={styles.promptTitle}>Download map for offline use</Text>
-          <Text style={styles.promptText}>Wi-Fi is recommended for the first tile pack download.</Text>
-          <PrimaryButton label="Download map for offline" onPress={() => void handleDownload()} />
-        </View>
-      ) : null}
+      <View style={styles.topOverlay}>
+        <HeroHeader eyebrow="Map" title="Festival grounds" subtitle="Stage and meetup pins stay available offline." />
+        {!mapDownloaded ? (
+          <MapOverlayCard
+            title="Download map for offline use"
+            subtitle="Wi-Fi is recommended for the first tile pack download."
+            action={<PrimaryButton label="Download map" onPress={() => void handleDownload()} />}
+          />
+        ) : null}
+      </View>
 
       <Mapbox.MapView style={styles.map} styleURL={Mapbox.StyleURL?.Outdoors ?? Mapbox.StyleURL?.Street}>
         <Mapbox.Camera zoomLevel={13.5} centerCoordinate={MAP_CENTER} animationMode="flyTo" />
@@ -157,19 +160,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
-  prompt: {
-    backgroundColor: '#ffffff',
-    gap: 8,
-    padding: 16,
-  },
-  promptText: {
-    color: '#64748b',
-  },
-  promptTitle: {
-    color: '#111827',
-    fontSize: 17,
-    fontWeight: '700',
-  },
   stagePin: {
     alignItems: 'center',
     backgroundColor: '#b2cefe',
@@ -179,5 +169,13 @@ const styles = StyleSheet.create({
     minWidth: 88,
     paddingHorizontal: 10,
     paddingVertical: 8,
+  },
+  topOverlay: {
+    gap: 10,
+    left: 12,
+    position: 'absolute',
+    right: 12,
+    top: 12,
+    zIndex: 3,
   },
 });
