@@ -1,5 +1,5 @@
 import { useGroups } from '@festival/data-access';
-import { GroupHeroCard, HeroHeader, LoadingState, PrimaryButton, Screen, SectionCard } from '@festival/ui';
+import { GroupHeroCard, HeroHeader, LoadingState, PrimaryButton, Screen, SecondaryButton, SectionCard } from '@festival/ui';
 import { router } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -16,7 +16,7 @@ export default function GroupsScreen() {
       <SectionCard>
         <View style={styles.actionRow}>
           <PrimaryButton label="Create group" onPress={() => router.push('/(tabs)/group/create')} />
-          <PrimaryButton label="Join group" onPress={() => router.push('/(tabs)/group/join')} />
+          <SecondaryButton label="Join group" onPress={() => router.push('/(tabs)/group/join')} />
         </View>
       </SectionCard>
 

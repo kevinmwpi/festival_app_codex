@@ -19,6 +19,10 @@ function formatTimeRange(start: string, end: string): string {
   })}`;
 }
 
+function formatDayLabel(value: string): string {
+  return new Date(value).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
 export default function BrowseScheduleScreen() {
   const queryClient = useQueryClient();
   const festivalId = useAppStore((state) => state.activeFestivalId);
@@ -125,7 +129,7 @@ export default function BrowseScheduleScreen() {
                   active={filterValue === option}
                   label={
                     filterKind === 'day' && option !== 'all'
-                      ? new Date(`${option}T12:00:00`).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
+                      ? formatDayLabel(`${option}T12:00:00`)
                       : option === 'all'
                         ? 'All'
                         : option
@@ -145,6 +149,8 @@ export default function BrowseScheduleScreen() {
             subtitle={`${row.stage_name} • ${formatTimeRange(row.start_time, row.end_time)}`}
             conflict={row.is_conflicting}
             badge={row.is_conflicting ? 'Conflict' : 'Set'}
+            eyebrow={new Date(row.start_time).toLocaleDateString([], { weekday: 'long' })}
+            meta={row.selection_id ? 'In your schedule' : 'Tap pick to add'}
             action={<SecondaryButton label={row.selection_id ? 'Selected' : 'Pick'} onPress={() => void handleToggle(row.id)} />}
           />
         </Pressable>

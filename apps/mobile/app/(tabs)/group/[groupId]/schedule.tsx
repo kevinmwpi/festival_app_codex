@@ -77,6 +77,7 @@ export default function CombinedScheduleScreen() {
                 title={entry.row.artist_name}
                 subtitle={`${entry.row.stage_name} • ${formatTime(entry.row.start_time)} - ${formatTime(entry.row.end_time)}`}
                 tone="success"
+                label="Shared pick"
               />
               <Chip active label={`${entry.count} members`} />
             </View>
@@ -89,6 +90,7 @@ export default function CombinedScheduleScreen() {
               <ScheduleSetCard
                 title={row.artist_name}
                 subtitle={`${row.stage_name} • ${formatTime(row.start_time)} - ${formatTime(row.end_time)}`}
+                label="Member selection"
               />
               <Chip label={row.member_display_name} />
             </SectionCard>
@@ -100,7 +102,7 @@ export default function CombinedScheduleScreen() {
             const meetup = nextMeetup(entry.row.start_time);
             return (
               <SectionCard key={entry.row.set_id}>
-                <ScheduleSetCard title={entry.row.artist_name} subtitle={`${entry.row.stage_name} • ${entry.names.join(', ')}`} tone="conflict" />
+                <ScheduleSetCard title={entry.row.artist_name} subtitle={`${entry.row.stage_name} • ${entry.names.join(', ')}`} tone="conflict" label="Split decision" />
                 {meetup ? <MeetupCard title="Next meetup" subtitle={meetup.title} meta={formatTime(meetup.starts_at)} /> : null}
               </SectionCard>
             );

@@ -32,7 +32,7 @@ export default function EnterEmailScreen() {
         title="Festival-ready sign in"
         subtitle="One-time email sign-in keeps your schedule, groups, and offline cache synced."
       />
-      <SectionCard>
+      <SectionCard title="Sign in with email" subtitle="We only use this to verify you and connect your festival data.">
         <Text style={{ color: '#64748b', lineHeight: 21 }}>
           Enter the email you want tied to your festival schedule, group invites, and offline sync queue.
         </Text>
