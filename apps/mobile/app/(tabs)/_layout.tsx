@@ -1,23 +1,14 @@
+import { colors } from '@festival/ui';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-function FestivalTabIcon({ label, focused }: { label: string; focused: boolean }) {
+function TabIcon({ label, icon, focused }: { label: string; icon: string; focused: boolean }) {
   return (
-    <View style={[styles.icon, focused ? styles.iconFocused : null]}>
-      <Text style={[styles.iconText, focused ? styles.iconTextFocused : null]}>{label}</Text>
+    <View style={[styles.iconContainer, focused && styles.iconContainerFocused]}>
+      <Text style={styles.iconEmoji}>{icon}</Text>
+      <Text style={[styles.iconLabel, focused && styles.iconLabelFocused]}>{label}</Text>
     </View>
-  );
-}
-
-function DisabledTabButton(props: any) {
-  return (
-    <Pressable {...props} disabled style={styles.disabledTab}>
-      <View style={styles.icon}>
-        <Text style={styles.iconText}>Soon</Text>
-      </View>
-      <Text style={styles.disabledLabel}>Chat</Text>
-    </Pressable>
   );
 }
 
@@ -26,14 +17,24 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#20352f',
-        tabBarInactiveTintColor: '#735d4f',
+        tabBarActiveTintColor: colors.textOnPrimary,
+        tabBarInactiveTintColor: colors.textSecondary,
+        tabBarShowLabel: false,
         tabBarStyle: {
-          backgroundColor: '#fffaf6',
-          borderTopColor: '#eaded0',
-          height: 74,
-          paddingBottom: 10,
-          paddingTop: 10,
+          backgroundColor: colors.primary,
+          borderTopWidth: 0,
+          borderRadius: 32,
+          height: 72,
+          marginHorizontal: 20,
+          marginBottom: 24,
+          paddingTop: 8,
+          paddingBottom: 8,
+          position: 'absolute',
+          shadowColor: colors.primary,
+          shadowOpacity: 0.3,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: 8,
         },
       }}
     >
@@ -41,29 +42,21 @@ export default function TabLayout() {
         name="schedule"
         options={{
           title: 'Schedule',
-          tabBarIcon: ({ focused }) => <FestivalTabIcon label="Set" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon label="Schedule" icon="📅" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="group"
         options={{
           title: 'Group',
-          tabBarIcon: ({ focused }) => <FestivalTabIcon label="Crew" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon label="Group" icon="👥" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="map"
         options={{
           title: 'Map',
-          tabBarIcon: ({ focused }) => <FestivalTabIcon label="Map" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="chat"
-        options={{
-          title: 'Chat',
-          tabBarButton: (props) => <DisabledTabButton {...props} />,
-          tabBarIcon: ({ focused }) => <FestivalTabIcon label="Chat" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon label="Map" icon="📍" focused={focused} />,
         }}
       />
     </Tabs>
@@ -71,33 +64,26 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  icon: {
+  iconContainer: {
     alignItems: 'center',
-    backgroundColor: '#efe4d8',
-    borderRadius: 999,
-    justifyContent: 'center',
-    minWidth: 44,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    gap: 2,
+    opacity: 0.5,
   },
-  iconFocused: {
-    backgroundColor: '#20352f',
+  iconContainerFocused: {
+    opacity: 1,
+    transform: [{ scale: 1.1 }],
   },
-  iconText: {
-    color: '#6a5a4d',
-    fontSize: 11,
-    fontWeight: '700',
+  iconEmoji: {
+    fontSize: 22,
   },
-  iconTextFocused: {
-    color: '#f4efe8',
+  iconLabel: {
+    color: 'rgba(0,0,0,0.4)',
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
-  disabledTab: {
-    alignItems: 'center',
-    opacity: 0.55,
-  },
-  disabledLabel: {
-    color: '#735d4f',
-    fontSize: 12,
-    marginTop: 4,
+  iconLabelFocused: {
+    color: colors.textOnPrimary,
   },
 });

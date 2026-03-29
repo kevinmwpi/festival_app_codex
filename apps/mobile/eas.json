@@ -1,14 +1,21 @@
 {
   "cli": {
-    "version": ">= 16.18.0"
+    "version": ">= 16.18.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "ios": {
+        "buildConfiguration": "Release"
+      }
     },
     "production": {
       "autoIncrement": true
@@ -17,18 +24,12 @@
   "submit": {
     "preview": {
       "ios": {
-        "ascAppId": "YOUR_ASC_APP_ID"
-      },
-      "android": {
-        "track": "internal"
+        "appleTeamId": "Z94VZGABD8"
       }
     },
     "production": {
       "ios": {
-        "ascAppId": "YOUR_ASC_APP_ID"
-      },
-      "android": {
-        "track": "internal"
+        "appleTeamId": "Z94VZGABD8"
       }
     }
   }

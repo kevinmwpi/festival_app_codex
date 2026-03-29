@@ -1,5 +1,5 @@
 import { saveProfile } from '@festival/data-access';
-import { FieldInput, FieldLabel, InlineMessage, PrimaryButton, Screen, SectionCard } from '@festival/ui';
+import { colors, FieldInput, InlineMessage, PrimaryButton } from '@festival/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import React from 'react';
@@ -42,44 +42,146 @@ export default function ProfileSetupScreen() {
   }, [displayName, initials, queryClient, selectedEmoji]);
 
   return (
-    <Screen scroll>
-      <SectionCard title="Set up your festival profile" subtitle="Pick a name and a quick avatar so your group can spot you fast.">
-        <FieldLabel>Display name</FieldLabel>
-        <FieldInput onChangeText={setDisplayName} placeholder="Festival alias" value={displayName} />
-        <FieldLabel>Emoji avatar</FieldLabel>
-        <View style={styles.emojiGrid}>
-          {EMOJIS.map((emoji) => {
-            const selected = emoji === selectedEmoji;
-            return (
-              <Pressable key={emoji} onPress={() => setSelectedEmoji(emoji)} style={[styles.emojiCell, selected ? styles.emojiCellSelected : null]}>
-                <Text style={styles.emoji}>{emoji}</Text>
-              </Pressable>
-            );
-          })}
+    <View style={styles.container}>
+      <View style={styles.content}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Your Profile</Text>
+          <Text style={styles.subtitle}>
+            Pick a name and avatar so your crew can spot you.
+          </Text>
         </View>
-        <Pressable onPress={() => setSelectedEmoji(null)} style={styles.initialsCard}>
+
+        {/* Name */}
+        <View style={styles.field}>
+          <Text style={styles.fieldLabel}>DISPLAY NAME</Text>
+          <FieldInput
+            onChangeText={setDisplayName}
+            placeholder="Festival alias"
+            value={displayName}
+            style={styles.nameInput}
+          />
+        </View>
+
+        {/* Avatar preview */}
+        <View style={styles.avatarPreview}>
+          <View style={styles.avatarCircle}>
+            <Text style={styles.avatarText}>
+              {selectedEmoji ?? (initials || 'FA')}
+            </Text>
+          </View>
+        </View>
+
+        {/* Emoji Grid */}
+        <View style={styles.field}>
+          <Text style={styles.fieldLabel}>CHOOSE AVATAR</Text>
+          <View style={styles.emojiGrid}>
+            {EMOJIS.map((emoji) => {
+              const selected = emoji === selectedEmoji;
+              return (
+                <Pressable
+                  key={emoji}
+                  onPress={() => setSelectedEmoji(emoji)}
+                  style={[styles.emojiCell, selected && styles.emojiCellSelected]}
+                >
+                  <Text style={styles.emoji}>{emoji}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Initials option */}
+        <Pressable
+          onPress={() => setSelectedEmoji(null)}
+          style={[styles.initialsCard, !selectedEmoji && styles.initialsCardSelected]}
+        >
           <Text style={styles.initialsLabel}>Use initials instead</Text>
           <Text style={styles.initialsValue}>{initials || 'FA'}</Text>
         </Pressable>
+
         <InlineMessage message={error} />
         <PrimaryButton
-          disabled={loading || displayName.trim().length < 2}
-          label={loading ? 'Saving...' : 'Finish setup'}
+          disabled={displayName.trim().length < 2}
+          loading={loading}
+          label="Let's go"
           onPress={handleSave}
         />
-      </SectionCard>
-    </Screen>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  emoji: {
-    fontSize: 24,
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+    paddingHorizontal: 24,
+    paddingTop: 60,
+  },
+  content: {
+    gap: 20,
+  },
+  header: {
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '700',
+    fontStyle: 'italic',
+    color: colors.textPrimary,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  field: {
+    gap: 8,
+  },
+  fieldLabel: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 2,
+  },
+  nameInput: {
+    paddingVertical: 18,
+    borderRadius: 16,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  avatarPreview: {
+    alignItems: 'center',
+  },
+  avatarCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  avatarText: {
+    fontSize: 32,
+  },
+  emojiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
   },
   emojiCell: {
     alignItems: 'center',
-    backgroundColor: '#fffaf6',
-    borderColor: '#e2d4c6',
+    backgroundColor: colors.surface,
+    borderColor: colors.borderCard,
     borderRadius: 16,
     borderWidth: 1,
     justifyContent: 'center',
@@ -87,28 +189,34 @@ const styles = StyleSheet.create({
     width: '18%',
   },
   emojiCellSelected: {
-    borderColor: '#e85d3f',
+    borderColor: colors.primary,
     borderWidth: 2,
+    backgroundColor: '#F0F4FF',
   },
-  emojiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+  emoji: {
+    fontSize: 24,
   },
   initialsCard: {
     alignItems: 'center',
-    backgroundColor: '#efe4d8',
+    backgroundColor: colors.surface,
+    borderColor: colors.borderCard,
+    borderWidth: 1,
     borderRadius: 16,
     gap: 4,
     padding: 14,
   },
+  initialsCardSelected: {
+    borderColor: colors.primary,
+    borderWidth: 2,
+    backgroundColor: '#F0F4FF',
+  },
   initialsLabel: {
-    color: '#4e3b2f',
+    color: colors.textSecondary,
     fontSize: 13,
     fontWeight: '600',
   },
   initialsValue: {
-    color: '#1d1712',
+    color: colors.textPrimary,
     fontSize: 24,
     fontWeight: '700',
   },

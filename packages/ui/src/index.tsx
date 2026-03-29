@@ -1,6 +1,7 @@
 import { useNetInfo } from '@react-native-community/netinfo';
 import React, { type PropsWithChildren } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,23 +12,27 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from 'react-native';
+import { colors, radii, spacing } from './theme';
+
+export { colors, radii, spacing, typography } from './theme';
+
+/* ─── Connectivity ──────────────────────────────────────── */
 
 export function useOfflineStatus(): boolean {
   const info = useNetInfo();
   return info.isConnected === false || info.isInternetReachable === false;
 }
 
-export function OfflineBanner({ visible, label = 'Offline mode: showing cached festival data.' }: { visible: boolean; label?: string }) {
-  if (!visible) {
-    return null;
-  }
-
+export function OfflineBanner({ visible, label = 'Offline — showing cached data' }: { visible: boolean; label?: string }) {
+  if (!visible) return null;
   return (
     <View style={styles.banner}>
       <Text style={styles.bannerText}>{label}</Text>
     </View>
   );
 }
+
+/* ─── Layout ────────────────────────────────────────────── */
 
 export function Screen({
   children,
@@ -46,7 +51,6 @@ export function Screen({
       </ScrollView>
     );
   }
-
   return <View style={[styles.screen, styles.screenContent, style]}>{children}</View>;
 }
 
@@ -60,76 +64,69 @@ export function SectionCard({ children, title, subtitle }: PropsWithChildren<{ t
   );
 }
 
-export function EmptyState({
-  title,
-  description,
-  action,
-}: {
-  title: string;
-  description: string;
-  action?: React.ReactNode;
-}) {
+export function EmptyState({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
   return (
-    <SectionCard>
+    <View style={styles.emptyContainer}>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyDescription}>{description}</Text>
       {action}
-    </SectionCard>
+    </View>
   );
 }
 
-export function PrimaryButton({
-  label,
-  onPress,
-  disabled,
-}: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <Pressable onPress={onPress} disabled={disabled} style={[styles.button, disabled ? styles.buttonDisabled : null]}>
-      <Text style={styles.buttonLabel}>{label}</Text>
-    </Pressable>
-  );
-}
-
-export function SecondaryButton({
-  label,
-  onPress,
-}: {
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.secondaryButton}>
-      <Text style={styles.secondaryButtonLabel}>{label}</Text>
-    </Pressable>
-  );
-}
+/* ─── Inputs ────────────────────────────────────────────── */
 
 export function FieldLabel({ children }: PropsWithChildren) {
   return <Text style={styles.fieldLabel}>{children}</Text>;
 }
 
 export function FieldInput(props: TextInputProps) {
-  return <TextInput placeholderTextColor="#7d7d85" style={styles.input} {...props} />;
+  return <TextInput placeholderTextColor="rgba(44,51,39,0.3)" style={styles.input} {...props} />;
 }
 
 export function InlineMessage({ message, tone = 'error' }: { message?: string | null; tone?: 'error' | 'muted' }) {
-  if (!message) {
-    return null;
-  }
-
+  if (!message) return null;
   return <Text style={tone === 'error' ? styles.errorText : styles.mutedText}>{message}</Text>;
 }
 
-export function Chip({ label, active = false }: { label: string; active?: boolean }) {
+/* ─── Buttons ───────────────────────────────────────────── */
+
+export function PrimaryButton({ label, onPress, disabled, loading }: { label: string; onPress: () => void; disabled?: boolean; loading?: boolean }) {
   return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled || loading}
+      style={({ pressed }) => [styles.primaryButton, (disabled || loading) && styles.buttonDisabled, pressed && styles.primaryButtonPressed]}
+    >
+      {loading ? (
+        <ActivityIndicator color={colors.textOnPrimary} size="small" />
+      ) : (
+        <Text style={styles.primaryButtonLabel}>{label}</Text>
+      )}
+    </Pressable>
+  );
+}
+
+export function SecondaryButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.7 }]}>
+      <Text style={styles.secondaryButtonLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/* ─── Chips & Segments ──────────────────────────────────── */
+
+export function Chip({ label, active = false, onPress }: { label: string; active?: boolean; onPress?: () => void }) {
+  const content = (
     <View style={[styles.chip, active ? styles.chipActive : null]}>
       <Text style={[styles.chipLabel, active ? styles.chipLabelActive : null]}>{label}</Text>
     </View>
   );
+  if (onPress) {
+    return <Pressable onPress={onPress}>{content}</Pressable>;
+  }
+  return content;
 }
 
 export function SegmentedControl<T extends string>({
@@ -142,169 +139,228 @@ export function SegmentedControl<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <View style={styles.segmented}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.segmented}>
       {options.map((option) => {
         const active = value === option.value;
         return (
-          <Pressable
-            key={option.value}
-            onPress={() => onChange(option.value)}
-            style={[styles.segment, active ? styles.segmentActive : null]}
-          >
+          <Pressable key={option.value} onPress={() => onChange(option.value)} style={[styles.segment, active ? styles.segmentActive : null]}>
             <Text style={[styles.segmentLabel, active ? styles.segmentLabelActive : null]}>{option.label}</Text>
           </Pressable>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
+/* ─── Styles ────────────────────────────────────────────── */
+
 const styles = StyleSheet.create({
+  /* Banner */
   banner: {
-    backgroundColor: '#ffd166',
-    paddingHorizontal: 16,
+    backgroundColor: colors.offlineBg,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
   },
   bannerText: {
-    color: '#2d1800',
+    color: colors.offlineText,
     fontSize: 13,
     fontWeight: '700',
     textAlign: 'center',
   },
+
+  /* Screen */
   screen: {
     flex: 1,
-    backgroundColor: '#f6efe7',
+    backgroundColor: colors.background,
   },
   screenContent: {
-    gap: 16,
-    padding: 20,
+    gap: spacing.md,
+    padding: spacing.lg,
   },
+
+  /* Card */
   card: {
-    backgroundColor: '#fffaf6',
-    borderColor: '#eaded0',
-    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderCard,
+    borderRadius: radii.xxl,
     borderWidth: 1,
-    gap: 8,
-    padding: 18,
-    shadowColor: '#a38b72',
-    shadowOpacity: 0.08,
+    gap: spacing.sm,
+    padding: spacing.xl,
+    shadowColor: colors.shadow,
+    shadowOpacity: 1,
     shadowRadius: 12,
-    shadowOffset: {
-      width: 0,
-      height: 6,
-    },
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   cardTitle: {
-    color: '#2f241d',
-    fontSize: 18,
+    color: colors.textPrimary,
+    fontSize: 24,
     fontWeight: '700',
+    fontStyle: 'italic',
   },
   cardSubtitle: {
-    color: '#6a5a4d',
+    color: colors.textSecondary,
     fontSize: 14,
   },
+
+  /* Empty */
+  emptyContainer: {
+    backgroundColor: colors.surface,
+    borderColor: colors.borderCard,
+    borderRadius: radii.xxl,
+    borderWidth: 1,
+    padding: spacing.xxxl,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   emptyTitle: {
-    color: '#2f241d',
+    color: colors.textPrimary,
     fontSize: 20,
     fontWeight: '700',
   },
   emptyDescription: {
-    color: '#6a5a4d',
+    color: colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
+    textAlign: 'center',
   },
-  button: {
-    alignItems: 'center',
-    backgroundColor: '#e85d3f',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonLabel: {
-    color: '#fff8f1',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    borderColor: '#dfc7b2',
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  secondaryButtonLabel: {
-    color: '#4a3527',
-    fontSize: 15,
-    fontWeight: '600',
-  },
+
+  /* Inputs */
   fieldLabel: {
-    color: '#3d2d20',
-    fontSize: 13,
-    fontWeight: '700',
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '800',
     textTransform: 'uppercase',
+    letterSpacing: 2,
   },
   input: {
-    backgroundColor: '#ffffff',
-    borderColor: '#e2d4c6',
-    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderCard,
+    borderRadius: radii.md,
     borderWidth: 1,
-    color: '#201712',
+    color: colors.textPrimary,
     fontSize: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    fontWeight: '700',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    shadowColor: colors.shadow,
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
+
+  /* Error / Muted */
   errorText: {
     color: '#b42318',
     fontSize: 13,
   },
   mutedText: {
-    color: '#6a5a4d',
+    color: colors.textSecondary,
     fontSize: 13,
   },
+
+  /* Primary Button */
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md + 2,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  primaryButtonPressed: {
+    backgroundColor: colors.primaryPressed,
+    transform: [{ scale: 0.97 }],
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  primaryButtonLabel: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+  },
+
+  /* Secondary Button */
+  secondaryButton: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    shadowColor: colors.shadow,
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  secondaryButtonLabel: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  /* Chips */
   chip: {
     alignSelf: 'flex-start',
-    backgroundColor: '#efe4d8',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    backgroundColor: '#F0F4FF',
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm + 4,
+    paddingVertical: spacing.xs + 2,
   },
   chipActive: {
-    backgroundColor: '#20352f',
+    backgroundColor: colors.primary,
   },
   chipLabel: {
-    color: '#5a483c',
-    fontSize: 12,
-    fontWeight: '700',
+    color: colors.primary,
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   chipLabelActive: {
-    color: '#f8f4ef',
+    color: colors.textOnPrimary,
   },
+
+  /* Segments */
   segmented: {
-    backgroundColor: '#efe4d8',
-    borderRadius: 16,
     flexDirection: 'row',
-    padding: 4,
+    gap: spacing.sm,
   },
   segment: {
-    borderRadius: 12,
-    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.xl,
     paddingVertical: 10,
+    opacity: 0.4,
   },
   segmentActive: {
-    backgroundColor: '#fffaf6',
+    backgroundColor: colors.primary,
+    opacity: 1,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   segmentLabel: {
-    color: '#5a483c',
-    fontSize: 13,
-    fontWeight: '600',
-    textAlign: 'center',
+    color: colors.textPrimary,
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
   },
   segmentLabelActive: {
-    color: '#241812',
-    fontWeight: '700',
+    color: colors.textOnPrimary,
+    fontWeight: '800',
   },
 });
