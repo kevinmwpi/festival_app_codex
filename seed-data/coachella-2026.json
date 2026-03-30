@@ -1,0 +1,70 @@
+{
+  "festival": {
+    "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+    "name": "Coachella 2026",
+    "start_date": "2026-04-10",
+    "end_date": "2026-04-12",
+    "timezone": "America/Los_Angeles",
+    "venue_name": "Empire Polo Club, Indio CA",
+    "map_asset_url": null,
+    "accent_color": "#FFB3D9",
+    "image_url": null,
+    "version": 1
+  },
+  "stages": [
+    { "id": "c0a00001-0001-4001-8001-000000000001", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "name": "Coachella Stage", "map_x": 0.50, "map_y": 0.20, "zone": "Main" },
+    { "id": "c0a00001-0001-4001-8001-000000000002", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "name": "Outdoor Theatre", "map_x": 0.30, "map_y": 0.35, "zone": "West" },
+    { "id": "c0a00001-0001-4001-8001-000000000003", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "name": "Mojave", "map_x": 0.65, "map_y": 0.45, "zone": "East" },
+    { "id": "c0a00001-0001-4001-8001-000000000004", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "name": "Gobi", "map_x": 0.70, "map_y": 0.55, "zone": "East" },
+    { "id": "c0a00001-0001-4001-8001-000000000005", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "name": "Sahara", "map_x": 0.80, "map_y": 0.30, "zone": "North" },
+    { "id": "c0a00001-0001-4001-8001-000000000006", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "name": "Yuma", "map_x": 0.20, "map_y": 0.60, "zone": "South" }
+  ],
+  "artists": [
+    { "id": "ca100001-0001-4001-8001-000000000001", "name": "Lunar Divide", "genre": "Alternative", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000002", "name": "Glass Terrace", "genre": "Indie Rock", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000003", "name": "Paloma Rising", "genre": "Latin Pop", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000004", "name": "Phantom Circuit", "genre": "EDM", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000005", "name": "Ember Haze", "genre": "R&B", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000006", "name": "Wire Garden", "genre": "Shoegaze", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000007", "name": "Saturn Return", "genre": "Dream Pop", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000008", "name": "Neon Meridian", "genre": "House", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000009", "name": "Desert Choir", "genre": "Psych Rock", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000010", "name": "Soft Machines", "genre": "Synth Pop", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000011", "name": "Rio Copper", "genre": "Afrobeats", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000012", "name": "Midnight Fjord", "genre": "Techno", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000013", "name": "Honey Flux", "genre": "Indie Pop", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000014", "name": "Cascade Unit", "genre": "Drum & Bass", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000015", "name": "Velvet Highway", "genre": "Country Rock", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000016", "name": "Crystal Venom", "genre": "Hip Hop", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000017", "name": "Tide Signal", "genre": "Garage Rock", "image_url": null },
+    { "id": "ca100001-0001-4001-8001-000000000018", "name": "Prism Lake", "genre": "Ambient", "image_url": null }
+  ],
+  "sets": [
+    { "id": "cs100001-0001-4001-8001-000000000001", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000001", "stage_id": "c0a00001-0001-4001-8001-000000000001", "start_time": "2026-04-10T17:00:00-07:00", "end_time": "2026-04-10T18:15:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000002", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000002", "stage_id": "c0a00001-0001-4001-8001-000000000002", "start_time": "2026-04-10T16:30:00-07:00", "end_time": "2026-04-10T17:30:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000003", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000003", "stage_id": "c0a00001-0001-4001-8001-000000000003", "start_time": "2026-04-10T15:00:00-07:00", "end_time": "2026-04-10T16:00:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000004", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000004", "stage_id": "c0a00001-0001-4001-8001-000000000005", "start_time": "2026-04-10T21:00:00-07:00", "end_time": "2026-04-10T22:30:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000005", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000005", "stage_id": "c0a00001-0001-4001-8001-000000000004", "start_time": "2026-04-10T19:00:00-07:00", "end_time": "2026-04-10T20:00:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000006", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000006", "stage_id": "c0a00001-0001-4001-8001-000000000003", "start_time": "2026-04-10T18:00:00-07:00", "end_time": "2026-04-10T19:00:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000007", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000007", "stage_id": "c0a00001-0001-4001-8001-000000000004", "start_time": "2026-04-10T17:00:00-07:00", "end_time": "2026-04-10T18:00:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000008", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000008", "stage_id": "c0a00001-0001-4001-8001-000000000006", "start_time": "2026-04-10T22:00:00-07:00", "end_time": "2026-04-10T23:30:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000009", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000009", "stage_id": "c0a00001-0001-4001-8001-000000000002", "start_time": "2026-04-10T20:00:00-07:00", "end_time": "2026-04-10T21:00:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000010", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000010", "stage_id": "c0a00001-0001-4001-8001-000000000001", "start_time": "2026-04-10T20:30:00-07:00", "end_time": "2026-04-10T21:45:00-07:00", "set_type": "performance" },
+
+    { "id": "cs100001-0001-4001-8001-000000000011", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000011", "stage_id": "c0a00001-0001-4001-8001-000000000001", "start_time": "2026-04-11T14:00:00-07:00", "end_time": "2026-04-11T15:00:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000012", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000012", "stage_id": "c0a00001-0001-4001-8001-000000000006", "start_time": "2026-04-11T23:00:00-07:00", "end_time": "2026-04-12T00:30:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000013", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000013", "stage_id": "c0a00001-0001-4001-8001-000000000003", "start_time": "2026-04-11T16:00:00-07:00", "end_time": "2026-04-11T17:00:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000014", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000014", "stage_id": "c0a00001-0001-4001-8001-000000000005", "start_time": "2026-04-11T20:00:00-07:00", "end_time": "2026-04-11T21:15:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000015", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000015", "stage_id": "c0a00001-0001-4001-8001-000000000002", "start_time": "2026-04-11T18:00:00-07:00", "end_time": "2026-04-11T19:00:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000016", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000016", "stage_id": "c0a00001-0001-4001-8001-000000000001", "start_time": "2026-04-11T22:00:00-07:00", "end_time": "2026-04-11T23:15:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000017", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000017", "stage_id": "c0a00001-0001-4001-8001-000000000004", "start_time": "2026-04-11T15:00:00-07:00", "end_time": "2026-04-11T16:00:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000018", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000018", "stage_id": "c0a00001-0001-4001-8001-000000000006", "start_time": "2026-04-11T17:00:00-07:00", "end_time": "2026-04-11T18:30:00-07:00", "set_type": "performance" },
+
+    { "id": "cs100001-0001-4001-8001-000000000019", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000003", "stage_id": "c0a00001-0001-4001-8001-000000000001", "start_time": "2026-04-12T18:00:00-07:00", "end_time": "2026-04-12T19:15:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000020", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000001", "stage_id": "c0a00001-0001-4001-8001-000000000001", "start_time": "2026-04-12T21:30:00-07:00", "end_time": "2026-04-12T23:00:00-07:00", "set_type": "headliner" },
+    { "id": "cs100001-0001-4001-8001-000000000021", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000005", "stage_id": "c0a00001-0001-4001-8001-000000000002", "start_time": "2026-04-12T20:00:00-07:00", "end_time": "2026-04-12T21:15:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000022", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000008", "stage_id": "c0a00001-0001-4001-8001-000000000006", "start_time": "2026-04-12T22:00:00-07:00", "end_time": "2026-04-12T23:30:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000023", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000010", "stage_id": "c0a00001-0001-4001-8001-000000000003", "start_time": "2026-04-12T16:00:00-07:00", "end_time": "2026-04-12T17:00:00-07:00", "set_type": "performance" },
+    { "id": "cs100001-0001-4001-8001-000000000024", "festival_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", "artist_id": "ca100001-0001-4001-8001-000000000004", "stage_id": "c0a00001-0001-4001-8001-000000000005", "start_time": "2026-04-12T22:30:00-07:00", "end_time": "2026-04-13T00:00:00-07:00", "set_type": "headliner" }
+  ]
+}
