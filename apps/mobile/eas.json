@@ -36,12 +36,16 @@
   "submit": {
     "preview": {
       "ios": {
-        "appleTeamId": "Z94VZGABD8"
+        "appleTeamId": "Z94VZGABD8",
+        "appleId": "6761392490",
+        "ascAppId": "6761392490"
       }
     },
     "production": {
       "ios": {
-        "appleTeamId": "Z94VZGABD8"
+        "appleTeamId": "Z94VZGABD8",
+        "appleId": "6761392490",
+        "ascAppId": "6761392490"
       }
     }
   }

@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.festieapp.mobile",
+      "bundleIdentifier": "com.kevin.festivalapp",
       "buildNumber": "1",
       "config": {
         "usesNonExemptEncryption": false
@@ -29,7 +29,7 @@
       }
     },
     "android": {
-      "package": "com.festieapp.mobile",
+      "package": "com.kevin.festivalapp",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#F0F6FF",
