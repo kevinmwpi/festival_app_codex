@@ -17,8 +17,6 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.textOnPrimary,
-        tabBarInactiveTintColor: colors.textSecondary,
         tabBarShowLabel: false,
         tabBarStyle: {
           backgroundColor: colors.primary,
@@ -38,6 +36,20 @@ export default function TabLayout() {
         },
       }}
     >
+      <Tabs.Screen
+        name="festivals"
+        options={{
+          title: 'Fests',
+          tabBarIcon: ({ focused }) => <TabIcon label="Fests" icon="🎪" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="lineup"
+        options={{
+          title: 'Lineup',
+          tabBarIcon: ({ focused }) => <TabIcon label="Lineup" icon="🎵" focused={focused} />,
+        }}
+      />
       <Tabs.Screen
         name="schedule"
         options={{
@@ -59,6 +71,9 @@ export default function TabLayout() {
           tabBarIcon: ({ focused }) => <TabIcon label="Map" icon="📍" focused={focused} />,
         }}
       />
+      {/* Hide auxiliary routes from tab bar */}
+      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="chat" options={{ href: null }} />
     </Tabs>
   );
 }
@@ -74,11 +89,11 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.1 }],
   },
   iconEmoji: {
-    fontSize: 22,
+    fontSize: 20,
   },
   iconLabel: {
     color: 'rgba(0,0,0,0.4)',
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 1,
