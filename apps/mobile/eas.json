@@ -1,34 +1,27 @@
 {
   "cli": {
-    "version": ">= 16.18.0"
+    "version": ">= 16.18.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "environment": "development"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "environment": "preview"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "environment": "production"
     }
   },
   "submit": {
-    "preview": {
-      "ios": {
-        "ascAppId": "YOUR_ASC_APP_ID"
-      },
-      "android": {
-        "track": "internal"
-      }
-    },
     "production": {
       "ios": {
-        "ascAppId": "YOUR_ASC_APP_ID"
-      },
-      "android": {
-        "track": "internal"
+        "ascAppId": "6761392490"
       }
     }
   }

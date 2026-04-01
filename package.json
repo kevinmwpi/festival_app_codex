@@ -9,9 +9,11 @@
   ],
   "scripts": {
     "start": "npm run start --workspace=@festival/admin-tools",
+    "build:mobile-workspace-deps": "npm run build:workspace-deps -w @festival/mobile",
     "build": "turbo run build",
     "test": "turbo run test",
     "lint": "turbo run lint",
+    "postinstall": "npm run build:mobile-workspace-deps",
     "supabase:status": "supabase status",
     "supabase:db:push": "supabase db push",
     "supabase:db:test": "supabase test db",
