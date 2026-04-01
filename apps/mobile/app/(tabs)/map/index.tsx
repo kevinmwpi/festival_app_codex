@@ -12,13 +12,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { MMKV } from 'react-native-mmkv';
+import { createMMKV } from 'react-native-mmkv';
 
 import { useAppStore } from '@/src/state/app-store';
 
 const Mapbox = require('@rnmapbox/maps') as any;
 const MAP_CENTER: [number, number] = [-122.4194, 37.7749];
-const storage = new MMKV({ id: 'location-prefs' });
+const storage = createMMKV({ id: 'location-prefs' });
 
 function toLngLat(point: { x: number; y: number }): [number, number] {
   return [MAP_CENTER[0] + (point.x - 0.5) * 0.02, MAP_CENTER[1] + (0.5 - point.y) * 0.02];
