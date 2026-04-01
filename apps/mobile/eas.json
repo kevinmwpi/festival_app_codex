@@ -7,20 +7,44 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "environment": "development"
+      "ios": {
+        "simulator": true
+      }
     },
     "preview": {
-      "distribution": "internal",
-      "environment": "preview"
+      "distribution": "store",
+      "ios": {
+        "buildConfiguration": "Release",
+        "autoIncrement": true
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://lzxewkfxdibohzqbqmiu.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "",
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": ""
+      }
     },
     "production": {
+      "distribution": "store",
       "autoIncrement": true,
-      "environment": "production"
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://lzxewkfxdibohzqbqmiu.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "",
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": ""
+      }
     }
   },
   "submit": {
+    "preview": {
+      "ios": {
+        "appleTeamId": "Z94VZGABD8",
+        "appleId": "6761392490",
+        "ascAppId": "6761392490"
+      }
+    },
     "production": {
       "ios": {
+        "appleTeamId": "Z94VZGABD8",
+        "appleId": "6761392490",
         "ascAppId": "6761392490"
       }
     }

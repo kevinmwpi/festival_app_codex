@@ -1,6 +1,6 @@
 import { createMeetup, getLocalFestivalBundle, uploadTotemPhoto } from '@festival/data-access';
 import { scheduleMeetupReminder } from '@festival/notification-utils';
-import { FieldInput, FieldLabel, InlineMessage, PrimaryButton, Screen, SectionCard } from '@festival/ui';
+import { colors, FieldInput, FieldLabel, InlineMessage, PrimaryButton, radii, Screen, SectionCard, spacing } from '@festival/ui';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useQuery } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
@@ -85,7 +85,7 @@ export default function CreateMeetupScreen() {
           starts_at: meetup.starts_at,
         });
       } catch {
-        // Do not block meetup creation when notification permissions are not granted.
+        // Notification permission not granted — meetup still saved
       }
       router.replace(`/(tabs)/group/${groupId}`);
     } catch (saveError) {
@@ -97,37 +97,66 @@ export default function CreateMeetupScreen() {
 
   return (
     <Screen scroll>
-      <SectionCard title="Create meetup" subtitle="Meetups save to the local queue first, then sync when you reconnect.">
+      <View style={styles.header}>
+        <Text style={styles.title}>Create Meetup</Text>
+        <Text style={styles.subtitle}>PLAN YOUR REGROUP SPOT</Text>
+      </View>
+
+      <SectionCard subtitle="Meetups save locally first, then sync when you reconnect.">
         <FieldLabel>Title</FieldLabel>
         <FieldInput onChangeText={setTitle} placeholder="Sunset regroup" value={title} />
-        <FieldLabel>Date and time</FieldLabel>
-        <PrimaryButton label={startsAt.toLocaleString()} onPress={() => setShowPicker((value) => !value)} />
+
+        <FieldLabel>Date & time</FieldLabel>
+        <Pressable
+          onPress={() => setShowPicker((v) => !v)}
+          style={({ pressed }) => [styles.dateButton, pressed && { opacity: 0.8 }]}
+        >
+          <Text style={styles.dateButtonText}>
+            {startsAt.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+            {'  ·  '}
+            {startsAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+          </Text>
+        </Pressable>
         {showPicker ? (
           <DateTimePicker
             mode="datetime"
             value={startsAt}
             onChange={(_, date) => {
               setShowPicker(false);
-              if (date) {
-                setStartsAt(date);
-              }
+              if (date) setStartsAt(date);
             }}
           />
         ) : null}
-        <FieldLabel>Optional stage</FieldLabel>
+
+        <FieldLabel>Stage (optional)</FieldLabel>
         <View style={styles.stageList}>
           {(festivalQuery.data?.stages ?? []).map((stage) => {
             const selected = selectedStageId === stage.id;
             return (
-              <Pressable key={stage.id} onPress={() => setSelectedStageId(selected ? null : stage.id)} style={[styles.stageChip, selected ? styles.stageChipSelected : null]}>
-                <Text style={[styles.stageChipText, selected ? styles.stageChipTextSelected : null]}>{stage.name}</Text>
+              <Pressable
+                key={stage.id}
+                onPress={() => setSelectedStageId(selected ? null : stage.id)}
+                style={[styles.stageChip, selected && styles.stageChipSelected]}
+              >
+                <Text style={[styles.stageChipText, selected && styles.stageChipTextSelected]}>
+                  {stage.name}
+                </Text>
               </Pressable>
             );
           })}
         </View>
-        <FieldLabel>Optional notes</FieldLabel>
-        <FieldInput multiline numberOfLines={4} onChangeText={setNotes} placeholder="Bring the glow sticks." value={notes} />
-        <FieldLabel>Map pin placement</FieldLabel>
+
+        <FieldLabel>Notes (optional)</FieldLabel>
+        <FieldInput
+          multiline
+          numberOfLines={3}
+          onChangeText={setNotes}
+          placeholder="Bring the glow sticks."
+          value={notes}
+          style={styles.notesInput}
+        />
+
+        <FieldLabel>Map pin</FieldLabel>
         <Pressable
           onLayout={handleMapLayout}
           onPress={(event) =>
@@ -138,69 +167,152 @@ export default function CreateMeetupScreen() {
           }
           style={styles.mapPlaceholder}
         >
-          <Text style={styles.mapText}>Tap anywhere on the festival map to place the meetup pin.</Text>
-          {pin ? <View style={[styles.pin, { left: `${pin.x * 100}%`, top: `${pin.y * 100}%` }]} /> : null}
+          <Text style={styles.mapHint}>Tap to place your meetup pin</Text>
+          {pin ? (
+            <View
+              style={[
+                styles.pin,
+                { left: `${pin.x * 100}%` as any, top: `${pin.y * 100}%` as any },
+              ]}
+            />
+          ) : null}
         </Pressable>
-        <PrimaryButton label={imageAsset ? 'Replace totem photo' : 'Add totem photo'} onPress={() => void handlePickImage()} />
+
+        <Pressable
+          onPress={() => void handlePickImage()}
+          style={({ pressed }) => [styles.photoButton, pressed && { opacity: 0.8 }]}
+        >
+          <Text style={styles.photoButtonText}>
+            {imageAsset ? '🪐 Replace totem photo' : '📸 Add totem photo'}
+          </Text>
+        </Pressable>
         {imageAsset ? <Image source={{ uri: imageAsset.uri }} style={styles.preview} /> : null}
+
         <InlineMessage message={error} />
-        <PrimaryButton disabled={loading || title.trim().length < 2} label={loading ? 'Saving...' : 'Save meetup'} onPress={handleSave} />
+        <PrimaryButton
+          disabled={loading || title.trim().length < 2}
+          label={loading ? 'Saving...' : 'Save meetup'}
+          loading={loading}
+          onPress={() => void handleSave()}
+        />
       </SectionCard>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  mapPlaceholder: {
-    backgroundColor: '#efe4d8',
-    borderRadius: 18,
-    height: 220,
-    overflow: 'hidden',
-    position: 'relative',
+  header: {
+    paddingHorizontal: spacing.xs,
+    paddingBottom: spacing.sm,
   },
-  mapText: {
-    color: '#5a483c',
-    left: 16,
-    position: 'absolute',
-    right: 16,
-    top: 16,
+  title: {
+    color: colors.textPrimary,
+    fontSize: 28,
+    fontWeight: '700',
+    fontStyle: 'italic',
   },
-  pin: {
-    backgroundColor: '#e85d3f',
-    borderColor: '#ffffff',
-    borderRadius: 999,
-    borderWidth: 3,
-    height: 18,
-    marginLeft: -9,
-    marginTop: -9,
-    position: 'absolute',
-    width: 18,
+  subtitle: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    marginTop: spacing.xs,
   },
-  preview: {
-    borderRadius: 18,
-    height: 180,
-    resizeMode: 'cover',
-    width: '100%',
+  dateButton: {
+    backgroundColor: '#F0F4FF',
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
   },
-  stageChip: {
-    backgroundColor: '#efe4d8',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  stageChipSelected: {
-    backgroundColor: '#20352f',
-  },
-  stageChipText: {
-    color: '#5a483c',
-    fontWeight: '600',
-  },
-  stageChipTextSelected: {
-    color: '#f8f4ef',
+  dateButtonText: {
+    color: colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '700',
   },
   stageList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing.sm,
+  },
+  stageChip: {
+    backgroundColor: '#F0F4FF',
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  stageChipSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  stageChipText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  stageChipTextSelected: {
+    color: colors.textPrimary,
+  },
+  notesInput: {
+    height: 80,
+    textAlignVertical: 'top',
+    paddingTop: spacing.md,
+  },
+  mapPlaceholder: {
+    backgroundColor: '#F0F4FF',
+    borderRadius: radii.xl,
+    height: 180,
+    overflow: 'hidden',
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+  },
+  mapHint: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  pin: {
+    backgroundColor: colors.primary,
+    borderColor: '#FFFFFF',
+    borderRadius: 999,
+    borderWidth: 3,
+    height: 20,
+    marginLeft: -10,
+    marginTop: -10,
+    position: 'absolute',
+    width: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  photoButton: {
+    backgroundColor: '#F0F4FF',
+    borderRadius: radii.xl,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+  },
+  photoButtonText: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  preview: {
+    borderRadius: radii.xl,
+    height: 180,
+    resizeMode: 'cover',
+    width: '100%',
   },
 });

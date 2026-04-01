@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getDb, replaceRowsForFestival, upsertRows, withDbTransaction } from '@festival/sync-engine';
 
 import { supabase } from './supabase';
-import type { ArtistRow, FestivalRow, SetRow, StageRow } from './models';
+import type { ArtistRow, FestivalRow, SetRow, StageRow, UserFestivalRow } from './models';
 
 const client = supabase as any;
 
@@ -118,6 +118,44 @@ export async function getLocalFestivalLineup(festivalId: string): Promise<Festiv
      ORDER BY sets.start_time ASC;`,
     [festivalId],
   );
+}
+
+export async function getUserFestivals(userId: string): Promise<UserFestivalRow[]> {
+  const { data, error } = await client
+    .from('user_festivals')
+    .select('*')
+    .eq('user_id', userId);
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []) as UserFestivalRow[];
+}
+
+export async function toggleUserFestival(userId: string, festivalId: string): Promise<boolean> {
+  const { data: existing } = await client
+    .from('user_festivals')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('festival_id', festivalId)
+    .maybeSingle();
+
+  if (existing?.id) {
+    await client.from('user_festivals').delete().eq('id', existing.id);
+    return false;
+  }
+
+  const { error } = await client.from('user_festivals').insert({
+    user_id: userId,
+    festival_id: festivalId,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return true;
 }
 
 export function useFestivals(festivalId?: string) {

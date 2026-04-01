@@ -1,6 +1,6 @@
 import { fetchAndCacheFestival, getLineupWithConflicts, toggleSetSelection } from '@festival/data-access';
 import { cancelReminderForEntity, scheduleSetReminder } from '@festival/notification-utils';
-import { Chip, Screen, SecondaryButton, SegmentedControl, SectionCard } from '@festival/ui';
+import { Chip, colors, radii, SecondaryButton, SectionCard, SegmentedControl, spacing, Screen } from '@festival/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -165,7 +165,7 @@ export default function BrowseScheduleScreen() {
 
 const styles = StyleSheet.create({
   artist: {
-    color: '#241812',
+    color: colors.textPrimary,
     fontSize: 17,
     fontWeight: '700',
   },
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   conflictDot: {
-    backgroundColor: '#c62828',
+    backgroundColor: colors.warning,
     borderRadius: 999,
     height: 12,
     width: 12,
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   meta: {
-    color: '#5a483c',
+    color: colors.textSecondary,
     fontSize: 14,
   },
   rowHeader: {

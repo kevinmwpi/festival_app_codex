@@ -21,7 +21,10 @@
     "supabase:db:diff:linked": "supabase db diff --linked --schema public,storage",
     "supabase:functions:serve": "supabase functions serve",
     "supabase:functions:deploy": "supabase functions deploy create_group_invite && supabase functions deploy join_group_from_invite && supabase functions deploy upload_totem_photo",
-    "supabase:seed:festival": "npx ts-node apps/admin-tools/src/seed-festival.ts seed-data/sample-festival.json"
+    "supabase:seed:festival": "npx ts-node apps/admin-tools/src/seed-festival.ts seed-data/sample-festival.json",
+    "supabase:seed:coachella": "npx ts-node apps/admin-tools/src/seed-festival.ts seed-data/coachella-2026.json",
+    "supabase:seed:lolla": "npx ts-node apps/admin-tools/src/seed-festival.ts seed-data/lollapalooza-2026.json",
+    "supabase:seed:all": "npm run supabase:seed:festival && npm run supabase:seed:coachella && npm run supabase:seed:lolla"
   },
   "devDependencies": {
     "@types/node": "^22.14.1",
