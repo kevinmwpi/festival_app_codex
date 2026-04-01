@@ -18,18 +18,14 @@
         "autoIncrement": true
       },
       "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://lzxewkfxdibohzqbqmiu.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "",
-        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": ""
+        "EXPO_PUBLIC_SUPABASE_URL": "https://lzxewkfxdibohzqbqmiu.supabase.co"
       }
     },
     "production": {
       "distribution": "store",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://lzxewkfxdibohzqbqmiu.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "",
-        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": ""
+        "EXPO_PUBLIC_SUPABASE_URL": "https://lzxewkfxdibohzqbqmiu.supabase.co"
       }
     }
   },
