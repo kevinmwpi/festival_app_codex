@@ -27,6 +27,7 @@
     "supabase:seed:all": "npm run supabase:seed:festival && npm run supabase:seed:coachella && npm run supabase:seed:lolla"
   },
   "devDependencies": {
+    "@react-native-community/netinfo": "11.5.2",
     "@types/node": "^22.14.1",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.6",

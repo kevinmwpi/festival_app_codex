@@ -10,10 +10,12 @@
     "lint": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@react-native-community/netinfo": "^12.0.1",
     "@supabase/supabase-js": "^2.99.3",
     "expo-sqlite": "~55.0.11",
     "sql.js": "^1.14.1"
+  },
+  "peerDependencies": {
+    "@react-native-community/netinfo": "11.5.2"
   },
   "devDependencies": {
     "@types/sql.js": "^1.4.10"
