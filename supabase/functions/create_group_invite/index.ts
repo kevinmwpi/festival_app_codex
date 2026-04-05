@@ -1,5 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts';
 import { resolveAuthedAppUser } from '../_shared/helpers.ts';
+import { checkBodySize, requireUUID, ValidationError, validationErrorResponse } from '../_shared/validate.ts';
 
 function randomInviteCode(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(6)))
@@ -12,13 +13,27 @@ Deno.serve(async (request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  const sizeError = checkBodySize(request, 512);
+  if (sizeError) return sizeError;
+
   const auth = await resolveAuthedAppUser(request);
   if ('error' in auth) {
     return auth.error;
   }
 
   const { appUser, serviceClient } = auth;
-  const { group_id } = await request.json();
+
+  let group_id: string;
+  try {
+    const body = await request.json();
+    group_id = requireUUID(body?.group_id, 'group_id');
+  } catch (err) {
+    if (err instanceof ValidationError) return validationErrorResponse(err);
+    return new Response(JSON.stringify({ error: 'Invalid request body.' }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
 
   const { data: group, error: groupError } = await serviceClient.from('groups').select('*').eq('id', group_id).single();
   if (groupError || !group) {

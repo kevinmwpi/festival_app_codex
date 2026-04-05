@@ -21,7 +21,6 @@
       },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Festie uses your location to show your position on the festival map and help friends find you.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Festie tracks your location in the background to share with your group and log stage visits.",
         "NSCameraUsageDescription": "Festie needs camera access to take totem photos for meetup coordination.",
         "NSPhotoLibraryUsageDescription": "Festie needs photo library access to select totem photos.",
         "ITSAppUsesNonExemptEncryption": false
@@ -55,7 +54,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Festie to use your location to share with your group."
+          "locationWhenInUsePermission": "Allow Festie to use your location to share with your group."
         }
       ],
       [
