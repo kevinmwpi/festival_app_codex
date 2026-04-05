@@ -4,19 +4,26 @@ import { router } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+const MAX_EMAIL_LENGTH = 254;
+
 export default function EnterEmailScreen() {
   const [email, setEmail] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
 
   const handleSubmit = React.useCallback(async () => {
+    const trimmed = email.trim();
+    if (trimmed.length > MAX_EMAIL_LENGTH) {
+      setError('Please enter a valid email address.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      await signInWithOTP(email.trim());
+      await signInWithOTP(trimmed);
       router.push({
         pathname: '/auth/verify-otp',
-        params: { email: email.trim() },
+        params: { email: trimmed },
       });
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Unable to send code.');
@@ -55,6 +62,16 @@ export default function EnterEmailScreen() {
             label="Send Code"
             onPress={handleSubmit}
           />
+          <View style={styles.legalRow}>
+            <Text style={styles.legalText}>By continuing you agree to our </Text>
+            <Pressable onPress={() => router.push('/legal/terms-of-use')}>
+              <Text style={styles.legalLink}>Terms of Use</Text>
+            </Pressable>
+            <Text style={styles.legalText}> and </Text>
+            <Pressable onPress={() => router.push('/legal/privacy-policy')}>
+              <Text style={styles.legalLink}>Privacy Policy</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </View>
@@ -114,5 +131,21 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     fontSize: 16,
     fontWeight: '700',
+  },
+  legalRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  legalText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  legalLink: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '600',
   },
 });

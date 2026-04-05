@@ -142,7 +142,19 @@ export async function listMyGroups(): Promise<GroupSummary[]> {
   }
 }
 
+const MAX_GROUP_NAME_LENGTH = 100;
+const MAX_MEETUP_TITLE_LENGTH = 150;
+const MAX_MEETUP_NOTES_LENGTH = 1000;
+
 export async function createGroup(input: { name: string; festival_id: string }): Promise<{ invite_code: string; deep_link: string; group: GroupRow }> {
+  const trimmedName = input.name.trim();
+  if (trimmedName.length === 0) {
+    throw new Error('Group name is required.');
+  }
+  if (trimmedName.length > MAX_GROUP_NAME_LENGTH) {
+    throw new Error(`Group name must be ${MAX_GROUP_NAME_LENGTH} characters or fewer.`);
+  }
+
   const profile = await requireCurrentProfile();
   const groupId = createId();
   const memberId = createId();
@@ -152,7 +164,7 @@ export async function createGroup(input: { name: string; festival_id: string }):
     .insert({
       id: groupId,
       festival_id: input.festival_id,
-      name: input.name,
+      name: trimmedName,
       created_by_user_id: profile.id,
       invite_code: `pending-${groupId.slice(0, 6)}`,
     })
@@ -258,16 +270,28 @@ export async function createMeetup(input: {
   custom_map_y?: number | null;
   notes?: string | null;
 }): Promise<MeetupRow> {
+  const trimmedTitle = input.title.trim();
+  if (trimmedTitle.length === 0) {
+    throw new Error('Meetup title is required.');
+  }
+  if (trimmedTitle.length > MAX_MEETUP_TITLE_LENGTH) {
+    throw new Error(`Meetup title must be ${MAX_MEETUP_TITLE_LENGTH} characters or fewer.`);
+  }
+  const trimmedNotes = input.notes?.trim() ?? null;
+  if (trimmedNotes && trimmedNotes.length > MAX_MEETUP_NOTES_LENGTH) {
+    throw new Error(`Meetup notes must be ${MAX_MEETUP_NOTES_LENGTH} characters or fewer.`);
+  }
+
   const profile = await requireCurrentProfile();
   const meetup: MeetupRow = {
     id: createId(),
     group_id: input.group_id,
-    title: input.title,
+    title: trimmedTitle,
     starts_at: input.starts_at,
     stage_id: input.stage_id ?? null,
     custom_map_x: input.custom_map_x ?? null,
     custom_map_y: input.custom_map_y ?? null,
-    notes: input.notes ?? null,
+    notes: trimmedNotes,
     totem_image_url: null,
     created_by_user_id: profile.id,
   };

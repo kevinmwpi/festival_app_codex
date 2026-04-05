@@ -1,10 +1,15 @@
 import { corsHeaders } from '../_shared/cors.ts';
 import { resolveAuthedAppUser } from '../_shared/helpers.ts';
+import { checkRateLimit } from '../_shared/rate-limit.ts';
+import { checkBodySize, requireUUID, requireUrl, ValidationError, validationErrorResponse } from '../_shared/validate.ts';
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
+
+  const sizeError = checkBodySize(request, 2048);
+  if (sizeError) return sizeError;
 
   const auth = await resolveAuthedAppUser(request);
   if ('error' in auth) {
@@ -12,16 +17,33 @@ Deno.serve(async (request) => {
   }
 
   const { appUser, serviceClient } = auth;
-  const { meetup_id, totem_image_url } = await request.json();
+
+  let meetup_id: string;
+  let totem_image_url: string;
+  try {
+    const body = await request.json();
+    meetup_id = requireUUID(body?.meetup_id, 'meetup_id');
+    totem_image_url = requireUrl(body?.totem_image_url, 'totem_image_url', 1024);
+  } catch (err) {
+    if (err instanceof ValidationError) return validationErrorResponse(err);
+    return new Response(JSON.stringify({ error: 'Invalid request body.' }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Rate limit: 20 totem uploads per user per hour
+  const rateLimitError = await checkRateLimit(serviceClient, appUser.email, 'upload_totem', 20, 60 * 60 * 1000);
+  if (rateLimitError) return rateLimitError;
+
+  // Verify the URL path matches the expected meetup storage prefix
   const expectedPathPrefix = `/storage/v1/object/public/totems/${meetup_id}/`;
   let hasExpectedPath = false;
-  if (typeof totem_image_url === 'string') {
-    try {
-      const parsedUrl = new URL(totem_image_url);
-      hasExpectedPath = parsedUrl.pathname.startsWith(expectedPathPrefix);
-    } catch {
-      hasExpectedPath = false;
-    }
+  try {
+    const parsedUrl = new URL(totem_image_url);
+    hasExpectedPath = parsedUrl.pathname.startsWith(expectedPathPrefix);
+  } catch {
+    hasExpectedPath = false;
   }
 
   if (!hasExpectedPath) {

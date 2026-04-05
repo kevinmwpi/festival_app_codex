@@ -7,6 +7,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 const EMOJIS = ['🎧', '🪩', '🌞', '🌈', '🛼', '🦋', '🌊', '🔥', '🪐', '🍓', '🎸', '🎹', '🥁', '🎷', '🍒', '⚡', '🌻', '🌙', '🛸', '🍑'];
 
+const MAX_DISPLAY_NAME_LENGTH = 80;
+
 export default function ProfileSetupScreen() {
   const queryClient = useQueryClient();
   const [displayName, setDisplayName] = React.useState('');
@@ -24,11 +26,16 @@ export default function ProfileSetupScreen() {
   }, [displayName]);
 
   const handleSave = React.useCallback(async () => {
+    const trimmedName = displayName.trim();
+    if (trimmedName.length > MAX_DISPLAY_NAME_LENGTH) {
+      setError(`Display name must be ${MAX_DISPLAY_NAME_LENGTH} characters or fewer.`);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       await saveProfile({
-        display_name: displayName.trim(),
+        display_name: trimmedName,
         avatar_type: selectedEmoji ? 'emoji' : 'initials',
         avatar_value: selectedEmoji ?? (initials || 'FA'),
       });
