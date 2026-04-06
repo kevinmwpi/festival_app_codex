@@ -84,9 +84,6 @@
         "projectId": "59195106-7885-444b-8813-a6760fd93f4a"
       }
     },
-    "experiments": {
-      "typedRoutes": true
-    },
     "owner": "kevinppi",
     "runtimeVersion": {
       "policy": "appVersion"
