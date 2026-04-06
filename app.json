@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "59195106-7885-444b-8813-a6760fd93f4a"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.kevinppi.festivalapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}
