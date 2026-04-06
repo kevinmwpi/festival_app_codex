@@ -41,6 +41,7 @@
     "expo-sqlite": "~55.0.11",
     "expo-status-bar": "~55.0.4",
     "expo-symbols": "~55.0.5",
+    "expo-updates": "~55.0.18",
     "expo-web-browser": "~55.0.10",
     "piexifjs": "^1.0.6",
     "react": "19.2.0",
