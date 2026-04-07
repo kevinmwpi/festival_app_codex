@@ -26,7 +26,7 @@ export default function IndexScreen() {
         return;
       }
 
-      setDestination('/(tabs)/schedule');
+      setDestination('/(tabs)/festivals');
     })();
 
     return () => {

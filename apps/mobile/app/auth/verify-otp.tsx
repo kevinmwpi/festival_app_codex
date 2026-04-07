@@ -21,7 +21,7 @@ export default function VerifyOtpScreen() {
         await verifyOTP(email, nextOtp);
         const profile = await getCurrentProfile();
         if (profile) {
-          router.replace('/(tabs)/schedule');
+          router.replace('/(tabs)/festivals');
         } else {
           router.replace('/auth/profile-setup');
         }

@@ -52,46 +52,25 @@ export async function getUser() {
 }
 
 export async function signInWithOTP(email: string): Promise<void> {
-  const url = `${supabaseUrl}/functions/v1/request-otp`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${supabaseAnonKey}`,
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      shouldCreateUser: true,
     },
-    body: JSON.stringify({ email }),
   });
 
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    const message = (body as { error?: string }).error ?? 'Unable to send login code.';
-    throw new Error(message);
+  if (error) {
+    throw error;
   }
 }
 
 export async function verifyOTP(email: string, token: string) {
-  const url = `${supabaseUrl}/functions/v1/verify-otp`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${supabaseAnonKey}`,
-    },
-    body: JSON.stringify({ email, token }),
+  const { data, error } = await supabase.auth.verifyOtp({
+    email,
+    token,
+    type: 'email',
   });
 
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    const message = (body as { error?: string }).error ?? 'That code was not accepted.';
-    throw new Error(message);
-  }
-
-  const { access_token, refresh_token } = (await response.json()) as {
-    access_token: string;
-    refresh_token: string;
-  };
-
-  const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
   if (error) {
     throw error;
   }

@@ -26,9 +26,13 @@ export default function EnterEmailScreen() {
         params: { email: trimmed },
       });
     } catch (submissionError: any) {
-      console.error('[OTP Error]', JSON.stringify(submissionError, null, 2));
-      const msg = submissionError?.message || submissionError?.error_description || 'Unable to send code.';
-      setError(`${msg} (status: ${submissionError?.status ?? 'unknown'})`);
+      console.error('[OTP Error]', submissionError);
+      const msg = submissionError?.message || 'Unable to send code.';
+      if (msg.toLowerCase().includes('rate limit')) {
+        setError('Too many attempts. Please wait a few minutes and try again.');
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
