@@ -1,8 +1,8 @@
 import { getCurrentProfile, verifyOTP } from '@festival/data-access';
-import { colors, FieldInput, InlineMessage } from '@festival/ui';
+import { colors, InlineMessage } from '@festival/ui';
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 export default function VerifyOtpScreen() {
   const params = useLocalSearchParams<{ email?: string }>();
@@ -10,6 +10,7 @@ export default function VerifyOtpScreen() {
   const [otp, setOtp] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const inputRef = React.useRef<TextInput>(null);
 
   const submitOtp = React.useCallback(
     async (nextOtp: string) => {
@@ -55,23 +56,25 @@ export default function VerifyOtpScreen() {
           </Text>
         </View>
 
-        {/* OTP Display */}
-        <View style={styles.otpRow}>
+        {/* OTP Cells — tap anywhere to focus the hidden input */}
+        <Pressable onPress={() => inputRef.current?.focus()} style={styles.otpRow}>
           {Array.from({ length: 6 }).map((_, index) => (
             <View key={index} style={[styles.otpCell, otp[index] ? styles.otpCellFilled : null]}>
               <Text style={styles.otpText}>{otp[index] ?? ''}</Text>
             </View>
           ))}
-        </View>
+        </Pressable>
 
-        {/* Hidden input */}
-        <FieldInput
+        {/* Invisible TextInput that captures keyboard input */}
+        <TextInput
+          ref={inputRef}
           keyboardType="number-pad"
           maxLength={6}
           onChangeText={handleChange}
-          placeholder="123456"
           value={otp}
           autoFocus
+          style={styles.hiddenInput}
+          caretHidden
         />
         <InlineMessage message={error} />
         <Text style={styles.helper}>
@@ -113,6 +116,12 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  hiddenInput: {
+    position: 'absolute',
+    opacity: 0,
+    height: 0,
+    width: 0,
   },
   otpRow: {
     flexDirection: 'row',
