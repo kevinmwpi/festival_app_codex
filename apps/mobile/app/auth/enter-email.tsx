@@ -25,8 +25,10 @@ export default function EnterEmailScreen() {
         pathname: '/auth/verify-otp',
         params: { email: trimmed },
       });
-    } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : 'Unable to send code.');
+    } catch (submissionError: any) {
+      console.error('[OTP Error]', JSON.stringify(submissionError, null, 2));
+      const msg = submissionError?.message || submissionError?.error_description || 'Unable to send code.';
+      setError(`${msg} (status: ${submissionError?.status ?? 'unknown'})`);
     } finally {
       setLoading(false);
     }
