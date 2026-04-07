@@ -8,7 +8,7 @@ Deno.serve(async (request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  // Body size guard — email + 6-digit token should never exceed 1 KB
+  // Body size guard — email + 8-digit token should never exceed 1 KB
   const sizeError = checkBodySize(request, 1024);
   if (sizeError) return sizeError;
 

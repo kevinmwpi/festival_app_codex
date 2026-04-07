@@ -4,6 +4,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+const OTP_LENGTH = 8;
+
 export default function VerifyOtpScreen() {
   const params = useLocalSearchParams<{ email?: string }>();
   const email = Array.isArray(params.email) ? params.email[0] : params.email ?? '';
@@ -14,7 +16,7 @@ export default function VerifyOtpScreen() {
 
   const submitOtp = React.useCallback(
     async (nextOtp: string) => {
-      if (nextOtp.length !== 6) return;
+      if (nextOtp.length !== OTP_LENGTH) return;
       setLoading(true);
       setError(null);
       try {
@@ -36,9 +38,9 @@ export default function VerifyOtpScreen() {
 
   const handleChange = React.useCallback(
     (value: string) => {
-      const digits = value.replace(/\D/g, '').slice(0, 6);
+      const digits = value.replace(/\D/g, '').slice(0, OTP_LENGTH);
       setOtp(digits);
-      if (digits.length === 6) {
+      if (digits.length === OTP_LENGTH) {
         void submitOtp(digits);
       }
     },
@@ -52,13 +54,13 @@ export default function VerifyOtpScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Verify Code</Text>
           <Text style={styles.subtitle}>
-            {email ? `We sent a six-digit code to ${email}` : 'Enter the six-digit code from your inbox'}
+            {email ? `We sent an eight-digit code to ${email}` : 'Enter the eight-digit code from your inbox'}
           </Text>
         </View>
 
         {/* OTP Cells — tap anywhere to focus the hidden input */}
         <Pressable onPress={() => inputRef.current?.focus()} style={styles.otpRow}>
-          {Array.from({ length: 6 }).map((_, index) => (
+          {Array.from({ length: OTP_LENGTH }).map((_, index) => (
             <View key={index} style={[styles.otpCell, otp[index] ? styles.otpCellFilled : null]}>
               <Text style={styles.otpText}>{otp[index] ?? ''}</Text>
             </View>
@@ -69,7 +71,7 @@ export default function VerifyOtpScreen() {
         <TextInput
           ref={inputRef}
           keyboardType="number-pad"
-          maxLength={6}
+          maxLength={OTP_LENGTH}
           onChangeText={handleChange}
           value={otp}
           autoFocus
@@ -125,7 +127,7 @@ const styles = StyleSheet.create({
   },
   otpRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     justifyContent: 'center',
   },
   otpCell: {
