@@ -161,7 +161,7 @@ This document maps every data type collected by Festie to its App Store privacy 
 - Auth tokens stored in encrypted on-device storage (MMKV)
 - File uploads limited to 5 MiB
 - EXIF metadata stripped from photos before upload
-- Rate limiting on all authentication endpoints (5 attempts per 15 minutes)
+- Rate limiting on all authentication endpoints (10 attempts per 10 minutes)
 - Input validation and payload size limits on all server-side endpoints
 - No service role key used in client app (anon key only, protected by RLS)
 

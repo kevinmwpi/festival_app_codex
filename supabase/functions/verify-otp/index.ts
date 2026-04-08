@@ -32,8 +32,8 @@ Deno.serve(async (request) => {
 
   const serviceClient = createServiceClient();
 
-  // Rate limit: 5 OTP verification attempts per email per 15 minutes
-  const rateLimitError = await checkRateLimit(serviceClient, email, 'verify_otp', 5, 15 * 60 * 1000);
+  // Rate limit: 10 OTP verification attempts per email per 10 minutes
+  const rateLimitError = await checkRateLimit(serviceClient, email, 'verify_otp', 10, 10 * 60 * 1000);
   if (rateLimitError) return rateLimitError;
 
   // Verify the OTP using the admin API — this avoids the client needing a

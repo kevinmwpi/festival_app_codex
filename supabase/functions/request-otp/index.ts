@@ -29,8 +29,8 @@ Deno.serve(async (request) => {
 
   const serviceClient = createServiceClient();
 
-  // Rate limit: 5 OTP send attempts per email per 15 minutes
-  const rateLimitError = await checkRateLimit(serviceClient, email, 'request_otp', 5, 15 * 60 * 1000);
+  // Rate limit: 10 OTP send attempts per email per 10 minutes
+  const rateLimitError = await checkRateLimit(serviceClient, email, 'request_otp', 10, 10 * 60 * 1000);
   if (rateLimitError) return rateLimitError;
 
   // Trigger Supabase Auth to send the OTP email.
