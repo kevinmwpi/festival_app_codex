@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-const OTP_LENGTH = 8;
+const OTP_LENGTH = 6;
 
 export default function VerifyOtpScreen() {
   const params = useLocalSearchParams<{ email?: string }>();
@@ -54,7 +54,7 @@ export default function VerifyOtpScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Verify Code</Text>
           <Text style={styles.subtitle}>
-            {email ? `We sent an eight-digit code to ${email}` : 'Enter the eight-digit code from your inbox'}
+            {email ? `We sent an six-digit code to ${email}` : 'Enter the six-digit code from your inbox'}
           </Text>
         </View>
 

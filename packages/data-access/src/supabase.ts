@@ -11,8 +11,6 @@ const supabaseAnonKey =
   process.env.EXPO_PUBLIC_SUPABASE_KEY ??
   'development-anon-key';
 
-console.log('[Supabase Init]', { url: supabaseUrl, keyPrefix: supabaseAnonKey?.substring(0, 20) + '...' });
-
 const storage = createMMKV({ id: 'festival-auth' });
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
