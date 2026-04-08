@@ -3,7 +3,7 @@ import { colors, FieldInput, InlineMessage, PrimaryButton } from '@festival/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 const EMOJIS = ['🎧', '🪩', '🌞', '🌈', '🛼', '🦋', '🌊', '🔥', '🪐', '🍓', '🎸', '🎹', '🥁', '🎷', '🍒', '⚡', '🌻', '🌙', '🛸', '🍑'];
 
@@ -40,7 +40,7 @@ export default function ProfileSetupScreen() {
         avatar_value: selectedEmoji ?? (initials || 'FA'),
       });
       await queryClient.invalidateQueries({ queryKey: ['profile'] });
-      router.replace('/(tabs)/schedule');
+      router.replace('/(tabs)/festivals');
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Unable to save your profile.');
     } finally {
@@ -49,7 +49,7 @@ export default function ProfileSetupScreen() {
   }, [displayName, initials, queryClient, selectedEmoji]);
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
       <View style={styles.content}>
         {/* Header */}
         <View style={styles.header}>
@@ -115,7 +115,7 @@ export default function ProfileSetupScreen() {
           onPress={handleSave}
         />
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -123,8 +123,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  contentContainer: {
     paddingHorizontal: 24,
     paddingTop: 60,
+    paddingBottom: 40,
   },
   content: {
     gap: 20,
