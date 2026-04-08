@@ -7,8 +7,8 @@ import type { UserRow } from './models';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://example.supabase.co';
 const supabaseAnonKey =
-  process.env.EXPO_PUBLIC_SUPABASE_KEY ??
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
+  process.env.EXPO_PUBLIC_SUPABASE_KEY ??
   'development-anon-key';
 
 const storage = createMMKV({ id: 'festival-auth' });
@@ -40,6 +40,23 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
 
 const client = supabase as any;
 
+async function extractFunctionError(error: any): Promise<Error> {
+  const response = error?.context;
+  if (response && typeof response.json === 'function') {
+    try {
+      const body = await response.json();
+      const message = typeof body?.error === 'string' ? body.error : null;
+      if (message) {
+        return new Error(message);
+      }
+    } catch {
+      // Fall back to the original error message if the response body is unreadable.
+    }
+  }
+
+  return error instanceof Error ? error : new Error('Unexpected function error.');
+}
+
 export async function getUser() {
   const { data, error } = await supabase.auth.getUser();
   if (error) {
@@ -50,30 +67,44 @@ export async function getUser() {
 }
 
 export async function signInWithOTP(email: string): Promise<void> {
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      shouldCreateUser: true,
+  const { error } = await client.functions.invoke('request-otp', {
+    body: {
+      email,
     },
   });
 
   if (error) {
-    throw error;
+    throw await extractFunctionError(error);
   }
 }
 
 export async function verifyOTP(email: string, token: string) {
-  const { data, error } = await supabase.auth.verifyOtp({
-    email,
-    token,
-    type: 'email',
+  const { data, error } = await client.functions.invoke('verify-otp', {
+    body: {
+      email,
+      token,
+    },
   });
 
   if (error) {
-    throw error;
+    throw await extractFunctionError(error);
   }
 
-  return data.session;
+  const accessToken = data?.access_token;
+  const refreshToken = data?.refresh_token;
+  if (typeof accessToken !== 'string' || typeof refreshToken !== 'string') {
+    throw new Error('OTP verification did not return a valid session.');
+  }
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+  if (sessionError) {
+    throw sessionError;
+  }
+
+  return sessionData.session;
 }
 
 export async function signOut(): Promise<void> {

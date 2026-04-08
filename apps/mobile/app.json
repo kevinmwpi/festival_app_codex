@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Festival App",
+    "name": "Festie",
     "slug": "festival-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,23 +10,47 @@
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#f6efe7"
+      "backgroundColor": "#F0F6FF"
     },
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.festival.app",
-      "buildNumber": "1"
+      "supportsTablet": false,
+      "bundleIdentifier": "com.kevin.festivalapp",
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Festie uses your location to show your position on the festival map and help friends find you.",
+        "NSCameraUsageDescription": "Festie needs camera access to take totem photos for meetup coordination.",
+        "NSPhotoLibraryUsageDescription": "Festie needs photo library access to select totem photos.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
-      "package": "com.festival.app",
+      "package": "com.kevin.festivalapp",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#f6efe7",
+        "backgroundColor": "#F0F6FF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "permissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -36,13 +60,36 @@
     "plugins": [
       "expo-router",
       "expo-sqlite",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Festie to use your location to share with your group."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Festie to access your photos for totem images.",
+          "cameraPermission": "Allow Festie to use your camera for totem photos."
+        }
+      ],
+      "expo-sharing",
+      "@react-native-community/datetimepicker",
+      "expo-web-browser"
     ],
     "extra": {
-      "defaultFestivalId": "11111111-1111-4111-8111-111111111111"
+      "defaultFestivalId": "11111111-1111-4111-8111-111111111111",
+      "eas": {
+        "projectId": "59195106-7885-444b-8813-a6760fd93f4a"
+      }
     },
-    "experiments": {
-      "typedRoutes": true
+    "owner": "kevinppi",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/59195106-7885-444b-8813-a6760fd93f4a"
     }
   }
 }

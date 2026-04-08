@@ -12,3 +12,5 @@ apps/mobile/node_modules
 supabase/.temp
 *.db
 *.db-journal
+.env
+apps/mobile/.env

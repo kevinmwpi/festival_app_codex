@@ -135,6 +135,10 @@ Primary runbook for hosted/local Supabase operations:
 
 - [`docs/supabase-operations.md`](docs/supabase-operations.md)
 
+Email OTP sign-in verification checklist:
+
+- [`docs/supabase-operations.md#8-email-otp-verification-checklist`](docs/supabase-operations.md#8-email-otp-verification-checklist)
+
 Apply migrations:
 
 ```bash
@@ -158,6 +162,11 @@ Deploy all MVP edge functions:
 ```bash
 npm run supabase:functions:deploy
 ```
+
+This includes the OTP auth functions used by the mobile sign-in flow:
+
+- `request-otp`
+- `verify-otp`
 
 Supabase assets included here:
 

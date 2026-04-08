@@ -8,4 +8,6 @@ export type MeetupRow = Database['public']['Tables']['meetups']['Row'];
 export type SetRow = Database['public']['Tables']['sets']['Row'];
 export type StageRow = Database['public']['Tables']['stages']['Row'];
 export type UserRow = Database['public']['Tables']['users']['Row'];
+export type LocationShareRow = Database['public']['Tables']['location_shares']['Row'];
+export type UserFestivalRow = Database['public']['Tables']['user_festivals']['Row'];
 export type UserSetSelectionRow = Database['public']['Tables']['user_set_selections']['Row'];

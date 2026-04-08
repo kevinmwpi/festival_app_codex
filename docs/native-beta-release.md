@@ -26,8 +26,8 @@ eas project:init
 
 ### App identifiers (already committed)
 
-- iOS bundle ID: `com.festival.app`
-- Android package: `com.festival.app`
+- iOS bundle ID: `com.kevin.festivalapp`
+- Android package: `com.kevin.festivalapp`
 
 ### Build numbers (already scaffolded)
 
