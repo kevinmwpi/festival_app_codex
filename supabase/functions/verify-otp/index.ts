@@ -38,23 +38,38 @@ Deno.serve(async (request) => {
 
   // Verify the OTP using the admin API — this avoids the client needing a
   // user-scoped session before verification and lets us control the flow.
-  const { data, error } = await serviceClient.auth.admin.verifyOtp({
-    email,
-    token,
-    type: 'email',
-  });
-
-  if (error || !data.session) {
+  // The OTP is issued via the /otp endpoint which generates a magiclink-type
+  // token, so we must verify with type 'magiclink' to match.
+  let data: { session: { access_token: string; refresh_token: string; expires_in: number; token_type: string } | null; user: unknown };
+  try {
+    const result = await serviceClient.auth.admin.verifyOtp({
+      email,
+      token,
+      type: 'magiclink',
+    });
+    if (result.error || !result.data.session) {
+      return new Response(
+        JSON.stringify({ error: result.error?.message ?? 'Invalid or expired login code.' }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
+    }
+    data = result.data;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Verification failed.';
+    console.error('[verify-otp] admin.verifyOtp threw:', message);
     return new Response(
-      JSON.stringify({ error: error?.message ?? 'Invalid or expired login code.' }),
+      JSON.stringify({ error: message }),
       {
-        status: 401,
+        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       },
     );
   }
 
-  const { access_token, refresh_token, expires_in, token_type } = data.session;
+  const { access_token, refresh_token, expires_in, token_type } = data.session!;
 
   return new Response(
     JSON.stringify({ access_token, refresh_token, expires_in, token_type }),
