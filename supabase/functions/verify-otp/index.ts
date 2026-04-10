@@ -36,16 +36,15 @@ Deno.serve(async (request) => {
   const rateLimitError = await checkRateLimit(serviceClient, email, 'verify_otp', 10, 10 * 60 * 1000);
   if (rateLimitError) return rateLimitError;
 
-  // Verify the OTP using the admin API — this avoids the client needing a
-  // user-scoped session before verification and lets us control the flow.
-  // The OTP is issued via the /otp endpoint which generates a magiclink-type
-  // token, so we must verify with type 'magiclink' to match.
+  // Verify the email OTP and return the resulting user session to the client.
+  // Supabase exposes this flow on auth.verifyOtp, and email OTP codes should
+  // be verified with type 'email'.
   let data: { session: { access_token: string; refresh_token: string; expires_in: number; token_type: string } | null; user: unknown };
   try {
-    const result = await serviceClient.auth.admin.verifyOtp({
+    const result = await serviceClient.auth.verifyOtp({
       email,
       token,
-      type: 'magiclink',
+      type: 'email',
     });
     if (result.error || !result.data.session) {
       return new Response(
@@ -59,7 +58,7 @@ Deno.serve(async (request) => {
     data = result.data;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Verification failed.';
-    console.error('[verify-otp] admin.verifyOtp threw:', message);
+    console.error('[verify-otp] auth.verifyOtp threw:', message);
     return new Response(
       JSON.stringify({ error: message }),
       {
