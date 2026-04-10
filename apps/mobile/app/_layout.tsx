@@ -1,7 +1,8 @@
 import { OfflineBanner, useOfflineStatus, colors } from '@festival/ui';
 import { Stack } from 'expo-router';
 import React from 'react';
-import { SafeAreaView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppProviders } from '@/src/providers/app-providers';
 
@@ -9,9 +10,11 @@ export { ErrorBoundary } from 'expo-router';
 
 export default function RootLayout() {
   return (
-    <AppProviders>
-      <RootShell />
-    </AppProviders>
+    <SafeAreaProvider>
+      <AppProviders>
+        <RootShell />
+      </AppProviders>
+    </SafeAreaProvider>
   );
 }
 
