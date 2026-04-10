@@ -13,9 +13,11 @@
     "@festival/domain": "*",
     "@festival/sync-engine": "*",
     "@supabase/supabase-js": "^2.99.3",
-    "@tanstack/react-query": "^5.94.5",
     "piexifjs": "^1.0.6",
-    "react": "19.2.0",
     "react-native-mmkv": "^4.3.0"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5.0.0",
+    "react": ">=18.0.0"
   }
 }
