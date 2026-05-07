@@ -5,37 +5,49 @@ import {
   type ScheduleRow,
 } from '@festival/data-access';
 import { cancelReminderForEntity, scheduleSetReminder } from '@festival/notification-utils';
-import { Chip, colors, radii, spacing } from '@festival/ui';
+import { Chip, colors, deriveAccentColors, radii, spacing } from '@festival/ui';
+import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import React from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useCurrentProfile } from '@/src/hooks/use-current-profile';
 import { useAppStore } from '@/src/state/app-store';
 
+/* ─── Stage colours — reference pastel palette ─────────── */
 const STAGE_COLORS: Record<string, string> = {
-  'Coachella Stage': '#FFB3D9',
-  'Outdoor Theatre': '#B2CEFE',
-  'Main Stage': '#FDFD96',
-  'Oasis Stage': '#B2D8B2',
-  'Sunset Stage': '#FFB3B3',
-  'Summit Stage': '#D1B3FF',
-  'Valley Stage': '#FFD1B3',
-  'Kinetic Field': '#B3FFE6',
-  'Circuit Grounds': '#FFFAB3',
-  'Neon Garden': '#D1B3FF',
-  'Basspod': '#FFB3B3',
-  'Cosmic Meadow': '#B2D8B2',
-  'Stereo Bloom': '#B2CEFE',
-  'Garden Stage': '#FFB3D9',
-  'Meadow Stage': '#FDFD96',
-  'Orchard Stage': '#FFD1B3',
-  'Hilltop Stage': '#B3FFE6',
-  'Coast Stage': '#FFFAB3',
+  'Coachella Stage':  '#FFB3D9',
+  'Outdoor Theatre':  '#B2CEFE',
+  'Main Stage':       '#FDFD96',
+  'Oasis Stage':      '#B2D8B2',
+  'Sunset Stage':     '#FFB3B3',
+  'Summit Stage':     '#D1B3FF',
+  'Valley Stage':     '#FFD1B3',
+  'Kinetic Field':    '#B3FFE6',
+  'Circuit Grounds':  '#FFFAB3',
+  'Neon Garden':      '#D1B3FF',
+  'Basspod':          '#FFB3B3',
+  'Cosmic Meadow':    '#B2D8B2',
+  'Stereo Bloom':     '#B2CEFE',
+  'Garden Stage':     '#FFB3D9',
+  'Meadow Stage':     '#FDFD96',
+  'Orchard Stage':    '#FFD1B3',
+  'Hilltop Stage':    '#B3FFE6',
+  'Coast Stage':      '#FFFAB3',
 };
 
 function getStageColor(stageName: string): string {
   return STAGE_COLORS[stageName] ?? colors.primary;
+}
+
+/**
+ * Derive a deterministic picsum.photos URL from an artist name.
+ * This gives each artist a consistent landscape/portrait image as a placeholder,
+ * matching the reference prototype which uses https://picsum.photos/seed/{slug}/400/400
+ */
+function artistImageUrl(name: string): string {
+  const seed = name.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 14) || 'artist';
+  return `https://picsum.photos/seed/${seed}/400/400`;
 }
 
 function formatTimeRange(start: string, end: string): string {
@@ -43,6 +55,8 @@ function formatTimeRange(start: string, end: string): string {
   const e = new Date(end);
   return `${s.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} – ${e.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
 }
+
+/* ─── Artist Card ─────────────────────────────────────────── */
 
 function ArtistCard({
   row,
@@ -55,48 +69,74 @@ function ArtistCard({
   const stageColor = getStageColor(row.stage_name);
 
   return (
+    /* bg-white rounded-[40px] p-6 shadow-sm border border-black/5 */
     <View style={styles.artistCard}>
-      {/* Image placeholder with toggle button */}
-      <View style={styles.imageContainer}>
-        <View style={[styles.artistImage, { backgroundColor: stageColor + '40' }]}>
-          <Text style={styles.artistInitial}>{row.artist_name.charAt(0)}</Text>
+      <View style={styles.cardInner}>
+        {/* Image area — w-28 h-28 rounded-[32px] */}
+        <View style={styles.imageWrap}>
+          <Image
+            source={{ uri: artistImageUrl(row.artist_name) }}
+            style={styles.artistImage}
+            resizeMode="cover"
+          />
+          {/* Floating add / check button — absolute -bottom-2 -right-2 */}
+          <Pressable
+            onPress={onToggle}
+            style={({ pressed }) => [
+              styles.addButton,
+              isSelected ? styles.addButtonSelected : styles.addButtonDefault,
+              pressed && { transform: [{ scale: 0.88 }] },
+            ]}
+          >
+            {isSelected
+              ? <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+              : <Ionicons name="add" size={18} color="#FFFFFF" />}
+          </Pressable>
         </View>
-        <Pressable
-          onPress={onToggle}
-          style={({ pressed }) => [
-            styles.addButton,
-            isSelected ? styles.addButtonSelected : styles.addButtonDefault,
-            pressed && { transform: [{ scale: 0.9 }] },
-          ]}
-        >
-          <Text style={styles.addButtonIcon}>{isSelected ? '✓' : '+'}</Text>
-        </Pressable>
-      </View>
 
-      {/* Content */}
-      <View style={styles.artistContent}>
-        <View style={[styles.stageBadge, { backgroundColor: stageColor + '20' }]}>
-          <Text style={[styles.stageBadgeText, { color: stageColor }]}>{row.stage_name}</Text>
-        </View>
-        <Text style={styles.artistName}>{row.artist_name}</Text>
-        {row.is_conflicting ? (
-          <View style={styles.conflictBadge}>
-            <Text style={styles.conflictText}>CONFLICT</Text>
+        {/* Right content */}
+        <View style={styles.artistContent}>
+          {/* Stage pill — bg-[#F0F4FF] text-[#B2CEFE] */}
+          <View style={styles.stagePill}>
+            <Text style={styles.stagePillText}>{row.stage_name}</Text>
           </View>
-        ) : null}
-        <Text style={styles.artistTime}>{formatTimeRange(row.start_time, row.end_time)}</Text>
+
+          {/* Heart / saved indicator row */}
+          <View style={styles.nameRow}>
+            <Text style={styles.artistName} numberOfLines={2}>{row.artist_name}</Text>
+            {isSelected && (
+              <Ionicons name="heart" size={22} color={colors.warning} style={{ marginLeft: 4 }} />
+            )}
+          </View>
+
+          {/* Conflict */}
+          {row.is_conflicting && (
+            <View style={styles.conflictBadge}>
+              <Ionicons name="warning-outline" size={9} color={colors.conflict} />
+              <Text style={styles.conflictText}>Conflict</Text>
+            </View>
+          )}
+
+          {/* Time */}
+          <Text style={styles.artistTime}>{formatTimeRange(row.start_time, row.end_time)}</Text>
+        </View>
       </View>
     </View>
   );
 }
 
+/* ─── Screen ──────────────────────────────────────────────── */
+
 export default function LineupScreen() {
   const queryClient = useQueryClient();
-  const festivalId = useAppStore((state) => state.activeFestivalId);
+  const festivalId = useAppStore((s) => s.activeFestivalId);
+  const activeFestivalAccent = useAppStore((s) => s.activeFestivalAccent);
   const profileQuery = useCurrentProfile();
   const userId = profileQuery.data?.id ?? '';
   const [dayFilter, setDayFilter] = React.useState<string>('all');
   const [stageFilter, setStageFilter] = React.useState<string>('all');
+
+  const screenBg = deriveAccentColors(activeFestivalAccent).bgTint;
 
   React.useEffect(() => {
     void fetchAndCacheFestival(festivalId).catch(() => undefined);
@@ -119,34 +159,27 @@ export default function LineupScreen() {
     return ['all', ...Array.from(set).sort()];
   }, [deferredLineup]);
 
-  const filtered = React.useMemo(() => {
-    return deferredLineup.filter((row) => {
-      if (dayFilter !== 'all' && row.start_time.slice(0, 10) !== dayFilter) return false;
-      if (stageFilter !== 'all' && row.stage_name !== stageFilter) return false;
-      return true;
-    });
-  }, [deferredLineup, dayFilter, stageFilter]);
+  const filtered = React.useMemo(() => deferredLineup.filter((row) => {
+    if (dayFilter !== 'all' && row.start_time.slice(0, 10) !== dayFilter) return false;
+    if (stageFilter !== 'all' && row.stage_name !== stageFilter) return false;
+    return true;
+  }), [deferredLineup, dayFilter, stageFilter]);
 
-  const handleToggle = React.useCallback(
-    async (setId: string) => {
-      if (!userId) return;
-      const isSelected = await toggleSetSelection(festivalId, userId, setId);
-      const row = lineupQuery.data?.find((r) => r.id === setId);
-      if (row) {
-        try {
-          if (isSelected) await scheduleSetReminder(row);
-          else await cancelReminderForEntity('set', setId);
-        } catch {
-          // Reminder failed but selection was saved
-        }
-      }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['browse-schedule', festivalId, userId] }),
-        queryClient.invalidateQueries({ queryKey: ['schedule', festivalId, userId] }),
-      ]);
-    },
-    [festivalId, userId, queryClient, lineupQuery.data],
-  );
+  const handleToggle = React.useCallback(async (setId: string) => {
+    if (!userId) return;
+    const isSelected = await toggleSetSelection(festivalId, userId, setId);
+    const row = lineupQuery.data?.find((r) => r.id === setId);
+    if (row) {
+      try {
+        if (isSelected) await scheduleSetReminder(row);
+        else await cancelReminderForEntity('set', setId);
+      } catch { /* reminder failed */ }
+    }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['browse-schedule', festivalId, userId] }),
+      queryClient.invalidateQueries({ queryKey: ['schedule', festivalId, userId] }),
+    ]);
+  }, [festivalId, userId, queryClient, lineupQuery.data]);
 
   const handleRefresh = React.useCallback(async () => {
     await fetchAndCacheFestival(festivalId).catch(() => undefined);
@@ -154,36 +187,42 @@ export default function LineupScreen() {
   }, [festivalId, userId, queryClient]);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: screenBg }]}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Lineup</Text>
-        <Text style={styles.subtitle}>BROWSE ARTISTS</Text>
+        <Text style={styles.wordmark}>Festie</Text>
+        <View style={styles.breadcrumb}>
+          <Text style={[styles.breadcrumbActive, { color: activeFestivalAccent }]}>Browse Lineup</Text>
+        </View>
       </View>
 
-      {/* Day filters */}
+      {/* Day filter pills — black active like reference */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-        {days.map((day) => (
-          <Chip
-            key={day}
-            active={dayFilter === day}
-            onPress={() => setDayFilter(day)}
-            label={
-              day === 'all'
-                ? 'All Days'
-                : new Date(`${day}T12:00:00`).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
-            }
-          />
-        ))}
+        {days.map((day) => {
+          const active = dayFilter === day;
+          const label = day === 'all'
+            ? 'All'
+            : new Date(`${day}T12:00:00`).toLocaleDateString([], { weekday: 'short' }).toUpperCase();
+          return (
+            <Pressable
+              key={day}
+              onPress={() => setDayFilter(day)}
+              style={[styles.dayPill, active && styles.dayPillActive]}
+            >
+              <Text style={[styles.dayPillLabel, active && styles.dayPillLabelActive]}>{label}</Text>
+            </Pressable>
+          );
+        })}
       </ScrollView>
 
-      {/* Stage filters */}
+      {/* Stage filter chips */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
         {stages.map((stage) => (
           <Chip
             key={stage}
             active={stageFilter === stage}
             onPress={() => setStageFilter(stage)}
-            label={stage === 'all' ? 'All Stages' : stage}
+            label={stage === 'all' ? 'All' : stage}
           />
         ))}
       </ScrollView>
@@ -192,11 +231,18 @@ export default function LineupScreen() {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={lineupQuery.isFetching} onRefresh={() => void handleRefresh()} />}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={lineupQuery.isFetching}
+            onRefresh={() => void handleRefresh()}
+            tintColor={activeFestivalAccent}
+          />
+        }
       >
         {filtered.length === 0 && !lineupQuery.isLoading ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>🎵</Text>
+            <Ionicons name="musical-notes-outline" size={48} color={colors.textSecondary} style={{ opacity: 0.3, marginBottom: 8 }} />
             <Text style={styles.emptyTitle}>No artists found</Text>
             <Text style={styles.emptyDesc}>
               {deferredLineup.length === 0
@@ -214,170 +260,183 @@ export default function LineupScreen() {
   );
 }
 
+/* ─── Styles ─────────────────────────────────────────────── */
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+  container: { flex: 1 },
+
   header: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.sm,
+    paddingTop: spacing.xl + 4,
+    paddingBottom: spacing.xs,
+    gap: 4,
   },
-  title: {
-    color: colors.textPrimary,
-    fontSize: 32,
-    fontWeight: '700',
+  wordmark: {
+    fontFamily: 'Georgia',
     fontStyle: 'italic',
+    fontSize: 40,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    letterSpacing: -0.5,
   },
-  subtitle: {
-    color: colors.textSecondary,
-    fontSize: 10,
+  breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  breadcrumbActive: {
+    fontSize: 11,
     fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 2,
-    marginTop: spacing.xs,
+    letterSpacing: 1,
   },
+
+  /* Day pills — black = active, white = inactive */
   filterRow: {
     flexDirection: 'row',
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
   },
-  scroll: {
-    flex: 1,
+  dayPill: {
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surface,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
-  scrollContent: {
-    padding: spacing.lg,
-    paddingBottom: 120,
-    gap: spacing.md,
+  dayPillActive: {
+    backgroundColor: colors.textPrimary,
   },
+  dayPillLabel: {
+    color: colors.textPrimary,
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  dayPillLabelActive: {
+    color: '#FFFFFF',
+  },
+
+  scroll: { flex: 1 },
+  scrollContent: { padding: spacing.lg, paddingBottom: 120, gap: spacing.md },
+
+  /* Artist card — bg-white rounded-[40px] p-6 shadow-sm border border-black/5 */
   artistCard: {
     backgroundColor: colors.surface,
-    borderRadius: radii.xxl + 8,
-    borderWidth: 1,
-    borderColor: colors.borderCard,
+    borderRadius: radii.card,
     padding: spacing.xl,
-    flexDirection: 'row',
-    gap: spacing.xl,
-    shadowColor: colors.shadow,
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
   },
-  imageContainer: {
-    position: 'relative',
-  },
+  cardInner: { flexDirection: 'row', gap: spacing.xl },
+
+  /* Image — w-28 h-28 rounded-[32px] */
+  imageWrap: { position: 'relative', flexShrink: 0 },
   artistImage: {
-    width: 96,
-    height: 96,
-    borderRadius: radii.xxl,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 112,
+    height: 112,
+    borderRadius: 32,
   },
-  artistInitial: {
-    fontSize: 32,
-    fontWeight: '700',
-    fontStyle: 'italic',
-    color: colors.textPrimary,
-    opacity: 0.4,
-  },
+  /* Add button — absolute -bottom-2 -right-2 w-10 h-10 rounded-2xl border-4 border-white */
   addButton: {
     position: 'absolute',
-    bottom: -6,
-    right: -6,
-    width: 36,
-    height: 36,
-    borderRadius: radii.md,
+    bottom: -8,
+    right: -8,
+    width: 40,
+    height: 40,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: '#FFFFFF',
     shadowColor: '#000',
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.12,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
-  addButtonSelected: {
-    backgroundColor: colors.success,
-  },
-  addButtonDefault: {
-    backgroundColor: colors.primary,
-  },
-  addButtonIcon: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  artistContent: {
-    flex: 1,
-    gap: 4,
-  },
-  stageBadge: {
+  addButtonDefault: { backgroundColor: colors.primary },
+  addButtonSelected: { backgroundColor: colors.success },
+
+  /* Content */
+  artistContent: { flex: 1, gap: 4, justifyContent: 'center' },
+  /* Stage pill — text-[10px] font-bold uppercase bg-[#F0F4FF] text-[#B2CEFE] */
+  stagePill: {
     alignSelf: 'flex-start',
+    backgroundColor: '#F0F4FF',
     borderRadius: radii.pill,
-    paddingHorizontal: spacing.sm + 4,
-    paddingVertical: spacing.xs,
-    marginBottom: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    marginBottom: 4,
   },
-  stageBadgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-  },
-  artistName: {
-    color: colors.textPrimary,
-    fontSize: 22,
-    fontWeight: '700',
-    fontStyle: 'italic',
-    lineHeight: 26,
-  },
-  conflictBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#FFF5F5',
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-  },
-  conflictText: {
-    color: '#FFB3B3',
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  artistTime: {
-    color: colors.textPrimary,
+  stagePillText: {
+    color: colors.primary,
     fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 1.5,
-    opacity: 0.3,
-    marginTop: 2,
   },
+  nameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+  /* Artist name — text-2xl font-serif italic font-bold leading-tight */
+  artistName: {
+    flex: 1,
+    color: colors.textPrimary,
+    fontFamily: 'Georgia',
+    fontStyle: 'italic',
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 26,
+  },
+  conflictBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.conflictBg,
+    borderRadius: radii.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  conflictText: {
+    color: colors.conflict,
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  /* Time — text-xs font-bold opacity-30 tracking-widest uppercase */
+  artistTime: {
+    color: colors.textPrimary,
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    opacity: 0.3,
+  },
+
+  /* Empty */
   empty: {
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: radii.xxl,
+    borderRadius: radii.card,
     borderWidth: 1,
     borderColor: colors.borderCard,
     padding: spacing.xxxl,
     gap: spacing.sm,
   },
-  emptyIcon: {
-    fontSize: 40,
-    marginBottom: spacing.sm,
-  },
   emptyTitle: {
     color: colors.textPrimary,
+    fontFamily: 'Georgia',
+    fontStyle: 'italic',
     fontSize: 20,
     fontWeight: '700',
   },
-  emptyDesc: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    textAlign: 'center',
-  },
+  emptyDesc: { color: colors.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 20 },
 });
