@@ -163,7 +163,7 @@ do $$ begin
 exception when others then raise notice 'pg_cron unavailable: %', sqlerrm;
 end $$;
 ```
-Retention never depends on cron alone (the location RPCs purge too).
+Retention never depends on cron alone (the location RPCs purge too). Platform configuration outside the migrations (runbook §2.8): database auth audit logging is turned off and an operator-scheduled `purge-auth-audit-log` job deletes `auth.audit_log_entries` older than 90 days.
 
 ### 2.8 Storage — `008_storage_totems.sql`
 
@@ -216,7 +216,7 @@ Verification: `deno check` every function (`deno` is installed); `deno test` pur
 
 **Config & client**
 - Reads `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` (alias `EXPO_PUBLIC_SUPABASE_KEY`). No fallbacks: export `supabaseConfigError: string | null`; if set, no client is created and calls throw `ConfigError`.
-- `createClient(..., { global: { fetch: fetchWithTimeout(15_000) } })` (AbortController). For refresh-token requests (`/auth/v1/token?grant_type=refresh_token`), a non-OK response that is 5xx or not JSON (captive portal, proxy error page) is converted into a network error so auth-js keeps the session and retries, instead of signing the user out.
+- `createClient(..., { global: { fetch: fetchWithTimeout(15_000) } })` (AbortController). For refresh-token requests (`/auth/v1/token?grant_type=refresh_token`), a response that is 5xx, 429, not JSON (including a 200 HTML captive-portal page), or JSON without a session is converted into a network error so auth-js keeps the session and retries, instead of signing the user out. A genuine JSON 4xx auth error (e.g. `refresh_token_not_found`) still signs out. See `packages/data-access/README.md`.
 
 **Session (offline-safe)**
 - `getStoredSession(): { authUserId: string; expiresAt: number } | null` — **synchronous**; parses MMKV `festival-auth` / key `supabase_session`; requires `refresh_token` and `user.id`; never calls `supabase.auth.*`. Routing and launch paths use only this and `getCachedProfile()`. `supabase.auth.getSession()/getUser()` are never awaited on launch or render paths.

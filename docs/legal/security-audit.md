@@ -1,97 +1,115 @@
-# Security Audit — Hardcoded Secrets & Environment Variables
+# Security controls: Festie v1
 
-**Last updated: April 5, 2026**
-**Scope:** Full codebase scan of `festival_app_codex` repository
+Last reviewed: October 5, 2026, against the v1 code on this branch.
 
----
+What protects Festie's data, where each control lives and which automated test would fail if it were
+removed. The contract is [`../v1-architecture.md`](../v1-architecture.md) (goal 1: "no user can read or
+change data they should not; proven by automated tests"). All tests below run in CI
+(`.github/workflows/ci.yml`) on every push and pull request.
 
-## Executive Summary
+## 1. Secrets and configuration
 
-**Result: CLEAN — No hardcoded secrets found.**
+| Value | Where it lives | Exposure |
+|---|---|---|
+| Supabase URL, anon/publishable key | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY` (EAS environment variables; the URL is also pinned in `apps/mobile/eas.json`) | Public by design (in the app binary); everything they can reach is governed by RLS and grants |
+| Mapbox token | `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` | Public `pk.` token only; `MAPBOX_ACCESS_TOKEN` in `apps/mobile/src/config/app-info.ts` rejects anything else |
+| Service-role / secret key | Supabase Edge Functions runtime (injected automatically) and the operator's local, git-ignored `.env` for `apps/admin-tools` | Never in the app, never `EXPO_PUBLIC_*`, never committed. It was previously stored in a Railway service; rotate it when decommissioning Railway ([`../release-runbook.md`](../release-runbook.md) §2.3) |
+| Demo login email and code | Supabase function secrets `DEMO_LOGIN_EMAIL`, `DEMO_LOGIN_CODE` | Never committed; compared as SHA-256 digests in constant time |
+| Apple team id, App Store app id, EAS project id | `apps/mobile/eas.json`, `app.json` | Identifiers, not secrets |
 
-All API keys, tokens, and passwords are loaded from environment variables. No sensitive credentials exist in committed source files.
+`app.config.ts` refuses release builds without the public configuration. Without Supabase configuration
+the data layer creates no client and the app shows a configuration-error screen (no silent fallback
+project). Re-scan before each release:
+`git grep -nE "service_role|sb_secret_|sk\.[A-Za-z0-9]|BEGIN (RSA|EC|OPENSSH) PRIVATE KEY" -- . ':!docs'`
+(expect only references by name).
 
----
+## 2. Database access control (Postgres + PostgREST)
 
-## Scan Results
+| Control | Implementation | Tests |
+|---|---|---|
+| RLS enabled on every public table; locked tables have no policies or grants | `supabase/migrations/007_v1_security_overhaul.sql` §2.4–2.5 | `supabase/tests/rls.sql` section A |
+| Table and column privileges whitelist (e.g. `users` exposes only id, display name, avatar, created_at; `group_members` and `reports` are not directly writable) | 007 privileges block | rls.sql A, C, D, E |
+| Exact whitelist of RPCs executable by `anon` and `authenticated`; service-role-only functions (`prepare_account_deletion`, `prepare_demo_account`, purges, `check_rate_limit`) | 007, end of file | rls.sql A, M |
+| Security-definer helpers in a non-exposed `private` schema with `search_path = ''` | 007 §2.2 | rls.sql A |
+| Crew-scoped visibility of profiles, picks, meetups and locations, and block filtering in both directions | RLS policies and `private.*` helpers | rls.sql C, F, G, H, J |
+| Group integrity: atomic create, 6-character invite codes from a 32-character alphabet, exact-match join, 50-member cap, admin-only rotate/remove, admin hand-off under row locks | `create_group`, `join_group`, `rotate_invite_code`, `remove_group_member`, `leave_group` | rls.sql I; concurrency races in `supabase/tests/local/race-*.sql` |
+| Immutable meetup ownership and crew; picks must match their set's festival | Column-scoped triggers | rls.sql F, G |
+| Disallowed-word filter on names, crew names, meetup title/notes (insert and change only, never on cascades) | Triggers + `private.contains_disallowed_text`, list in `public.moderation_terms` (009) | rls.sql D, G; `apps/admin-tools/test/terms.test.ts` |
+| Rate limits: crew creation 10/day, reports 20/day, 11th wrong invite in an hour refused, demo login 20/h per IP and 30/h global | `private.check_rate_limit` (advisory lock per key) | rls.sql I, K, M; `supabase/functions/demo-login/handler_test.ts` |
+| Only published festivals visible; catalog read-only | RLS on festivals/stages/sets; draft-by-default; `festivals_published_requires_source` | rls.sql B |
+| Migrations safe on a dirty hosted database and idempotent | 006–009 | `npm run db:test` (dirty fixture, re-apply of 007–009, partial-history scenarios) |
+| No `storage.*` DDL/DML in migrations except the isolated 008 | `scripts/db-test.sh` guard | `npm run db:test` |
 
-### Secrets Inventory
+## 3. Storage
 
-| Secret | Variable Name | Location | Classification | Status |
-|--------|--------------|----------|---------------|--------|
-| Supabase Service Role Key | `SUPABASE_SERVICE_ROLE_KEY` | `.env` (gitignored) + Supabase dashboard | Server-side only | ✅ Clean |
-| Supabase Anon Key | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | `.env` (gitignored); bundled into app at build time | Public (protected by RLS) | ✅ Clean |
-| Supabase Anon Key (alt name) | `EXPO_PUBLIC_SUPABASE_KEY` | Fallback alias in `packages/data-access/src/supabase.ts:11` | Public (protected by RLS) | ✅ Clean |
-| Mapbox Access Token | `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` | `.env` (gitignored); bundled into app at build time | Public (Mapbox URL-restricted recommended) | ✅ Clean |
-| Supabase URL | `EXPO_PUBLIC_SUPABASE_URL` / `SUPABASE_URL` | `.env.example` shows project URL | Public (project reference only) | ✅ Acceptable |
-| Apple Team ID | `Z94VZGABD8` | `apps/mobile/eas.json` | Build config only (not a secret) | ✅ Acceptable |
-| Apple App ID | `6761392490` | `apps/mobile/eas.json` | Build config only (not a secret) | ✅ Acceptable |
+| Control | Implementation | Tests |
+|---|---|---|
+| Private `totems` bucket, 5 MiB, `image/jpeg` only | 008 | rls.sql L |
+| Restrictive guard: read only as a member of the folder's crew; upload only for your own meetup in that crew (`private.can_upload_totem`); delete by owner or crew admin; no updates; `upsert: false` | 008 policies | rls.sql L |
+| Reads only via 1-hour signed URLs | `getTotemSignedUrl` in `packages/data-access/src/media.ts` | `packages/data-access/test/meetups-totems.test.ts` |
+| Metadata stripped before upload (EXIF via piexif plus XMP/IPTC/comment segments) | `stripJpegMetadata` | `packages/data-access/test/groups-schedule.test.ts` |
+| Storage schema not exposed through the API | `[api] schemas = ["public", "graphql_public"]` in `supabase/config.toml` (applied with `supabase config push`) | Manual check, runbook §2.8 |
 
-### Files Checked
+## 4. Edge functions
 
-| File | Result |
-|------|--------|
-| `packages/data-access/src/supabase.ts` | ✅ Uses `process.env.EXPO_PUBLIC_*` only |
-| `packages/data-access/src/` (all) | ✅ No hardcoded secrets |
-| `apps/mobile/app/` (all screens) | ✅ No hardcoded secrets |
-| `apps/admin-tools/src/seed-festival.ts` | ✅ Uses `process.env.SUPABASE_URL` and `process.env.SUPABASE_SERVICE_ROLE_KEY` |
-| `supabase/functions/_shared/helpers.ts` | ✅ Uses `Deno.env.get('SUPABASE_URL')` and `Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')` |
-| `supabase/functions/` (all) | ✅ Uses `Deno.env.get()` only |
-| `apps/mobile/eas.json` | ✅ Contains build config identifiers (Apple Team ID, App ID) — not secrets |
-| `.env.example` | ✅ Contains placeholder values only, no real keys |
-| `.gitignore` | ✅ Properly excludes `.env`, `.env.local`, `.env*.local` |
+| Control | Implementation | Tests |
+|---|---|---|
+| `delete-account`: JWT verified by the gateway and by the function; idempotent; storage removed in batches ≤ 1000 before the auth user; retryable 500 on partial failure; no PII in logs | `supabase/functions/delete-account/handler.ts` | `delete-account/handler_test.ts`, `_shared/chunk_test.ts` |
+| `demo-login`: off (404) unless both secrets are valid; constant-time digest comparison of email and code; identical 401 for wrong email, wrong code or a full global cap (no enumeration); per-IP and global limits; spoofed X-Forwarded-For prefixes ignored | `supabase/functions/demo-login/handler.ts`, `_shared/crypto.ts`, `_shared/http.ts` | `demo-login/handler_test.ts`, `_shared/crypto_test.ts`, `_shared/http_test.ts`; the platform's header shape is verified once on hosted ([`../release-runbook.md`](../release-runbook.md) §2.11) |
+| Method checks, JSON body size cap, no CORS (native clients only) | `_shared/http.ts` | `_shared/http_test.ts` |
+| Retired functions (`request-otp`, `verify-otp`, `create_group_invite`, `join_group_from_invite`, `upload_totem_photo`) removed from the repo and from hosted | runbook §2.10 | Manual |
 
----
+## 5. Authentication and sessions
 
-## Key Findings & Notes
+- Email one-time codes only (8 digits, 10-minute expiry, `token_verifications = 30` per 5 minutes per IP), no
+  passwords, no links in emails (`supabase/config.toml`, `supabase/templates/`). At most one code email
+  per address per 60 seconds (`[auth.email] max_frequency`, verified on the hosted project in runbook
+  §2.8) and 200 emails per hour project-wide (`email_sent`).
+- Refresh-token rotation on; access tokens expire after 3600 s.
+- Session in MMKV inside the app sandbox (iOS data protection; no extra app-level encryption). Sign-out
+  and deletion remove it directly, even if the server call fails (`packages/data-access/test/signout-race.test.ts`).
+- Writes are never sent without a user JWT (prevents anon-key requests being misread as permission
+  errors); offline-safe routing uses only the stored session (`session-auth.test.ts`).
+- Captive portals or proxy error pages during token refresh are treated as network errors, so the user
+  is not signed out (`captive-portal.test.ts`).
+- Switching accounts on one device wipes the previous account's local data before anything is shown or
+  sent (`local-owner.test.ts`).
+- Sync errors are classified (transient vs permanent) so permission failures are never retried forever
+  (`packages/sync-engine/test/classify.test.ts`).
 
-### 1. EXPO_PUBLIC_ Prefix Awareness
-Variables prefixed with `EXPO_PUBLIC_` are **intentionally bundled into the app binary** and visible to anyone who reverse-engineers the binary. This is expected behavior for:
-- `EXPO_PUBLIC_SUPABASE_URL` — The Supabase project URL is not a secret; it's the public endpoint.
-- `EXPO_PUBLIC_SUPABASE_ANON_KEY` — The anon key is a public key by design, protected by Row-Level Security (RLS) policies at the database level. Supabase's architecture explicitly allows this key to be public.
-- `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` — Mapbox tokens can be URL/scope-restricted in the Mapbox dashboard. **Recommended action:** Set up token scoping in Mapbox to allow only the required styles and restrict to your app's domain.
+## 6. Mobile platform
 
-**Critical:** The `SUPABASE_SERVICE_ROLE_KEY` does NOT use the `EXPO_PUBLIC_` prefix and is never bundled into the client app. ✅
+- Permissions: When-In-Use location only (no background, no Always), camera and photos only on use,
+  microphone disabled; Android blocks background location, audio and broad storage permissions
+  (`apps/mobile/app.json`).
+- Mapbox telemetry opt-out requested (`Mapbox.setTelemetryEnabled(false)`); on iOS `@rnmapbox/maps` 10.3.0
+  only writes the legacy `MGLMapboxMetricsEnabled` default, so the effect is unconfirmed until the traffic
+  check in runbook §5.4 step 4 passes. No analytics or advertising SDKs; no tracking.
+- Release builds: `ITSAppUsesNonExemptEncryption = false` (TLS only); privacy manifest in `app.json`.
+- Custom URL scheme `festivalapp://` only for invite deep links; invite codes are stored and pre-filled,
+  never auto-joined.
 
-### 2. Supabase URL in .env.example
-The Supabase project URL (`https://lzxewkfxdibohzqbqmiu.supabase.co`) is visible in `.env.example`. This is acceptable — the project URL is:
-- Required for any API call and discoverable by anyone who uses the app.
-- Not a secret — it is the public API endpoint.
-- Not sufficient alone to access any data (requires the anon or service role key).
+## 7. Operations
 
-### 3. Apple Team ID & App ID in eas.json
-`Z94VZGABD8` (Team ID) and `6761392490` (App ID) are committed in `apps/mobile/eas.json`. These are:
-- Standard identifiers used for code signing and distribution.
-- Not secrets — Apple does not treat these as confidential.
-- Required in the build config file.
+- Admin actions run locally with the service-role key (`apps/admin-tools`), with `--dry-run` for every
+  write; no hosted admin service.
+- Moderation: reports reviewed daily within 24 hours; bans via `users:ban` (Auth ban plus removal from
+  every crew).
+- Backups before every schema change; Security Advisor checked after migrations (runbook §2.2, §2.6).
 
----
+## 8. Known limitations
 
-## Environment Variables Reference
-
-All variables that must be set before building or running:
-
-```
-# Server-side only (admin tools + Supabase Edge Functions)
-SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<never-commit-this>
-
-# Mobile app (bundled into binary — use public/anon values only)
-EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon-key-safe-to-bundle>
-EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=<mapbox-public-token>
-
-# Edge Functions (set via Supabase dashboard → Project Settings → Edge Functions)
-SUPABASE_URL=<auto-set by Supabase runtime>
-SUPABASE_SERVICE_ROLE_KEY=<auto-set by Supabase runtime>
-SUPABASE_ANON_KEY=<set manually in Supabase dashboard>
-```
-
----
-
-## Recommendations
-
-1. **Mapbox token scoping** — In the Mapbox dashboard, restrict your public token to only the styles and APIs your app uses. This limits exposure if the token is extracted from the binary.
-2. **Key rotation plan** — Establish a procedure to rotate the Supabase anon key if it is ever compromised (unlikely due to RLS, but good practice).
-3. **Periodic re-scan** — Re-run this audit before each major release using: `git grep -rn "sk_\|service_role\|private_key\|password\s*=" -- "*.ts" "*.tsx" "*.js" "*.json"`
-4. **CI secret scanning** — Consider adding a secret scanning step to your CI pipeline (e.g., GitHub's built-in secret scanning or `trufflehog`).
+- `supabase/tests/rls.sql` runs against a pgTAP-compatible shim in `npm run db:test`, not the real pgTAP
+  extension, and the Supabase platform is emulated by `supabase/tests/local/supabase-stubs.sql`. Hosted
+  behaviour of pg_cron and storage permissions is verified manually (runbook §2.6).
+- The X-Forwarded-For shape on hosted Supabase must be confirmed once (runbook §2.11).
+- `supabase config push` fills keys missing from `config.toml` with CLI template values; the runbook
+  (§2.8) requires `max_frequency = "60s"` and lists the full expected diff so the per-user email interval
+  is never pushed as 1 s.
+- Supabase Auth writes sign-in audit entries (email, IP) to `auth.audit_log_entries`, which account
+  deletion does not touch; retention is bounded by turning database audit logging off and a 90-day purge
+  job (runbook §2.8).
+- A totem photo can outlive its meetup if the app is killed between the database change and the storage
+  removal; it stays readable only to that crew's members and is removed by `storage:sweep-orphans`.
+- The anon key and Mapbox token are extractable from the app by design; their abuse is bounded by RLS,
+  rate limits and Mapbox token scopes.

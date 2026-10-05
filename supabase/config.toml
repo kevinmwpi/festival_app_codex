@@ -50,6 +50,10 @@ double_confirm_changes = true
 otp_length = 8
 # Codes expire after 10 minutes.
 otp_expiry = 600
+# Minimum time between code emails to the same address. Must stay explicit: the CLI template
+# default is "1s", and `supabase config push` would otherwise overwrite the hosted 60 s.
+# Matches the app's 60 s resend cooldown.
+max_frequency = "60s"
 
 # Sign-in code for an existing account (signInWithOtp).
 [auth.email.template.magic_link]
@@ -80,3 +84,8 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/demo-login/deno.json"
 entrypoint = "./functions/demo-login/index.ts"
+
+# MFA is not offered in v1; keep TOTP explicitly off so `supabase config push` diffs are intended.
+[auth.mfa.totp]
+enroll_enabled = false
+verify_enabled = false

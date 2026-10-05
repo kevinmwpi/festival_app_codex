@@ -7,7 +7,7 @@
  * the App Store listing). The values are `EXPO_PUBLIC_*`, i.e. embedded in the app binary — none of them
  * is secret. Set them as EAS environment variables (plain text or sensitive visibility, so the EAS CLI
  * can read them while resolving this config) for the matching EAS environment; see
- * docs/native-beta-release.md. Development builds and local runs never throw: the app shows its
+ * docs/release-runbook.md §5.1. Development builds and local runs never throw: the app shows its
  * configuration-error screen instead.
  */
 import type { ConfigContext, ExpoConfig } from 'expo/config';
@@ -67,7 +67,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         `Festie "${profile}" builds need their public runtime configuration:\n` +
           problems.map((problem) => `  - ${problem}`).join('\n') +
           `\nSet these as EAS environment variables for the "${profile}" environment ` +
-          '(see docs/native-beta-release.md).',
+          '(see docs/release-runbook.md §5.1).',
       );
     }
   }

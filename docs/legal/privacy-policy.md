@@ -1,149 +1,186 @@
-# Privacy Policy — Festie
+# Privacy Policy
 
-**Last updated: April 5, 2026**
+<!--
+Source of truth for the in-app Privacy Policy screen (apps/mobile/app/legal/privacy-policy.tsx) and
+the hosted page (docs/site/privacy.html). After editing run: node docs/legal/generate.mjs
+Allowed Markdown: see the header of docs/legal/generate.mjs. Every claim here is checked against the
+code; docs/legal/data-compliance.md maps each statement to the code and tests that back it.
+Placeholders (__LIKE_THIS__) are listed in docs/release-runbook.md, section 7.1. __SUPPORT_EMAIL__ is not a
+placeholder: it stays in this file and the generator fills it in from docs/legal/values.json (web pages)
+and EXPO_PUBLIC_SUPPORT_EMAIL (in-app screens).
+-->
 
-Festie ("we", "our", or "us") is operated by Kevin Pi. This Privacy Policy explains how we collect, use, store, and protect information when you use the Festie mobile application ("App").
+Last updated: October 5, 2026
 
----
+Festie is a festival planning app operated by __LEGAL_NAME__ ("Festie", "we", "us"). This policy explains what information the Festie app and its servers handle, why, who can see it, how long we keep it and the choices you have. If you have a question, email __SUPPORT_EMAIL__.
 
-## 1. Information We Collect
+## Summary
 
-### 1.1 Account Information
-When you create an account, we collect:
-- **Email address** — used to identify your account and send your one-time login code.
-- **Display name** — the name shown to your group members inside the app.
-- **Avatar** — an emoji or initials you choose to represent yourself.
+- We collect only what Festie needs to work: your email address, the profile you choose, your festival plans and crews, the meetups and photos you post and, only while you turn it on, your location.
+- No ads, no tracking, and no analytics, crash-reporting or advertising SDKs. We do not sell your personal information or share it for advertising. The only counting is of app installations: Mapbox (maps) and Expo (app updates) count them with a random identifier that is not linked to your account (section 4).
+- Your live location is shown only to the crew you choose, only while Festie is open, and is visible to your crew for at most 15 minutes after the last update, then deleted.
+- You can delete your account at any time in Settings, Delete account.
 
-### 1.2 Festival & Schedule Data
-We collect and store:
-- The festivals you add to your profile.
-- The artist sets you select ("want to see" list).
-- Notes you attach to selected sets.
+## 1. Information we collect
 
-### 1.3 Group & Social Data
-When you create or join a group:
-- Your group memberships and your role (member or admin).
-- Meetup details you create: title, time, location (stage or custom map pin), and any notes.
-- Totem photos you upload for a meetup (stored in our cloud storage).
-- Group chat messages (if used).
+### Account
 
-### 1.4 Location Data
-With your explicit permission, we collect:
-- **Real-time GPS coordinates** (latitude, longitude, heading, and accuracy) when you enable location sharing within a group.
-- Location data is shared **only with members of your group** and is retained for a **5-minute rolling window** — older location records are discarded automatically.
-- We do **not** track your location in the background or outside of an active sharing session.
+- **Email address.** Used to send your sign-in code and to identify your account. Other Festie users never see your email address.
 
-### 1.5 Device & Session Data
-- Authentication session tokens (stored securely on your device using encrypted local storage).
-- A generic client identifier (`festival-app`) sent with API requests for troubleshooting.
+### Profile
 
-### 1.6 What We Do Not Collect
-- We do not collect payment information.
-- We do not collect contacts, call logs, or SMS data.
-- We do not use third-party advertising SDKs or analytics platforms.
-- We do not sell your data to any third party.
+- **Display name and avatar.** The name you choose (up to 40 characters) and an avatar made of your initials, an emoji or a colour. Festie has no profile photos. Members of crews you belong to see your name and avatar.
 
----
+### Festival plans
 
-## 2. How We Use Your Information
+- **Festivals you follow.** Visible only to you.
+- **Sets you pick.** Members of your crews for the same festival see your picks in the crew schedule.
 
-| Data | Purpose |
-|------|---------|
-| Email address | Account authentication (OTP login) |
-| Display name & avatar | Shown to group members to identify you |
-| Festival & set selections | Build and display your personal schedule |
-| Group & meetup data | Coordinate with friends at the festival |
-| Location (when sharing) | Show your pin on the group map in real time |
-| Totem photos | Display your group's meetup photo |
-| Chat messages | In-group communication |
+### Crews
 
----
+- **Crews you create or join** and your role in each (admin or member). Crew members see the crew name, its invite code and the list of members.
 
-## 3. How We Share Your Information
+### Meetups
 
-We share your information **only in these limited circumstances**:
+- **Meetups you create:** title, time, optional stage, optional pin on the festival map and optional notes (up to 500 characters). Members of that crew see them.
 
-- **With your group members** — display name, avatar, location (when you enable sharing), and meetup details are visible to people in your group.
-- **With our service providers** — we use Supabase (database and authentication), Mapbox (maps), and Expo/EAS (app delivery). These providers process data only to operate the App. See Section 5 for details.
-- **If required by law** — we may disclose information if compelled by a valid legal process.
+### Totem photos
 
-We do **not** share your data with advertisers, data brokers, or any other third party.
+- **Photos you choose or take for a meetup.** Before a photo leaves your phone, Festie converts it to a JPEG and removes its metadata, such as GPS location, camera details and the time it was taken. Photos are stored privately: only members of that crew can view them, through links that expire after an hour.
 
----
+### Live location, only while you share it
 
-## 4. Data Retention
+- When you turn on location sharing for a crew, Festie sends your precise location (latitude, longitude, accuracy and direction) while the app is open on your screen: as you move and about every 2 minutes. Festie never collects your location in the background.
+- Sharing stops automatically at the end of the time you chose (1, 4 or 8 hours, or "Until I stop", which still ends after 24 hours), and also when you turn it off, leave the crew, are removed from it or sign out.
+- Your position is visible to your crew for at most 15 minutes after the last update, then deleted. Turning sharing off deletes it straight away (if your phone is offline at that moment, it simply expires).
+- If you allow location access, the map can also show your own position as a dot. That stays on your phone and is not sent to us.
 
-| Data Type | Retention |
-|-----------|-----------|
-| Account profile | Until you delete your account |
-| Festival & set selections | Until you delete your account |
-| Group memberships | Until you leave or delete the group |
-| Meetup data | Until deleted by the group |
-| Location shares | Automatically deleted after 5 minutes |
-| Totem photos | Until the meetup is deleted |
-| Chat messages | Until deleted by the group |
-| Authentication sessions | Until you sign out or session expires |
+### Reports and blocks
 
-To request deletion of your account and all associated data, contact us at the email in Section 8.
+- **Reports.** When you report a person, crew, meetup or photo, we store the reason you chose, any details you add (up to 500 characters), what you reported, a copy of the reported text at that moment (for example a name or meetup title) and that the report came from your account. The person you report is not told who reported them.
+- **Blocks.** We store who you have blocked. The person you block is not told.
 
----
+### Technical information
 
-## 5. Third-Party Services
+- To run sign-in and the app's server, our hosting provider processes technical information such as your IP address, the time of each request and basic information your device sends with it (for example the operating system).
+- **Sign-in logs.** Each sign-in, code request, session refresh and sign-out is logged with your email address, your IP address and the time. Each active sign-in session also records the IP address and device information of the phone using it. We use these records only to keep accounts secure and investigate abuse.
+- To prevent abuse, we keep short-lived rate-limit records: an account identifier, or the IP address of a device that enters a sign-in code we cannot verify, with a timestamp. They are deleted about a day after they are created.
+- When Festie starts, it checks Expo's update service for fixes to the app. These requests include the app version, platform and a random identifier for the installation that the update system creates. They contain no account information.
 
-### Supabase
-Database hosting, authentication, and file storage. Data is stored on Supabase-managed infrastructure. See [Supabase's Privacy Policy](https://supabase.com/privacy).
+### On your phone
 
-### Mapbox
-Provides the interactive festival map. Your device may send tile-request metadata to Mapbox servers when viewing the map. See [Mapbox's Privacy Policy](https://www.mapbox.com/legal/privacy).
+- To work offline at a festival, Festie keeps your sign-in session, a copy of your schedule, crews and meetups, changes waiting to sync, your reminders and your settings in the app's private storage on your phone, which iOS protects with its standard data protection. Signing out or deleting your account removes your account data from the phone; deleting the app removes everything.
+- Set and meetup reminders are scheduled on your phone as local notifications. We do not use push notification servers.
 
-### Expo / EAS
-Used to build and deliver the App. See [Expo's Privacy Policy](https://expo.dev/privacy).
+## 2. What we do not collect
 
----
+- Your contacts or address book.
+- Your location in the background, or at any time you are not sharing it with a crew.
+- Microphone or audio. Festie never asks for microphone access.
+- Your advertising identifier. Festie does not track you across other companies' apps or websites, so it never shows the App Tracking Transparency prompt.
+- Analytics, crash-reporting or advertising data. Festie contains no analytics, crash-reporting or advertising SDKs, and it turns off the map's optional Mapbox telemetry. The only counting is the installation count described in section 4, with a random identifier that is not linked to your account.
+- Payment information. Festie is free and has no purchases.
 
-## 6. Data Security
+## 3. How we use information
 
-We implement technical safeguards including:
-- All data in transit is encrypted via HTTPS/TLS.
-- Authentication tokens are stored in encrypted on-device storage (MMKV).
-- Database access is protected by Row-Level Security (RLS) — users can only access their own data and data shared by their groups.
-- Uploaded photos have metadata (EXIF data) stripped before storage.
-- Rate limiting is enforced on authentication and sensitive endpoints to prevent abuse.
+We use information only to provide and protect Festie:
 
-No method of transmission or storage is 100% secure. If you discover a security concern, please contact us immediately at the address in Section 8.
+- to sign you in and keep you signed in;
+- to show your profile, picks, meetups, photos and, while you share it, your location to your crews;
+- to keep your plans available offline and in sync;
+- to schedule reminders on your phone;
+- to review reports and enforce our [Terms of Use](./terms-of-use.md), including an automatic filter that rejects disallowed words in names, crew names and meetup text;
+- to prevent abuse and keep the service secure, for example with rate limits;
+- to answer your support requests and meet legal obligations.
 
----
+We do not use your information for advertising or profiling, we do not sell it, and we make no automated decisions about you with legal or similarly significant effects.
 
-## 7. Children's Privacy
+If you are in the European Economic Area or the United Kingdom, we rely on these legal bases: performing our contract with you (running the app you signed up for), our legitimate interests in keeping Festie safe and preventing abuse (moderation, security, rate limits), your consent for location sharing and for camera and photo access (you can withdraw it at any time by turning sharing off or changing the permission in iOS Settings), and compliance with legal obligations.
 
-Festie is not directed to children under 13. We do not knowingly collect personal information from children under 13. If you believe we have inadvertently collected such information, contact us and we will delete it promptly.
+## 4. Who can see your information
 
----
+### Your crews
 
-## 8. Your Rights
+Members of a crew see your display name and avatar, your picks for that crew's festival, the meetups and totem photos you post in that crew and, while you share it with that crew, your location. If you block someone, or they block you, neither of you sees the other's location, meetups or picks.
 
-Depending on your location, you may have rights to:
-- **Access** the personal data we hold about you.
-- **Correct** inaccurate data.
-- **Delete** your account and all associated data.
-- **Object** to or restrict certain processing.
+### Us
 
-To exercise any of these rights, email us at: **privacy@festie.app** (or your designated support contact).
+We can access the data on our servers to operate Festie, answer support requests and review reports.
 
----
+### Service providers
 
-## 9. Changes to This Policy
+These companies process data for us, only to run Festie. Each provider may use the information only to provide its service to us, is bound by contract (including data processing terms where the law requires them) to protect it at least as well as this policy does, and may not use it for its own purposes.
 
-We may update this policy from time to time. We will notify you of material changes by updating the "Last updated" date above. Continued use of the App after changes constitutes acceptance of the updated policy.
+- **Supabase** hosts our database, sign-in, photo storage and server functions, and stores all account and app data, in __SUPABASE_REGION__.
+- **__EMAIL_PROVIDER__** delivers sign-in code emails. It receives your email address and the email itself.
+- **Mapbox** provides map tiles when you open the map or download a festival map for offline use. Your device sends Mapbox its IP address, basic device information, the map area being loaded and a random identifier for the installation that Mapbox uses to count active users, but no account information.
+- **Expo** provides the app update service described in section 1 and uses its random installation identifier to count how many installations receive each update. It receives no account information.
 
----
+Apple distributes Festie through the App Store under Apple's own privacy policy. Festie does not use Apple's or Expo's push notification services.
 
-## 10. Contact
+### Others
 
-Kevin Pi
-Email: **privacy@festie.app**
-App: Festie (com.kevin.festivalapp)
+We disclose information to authorities only if the law requires it or where necessary to protect someone's safety. If Festie is transferred to another operator, that operator must keep honouring this policy.
 
----
+## 5. How long we keep information
 
-*This privacy policy was written for the Festie v1.0 MVP release. It covers all data practices as of the date above.*
+- **Live location:** visible to your crew for at most 15 minutes after the last update, then deleted. Turning sharing off (while online), leaving the crew or being removed deletes it immediately.
+- **Rate-limit records:** about a day after they are created.
+- **Account, profile, picks, followed festivals, crews, meetups, photos and blocks:** until you delete them or delete your account.
+- **Meetups in a crew you leave:** they stay visible to that crew until a crew admin removes them or you delete your account.
+- **Crews:** deleted automatically, with their meetups, when the last member leaves. Their photos are deleted with them when the last member deletes their account, and otherwise by routine cleanup within about a week.
+- **Totem photos:** deleted when you replace them or delete the meetup. Photo files left behind, for example by a deleted crew or an interrupted upload, are removed by routine cleanup within about a week.
+- **Reports:** kept as a moderation record. If you delete your account, reports you sent are kept without your name. Reports about you or your content keep the copy of the reported text taken at the time.
+- **Banned accounts:** if we ban an account for breaking our Terms of Use, we keep its profile, sign-in account and email address, and the content it posted that we have not removed, as a record of the ban and to stop it signing in again.
+- **Sign-in logs:** at most 90 days, then deleted automatically, including after you delete your account. The record of a sign-in session (its IP address and device information) is kept while the session can be used, and deleted when you sign out on that device while online or delete your account.
+- **Logs and backups:** our hosting provider keeps other operational logs, such as server request logs, for at most 90 days, and database backups for a limited period. Deleted information can remain in backups until they expire.
+
+## 6. Deleting your account
+
+You can delete your account in the app: open Settings (your avatar on the Fests screen), tap Delete account, type DELETE and tap Delete my account. You need an internet connection. Deletion happens on our servers straight away and permanently removes:
+
+- your profile: name, avatar and email address, and your sign-in account;
+- your crew memberships. If you are a crew's only admin, the longest-standing member becomes admin; crews left with no members are deleted with their meetups and photos;
+- the meetups and totem photos you created;
+- your schedule picks and followed festivals;
+- your shared location and the people you blocked.
+
+Festie then stops location sharing, cancels your reminders and clears your account data from the phone. Changes that had not synced yet are discarded. Reports you sent are kept without your name so we can finish reviewing them. Sign-in log entries that mention your email address (section 1) are not part of your account; they are deleted automatically when they reach the 90-day limit in section 5. You can sign up again later with the same email, but nothing is restored. You can also ask us to delete your account by emailing __SUPPORT_EMAIL__ from the address you sign in with.
+
+## 7. Security
+
+- All connections between the app and our servers are encrypted (HTTPS/TLS).
+- Database rules allow each account to read only its own data and what is shared in its crews. Automated tests check these rules on every change.
+- Totem photos are stored privately and shown only through short-lived links. Your email address is never readable by other users.
+- Your sign-in session stays in the app's private storage on your phone, protected by iOS data protection.
+- Sign-in, invites, reports and other sensitive actions are rate-limited.
+
+No system is perfectly secure. If you find a security problem, please email __SUPPORT_EMAIL__.
+
+## 8. Children
+
+Festie is not directed to children under 13, and you must be at least 13 to use it (see our [Terms of Use](./terms-of-use.md)). We do not knowingly collect personal information from children under 13. If you believe a child under 13 has given us personal information, email __SUPPORT_EMAIL__ and we will delete it.
+
+## 9. Your rights and choices
+
+- **Change your profile** at any time in Settings, Profile.
+- **Delete your account** in Settings, Delete account (see section 6).
+- **Location sharing** is off until you turn it on for a crew, and you can stop it at any time on the map or in Settings. You can also turn off location access for Festie in iOS Settings.
+- **Camera, photos and notifications** are used only when you choose, and you can turn them off in iOS Settings.
+- **Access and copies.** Email __SUPPORT_EMAIL__ for a copy of your information.
+
+Depending on where you live (for example in the EEA, the UK or California), you may have the right to access, correct, delete or receive a portable copy of your personal information, to restrict or object to its processing, to withdraw consent, and to complain to your data protection authority. We will answer within the time the law requires, and we may need to confirm the request comes from your account's email address. We do not sell or share personal information as those terms are defined in California law, and we will not treat you differently for exercising your rights.
+
+## 10. International transfers
+
+Our servers are in __SUPABASE_REGION__, and our service providers may process information in other countries, including the United States. Where the law requires it, these transfers are protected by safeguards such as the European Commission's Standard Contractual Clauses.
+
+## 11. Changes to this policy
+
+When we change this policy we will update the date at the top. If a change is significant, Festie will ask you to review and agree to the updated documents in the app before you continue.
+
+## 12. Contact
+
+__LEGAL_NAME__, __POSTAL_ADDRESS__
+
+Email: __SUPPORT_EMAIL__

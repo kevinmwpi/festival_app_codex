@@ -123,14 +123,10 @@ export async function verifyEmailCode(email: string, code: string): Promise<Sess
   return session;
 }
 
-/**
- * Makes `authUserId` the owner of the local cache. If a different user (or nobody) owned it, all local
- * user data is wiped first. Call it on launch with the stored session
- * (`ensureLocalOwner(getStoredSession().authUserId)`, before anything is enqueued) and on `SIGNED_IN`.
- * Launch matters: when the stored access token has already expired, supabase-js recovers the session
- * with `TOKEN_REFRESHED`/`INITIAL_SESSION`, never `SIGNED_IN`.
- */
-export async function ensureLocalOwner(authUserId: string): Promise<void> {
+/** The most recent `ensureLocalOwner` claim while it is in flight. */
+let pendingOwnerClaim: { authUserId: string; promise: Promise<void> } | null = null;
+
+async function claimLocalOwner(authUserId: string): Promise<void> {
   const owner = await getMeta(LOCAL_OWNER_META_KEY);
   if (owner === authUserId) {
     return;
@@ -143,6 +139,35 @@ export async function ensureLocalOwner(authUserId: string): Promise<void> {
     clearProfileCache();
   }
   await setMeta(LOCAL_OWNER_META_KEY, authUserId);
+}
+
+/**
+ * Makes `authUserId` the owner of the local cache. If a different user (or nobody) owned it, all local
+ * user data is wiped first. Call it on launch with the stored session
+ * (`ensureLocalOwner(getStoredSession().authUserId)`, before anything is enqueued) and on `SIGNED_IN`.
+ * Launch matters: when the stored access token has already expired, supabase-js recovers the session
+ * with `TOKEN_REFRESHED`/`INITIAL_SESSION`, never `SIGNED_IN`.
+ *
+ * Single-flight: a call made while a claim for the same user is in flight returns that claim's promise
+ * (one owner check, one wipe at most). A call for a different user waits for the in-flight claim to
+ * settle and then runs, so claims never interleave and the latest call decides the owner. A failed
+ * claim rejects every caller that shared it; the next call starts over.
+ */
+export function ensureLocalOwner(authUserId: string): Promise<void> {
+  if (pendingOwnerClaim?.authUserId === authUserId) {
+    return pendingOwnerClaim.promise;
+  }
+
+  const previous = pendingOwnerClaim?.promise.catch(() => undefined) ?? Promise.resolve();
+  const claim = { authUserId, promise: previous.then(() => claimLocalOwner(authUserId)) };
+  pendingOwnerClaim = claim;
+  const release = () => {
+    if (pendingOwnerClaim === claim) {
+      pendingOwnerClaim = null;
+    }
+  };
+  claim.promise.then(release, release);
+  return claim.promise;
 }
 
 /**

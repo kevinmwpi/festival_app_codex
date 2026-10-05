@@ -1,0 +1,135 @@
+# Verification gates 1–6 of docs/v1-architecture.md §7 (and docs/release-runbook.md §1.3).
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-lint-test:
+    name: Build, lint, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install (postinstall builds the workspace packages)
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Lint (tsc --noEmit)
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Legal pages match their Markdown sources
+        run: node docs/legal/generate.mjs --check
+
+  db-test:
+    name: Database tests (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # The bootstrap superuser must not be called "postgres": the migrations run as a
+          # non-superuser "postgres" role, as on hosted Supabase (see scripts/db-test.sh).
+          POSTGRES_USER: supabase_admin
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U supabase_admin -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://supabase_admin:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Ensure the psql client is available
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends postgresql-client
+          fi
+          psql --version
+
+      - name: No storage.* DDL/DML in migrations
+        run: |
+          if grep -nEi 'alter table storage\.|create (or replace )?function storage\.|delete from storage\.' supabase/migrations/*.sql; then
+            echo "::error::migrations contain forbidden storage.* statements (docs/v1-architecture.md §2.1)"
+            exit 1
+          fi
+
+      - name: Migrations 001–009, dirty fixture, rls.sql, idempotency, races
+        run: npm run db:test
+
+  edge-functions:
+    name: Edge functions (Deno)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: supabase/functions
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check
+        run: deno check */index.ts
+
+      - name: Test
+        run: deno test
+
+      - name: Lint
+        run: deno lint
+
+  expo-export-ios:
+    name: Expo export (iOS bundle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install (postinstall builds the workspace packages)
+        run: npm ci
+
+      - name: Export the iOS bundle with dummy public configuration
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: dummy
+        run: |
+          npx expo export --platform ios --output-dir "$RUNNER_TEMP/expo-export"
+          rm -rf "$RUNNER_TEMP/expo-export"

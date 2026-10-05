@@ -1,226 +1,119 @@
-# Festival App
+# Festie
 
-Festival planning app monorepo built with Turborepo, Expo, Supabase, and shared TypeScript packages.
+Festie is an iOS-first festival planner for groups of friends. Each person builds a schedule of the sets
+they want to see; crews see each other's picks, plan meetups (with an optional "totem" photo so friends
+can spot the meeting point) and can choose to share their live location with their crew while the app is
+open. It keeps working offline at the festival: schedules, crews and meetups are cached on the phone and
+changes sync when the signal comes back.
 
-This repo includes:
+- Mobile app: Expo SDK 55 / React Native 0.83, expo-router, SQLite + MMKV offline cache, Mapbox maps.
+- Backend: Supabase (Postgres with row-level security, Auth with emailed 8-digit codes, Storage, two Edge
+  Functions). No other servers.
+- Admin: a local TypeScript CLI for festival data, the App Review demo and moderation.
 
-- `apps/mobile`: Expo mobile client with auth, schedule, groups, meetups, offline cache/sync, map shell, and notification utilities
-- `apps/admin-tools`: seed script for loading festival data into Supabase
-- `packages/*`: shared domain, data, sync, UI, map, notification, and transport code
-- `supabase/`: SQL migrations, RLS policies, edge functions, and DB tests
+The authoritative design and security contract is [`docs/v1-architecture.md`](docs/v1-architecture.md).
+The visual design follows the separate `festival_app_aistudio` prototype, which is only a design
+reference: it is not part of this repository, not built and not shipped.
 
-## Workspace Layout
+## Repository layout
 
 ```text
 apps/
-  mobile/
-  admin-tools/
+  mobile/              Expo app (bundle id com.kevin.festivalapp, scheme festivalapp://)
+    app/               expo-router screens: auth, (tabs) fests/lineup/schedule/group/map, settings, legal
+    src/               config, providers (session, sign-out), location sharing, hooks, components
+  admin-tools/         `npm run admin -- <command>`: festival import/seed, demo seed, moderation, storage sweep
 packages/
-  domain/
-  data-access/
-  sync-engine/
-  ui/
-  notification-utils/
-  map-utils/
-  transport/
+  data-access/         Supabase client, offline-safe session, auth, RPC wrappers, cache-first reads, photos
+  sync-engine/         SQLite schema, offline write queue, flush/retry and error classification
+  domain/              Festival-time formatting, day bucketing (days start 06:00), conflicts (vitest)
+  map-utils/           Camera/bounds and stage/meetup coordinates
+  notification-utils/  Local set and meetup reminders
+  ui/                  Design tokens and primitives (pastel palette, accessible link colour)
 supabase/
-  migrations/
-  functions/
-  tests/
-seed-data/
+  migrations/          001–009 (006–009 are the v1 overhaul; 007 is idempotent)
+  functions/           delete-account, demo-login, _shared (Deno)
+  tests/               rls.sql (pgTAP-style) and local stubs, fixtures and race scripts
+  templates/           Code-only sign-in email templates
+  config.toml          Local config; pushed to hosted after review (runbook §2.8)
+seed-data/             Fictional demo festival (JSON + CSV) and its totem photo
+scripts/db-test.sh     Throwaway Postgres 16 harness for the database tests
+docs/                  Contract, runbook, QA, festival data, App Store and legal documents, static site
 ```
 
-## Requirements
+## Setup
 
-- Node.js 20+
-- npm 10+
-- Supabase CLI for local DB/function workflows
-- Expo tooling for simulator/device testing
+Requirements: Node 20 (`.nvmrc`: 20.19.4) with npm 10. For the database tests, PostgreSQL 16 binaries
+(`/usr/lib/postgresql/16/bin`, override with `PG_BIN`) or a `DATABASE_URL`; for edge functions,
+[Deno 2](https://deno.com). Xcode or EAS for iOS builds.
 
-## Environment
-
-Copy `.env.example` to your local env file and fill in real values:
-
-```bash
-# Admin tools / server-side only
-SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
-
-# Mobile / Expo public runtime vars
-EXPO_PUBLIC_SUPABASE_URL=
-EXPO_PUBLIC_SUPABASE_KEY=
-EXPO_PUBLIC_SUPABASE_ANON_KEY=
-EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=
+```sh
+npm ci                     # also builds the workspace packages the app imports
 ```
 
-## Getting Started
+Run the app against a Supabase project (local or hosted) with a development build:
 
-Install dependencies:
-
-```bash
-npm install
+```sh
+cd apps/mobile
+cat > .env <<'EOF'         # git-ignored; EXPO_PUBLIC_* values end up in the app, so never put secrets here
+EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon or publishable key>
+EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=pk.<optional, enables the map>
+EXPO_PUBLIC_SUPPORT_EMAIL=<optional in development>
+EOF
+npx expo run:ios           # or: npx eas-cli build --profile development-device, then npm run start:dev-client
 ```
 
-Build the whole workspace:
+Without the Supabase variables the app shows a configuration-error screen. Release builds need more
+variables and fail without them; see [`docs/release-runbook.md`](docs/release-runbook.md) §5.1.
 
-```bash
-npm run build
+Local Supabase (optional): `npx supabase start`, then `npx supabase db reset` applies the migrations and
+`npm run supabase:functions:serve` serves the functions.
+
+Admin commands run locally with the service-role key from a git-ignored root `.env`
+(`SUPABASE_URL`, `SUPABASE_SECRET_KEY`); see [`docs/festival-data.md`](docs/festival-data.md) and
+[`docs/release-runbook.md`](docs/release-runbook.md) §1.2.
+
+## Verification gates
+
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs all of these on every push and pull
+request; run them locally before pushing:
+
+```sh
+npm run build                       # turbo: package builds + mobile tsc
+npm run lint                        # turbo: tsc --noEmit everywhere
+npm run test                        # vitest: domain, sync-engine, data-access, map-utils, admin-tools
+npm run db:test                     # migrations 001–009 on a throwaway Postgres 16 + rls.sql + races
+(cd supabase/functions && deno check */index.ts && deno test && deno lint)
+node docs/legal/generate.mjs --check    # in-app legal screens and docs/site match docs/legal/*.md
+(cd apps/mobile && EXPO_PUBLIC_SUPABASE_URL=https://example.supabase.co EXPO_PUBLIC_SUPABASE_ANON_KEY=dummy \
+  npx expo export --platform ios --output-dir /tmp/festie-export) && rm -rf /tmp/festie-export
 ```
 
-Run tests:
+Never run `deno` against `supabase/` from the repository root without `--config`; it creates a stray
+`deno.lock`.
 
-```bash
-npm run test
-```
+## Documentation
 
-Lint/typecheck:
+| Document | Purpose |
+|---|---|
+| [`docs/v1-architecture.md`](docs/v1-architecture.md) | Authoritative v1 contract: schema, RLS, RPCs, functions, client and app rules, gates |
+| [`docs/release-runbook.md`](docs/release-runbook.md) | Ordered path from this repo to App Store submission, including the pre-submission checklist |
+| [`docs/qa-checklist.md`](docs/qa-checklist.md) | Manual device QA for every v1 flow |
+| [`docs/festival-data.md`](docs/festival-data.md) | Entering real festivals, the demo festival, moderation commands |
+| [`docs/app-store-privacy.md`](docs/app-store-privacy.md) | App Privacy answers, age rating, export compliance, URLs |
+| [`docs/app-review-notes.md`](docs/app-review-notes.md) | Template for the App Review notes |
+| [`docs/legal/`](docs/legal) | Privacy policy, terms, support page sources (`generate.mjs` builds the app screens and `docs/site/`), data inventory, security controls, IP review |
 
-```bash
-npm run lint
-```
+## Legal content
 
-## Mobile App
+`docs/legal/privacy-policy.md`, `terms-of-use.md` and `support.md` are the single source for the in-app
+legal screens (`apps/mobile/app/legal/*.tsx`) and the hostable pages in `docs/site/`. Edit the Markdown,
+then run `node docs/legal/generate.mjs`. Placeholders such as `__LEGAL_NAME__` must be replaced before
+release (`node docs/legal/generate.mjs --release`, runbook §4 and §7.1). `__SUPPORT_EMAIL__` is a template
+variable: it stays in the Markdown and is filled in from `docs/legal/values.json` (web pages) and
+`EXPO_PUBLIC_SUPPORT_EMAIL` (in-app screens).
 
-Start the Expo app:
+## License
 
-```bash
-npm --workspace @festival/mobile run start
-```
-
-Useful variants:
-
-```bash
-npm --workspace @festival/mobile run ios
-npm --workspace @festival/mobile run android
-npm --workspace @festival/mobile run web
-```
-
-`web` is available for local debugging only; native iOS/Android builds are the acceptance target.
-
-The current mobile scaffold includes:
-
-- email OTP auth and profile setup
-- schedule browse + personal schedule views
-- offline-first local SQLite cache
-- queued sync service with retry/backoff
-- groups, invite flow, combined schedule, and meetup creation
-- notification service and map screen shell
-- chat placeholder for a later phase
-
-MVP phase boundaries:
-
-- In MVP now: OTP auth/profile, personal schedule + conflicts, groups/invites, combined schedule, meetup coordination (optional totem), offline cache/sync, local notifications, map support for meetup/schedule coordination.
-- Phase 2+: live friend location.
-- Phase 2b+: session recap/stats.
-- Not MVP: BLE/local mesh chat.
-
-Manual device QA checklist for MVP acceptance:
-
-- [`docs/mvp-acceptance-checklist.md`](docs/mvp-acceptance-checklist.md)
-
-## Native Beta Delivery (EAS)
-
-Native distribution target for this repo is:
-
-- iOS: EAS Build → TestFlight
-- Android: EAS Build → Play internal testing
-
-EAS build/submit profiles live in [`apps/mobile/eas.json`](apps/mobile/eas.json), with `development`, `preview`, and `production` profiles.
-
-For setup and release commands, see [`docs/native-beta-release.md`](docs/native-beta-release.md).
-
-## Supabase
-
-Primary runbook for hosted/local Supabase operations:
-
-- [`docs/supabase-operations.md`](docs/supabase-operations.md)
-
-Email OTP sign-in verification checklist:
-
-- [`docs/supabase-operations.md#8-email-otp-verification-checklist`](docs/supabase-operations.md#8-email-otp-verification-checklist)
-
-Apply migrations:
-
-```bash
-npm run supabase:db:push
-```
-
-Run DB policy tests:
-
-```bash
-npm run supabase:db:test
-```
-
-Serve edge functions locally:
-
-```bash
-npm run supabase:functions:serve
-```
-
-Deploy all MVP edge functions:
-
-```bash
-npm run supabase:functions:deploy
-```
-
-This includes the OTP auth functions used by the mobile sign-in flow:
-
-- `request-otp`
-- `verify-otp`
-
-Supabase assets included here:
-
-- initial schema: [`supabase/migrations/001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql)
-- RLS policies: [`supabase/migrations/002_rls.sql`](supabase/migrations/002_rls.sql)
-- support tables/storage setup: [`supabase/migrations/003_supporting_tables.sql`](supabase/migrations/003_supporting_tables.sql)
-- security hardening: [`supabase/migrations/004_security_hardening.sql`](supabase/migrations/004_security_hardening.sql)
-- DB tests: [`supabase/tests/rls.sql`](supabase/tests/rls.sql)
-
-## Seed Data
-
-Sample festival data lives in [`seed-data/sample-festival.json`](seed-data/sample-festival.json).
-
-Run the seed script with:
-
-```bash
-npm run supabase:seed:festival
-```
-
-The seed flow is written to be idempotent through Supabase upserts.
-
-### Railway Admin Tools Setup
-
-`apps/admin-tools` is a one-off seed job, not a long-running web server.
-
-For Railway, configure the `festival/admin-tools` service with:
-
-- Build command: `npm run build --workspace=@festival/admin-tools`
-- Start command: `npm run start --workspace=@festival/admin-tools`
-- Variables:
-  - `SUPABASE_URL`
-  - `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SECRET_KEY`
-
-The admin seed job only reads server-side vars and does not fall back to `EXPO_PUBLIC_*` values.
-It uses the bundled sample seed file by default, unless you pass an explicit CLI file path.
-The mobile app only reads `EXPO_PUBLIC_*` values.
-This repo also accepts Supabase's newer mobile env name `EXPO_PUBLIC_SUPABASE_KEY` as an alias for `EXPO_PUBLIC_SUPABASE_ANON_KEY`.
-If you want this to run on a schedule, use a Railway cron job or manual redeploy instead of treating it like an always-on service.
-
-## Shared Packages
-
-- `@festival/domain`: pure scheduling logic and tests
-- `@festival/data-access`: Supabase client, local cache access, auth helpers, media uploads, and group/schedule data flows
-- `@festival/sync-engine`: SQLite schema, local queue, pending sync state, and flush/retry logic
-- `@festival/ui`: reusable React Native UI primitives, offline banner, and screen helpers
-- `@festival/notification-utils`: local reminder scheduling with Expo Notifications
-- `@festival/map-utils`: stage/meetup map helpers
-- `@festival/transport`: messaging transport interface stub for later phases
-
-## Current Verification
-
-The workspace currently passes:
-
-- `npm run build`
-- `npm run test`
-
-The domain and sync-engine packages have executable unit tests in place. Mobile simulator flows and Supabase CLI flows still need to be exercised against a real local or hosted backend environment.
+See [`LICENSE`](LICENSE).

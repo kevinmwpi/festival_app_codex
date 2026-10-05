@@ -1,151 +1,114 @@
-# Terms of Use — Festie
+# Terms of Use
 
-**Last updated: April 5, 2026**
-**Effective date: April 5, 2026**
+<!--
+Source of truth for the in-app Terms of Use screen (apps/mobile/app/legal/terms-of-use.tsx) and the
+hosted page (docs/site/terms.html). After editing run: node docs/legal/generate.mjs
+Material changes must be paired with a TERMS_VERSION bump in apps/mobile/src/config/app-info.ts,
+which asks every account to agree again (docs/release-runbook.md, sections 7.2 and 9).
+Placeholders (__LIKE_THIS__) are listed in docs/release-runbook.md, section 7.1. __SUPPORT_EMAIL__ is a
+template variable filled in by the generator (see docs/legal/generate.mjs), not a placeholder.
+-->
 
-Please read these Terms of Use ("Terms") carefully before using the Festie mobile application ("App") operated by Kevin Pi ("we", "us", or "our"). By creating an account or using the App, you agree to be bound by these Terms.
+Last updated: October 5, 2026
 
----
+These Terms of Use ("Terms") are an agreement between you and __LEGAL_NAME__ ("Festie", "we", "us") for using the Festie app and its services. By creating an account or using Festie you agree to these Terms and confirm you have read our [Privacy Policy](./privacy-policy.md). If you do not agree, do not use Festie.
 
-## 1. Acceptance of Terms
+## 1. Zero tolerance for objectionable content and abuse
 
-By downloading, installing, or using Festie, you confirm that you:
-1. Are at least 13 years of age.
-2. Have read and understood these Terms.
-3. Agree to be bound by these Terms and our [Privacy Policy](./privacy-policy.md).
+Festie has zero tolerance for objectionable content or abusive users; we act on reports within 24 hours by removing content and ejecting offenders. You can report any person, crew, meetup or photo and block any person from within the app.
 
-If you do not agree to these Terms, do not use the App.
+## 2. Who can use Festie
 
----
+- You must be at least 13 years old. If you are under the age of majority where you live, you may use Festie only with the permission of a parent or guardian, who agrees to these Terms for you.
+- You must not use Festie if we have banned you, or if the law where you live does not allow you to.
+- You need a valid email address that you control. Keep access to it secure: anyone who can read your email can sign in to your account. You are responsible for what happens in your account.
 
-## 2. Description of the App
+## 3. What Festie does
 
-Festie is a personal festival planning tool that lets you:
-- Build a schedule of artist sets you want to see.
-- Create and join groups with friends attending the same festival.
-- Share your real-time location with group members.
-- Coordinate meetups and upload group photos (totems).
+Festie helps you plan a music festival: build a schedule, see the sets your crew picked, set up meetups and, only when you choose, share your location with a crew. Festie is free and for personal, non-commercial use.
 
-The App is intended for **personal, non-commercial use only**.
+## 4. Acceptable use
 
----
+You agree not to:
 
-## 3. Accounts & Authentication
+- harass, bully, threaten, stalk or intimidate anyone, or use location sharing or meetups to follow or find someone who does not want to be found;
+- post content that is hateful, discriminatory, sexually explicit, violent, defamatory, illegal or that promotes self-harm or illegal activity;
+- impersonate anyone or misrepresent who you are, including in your display name;
+- post someone else's personal information, or photos of people without their permission;
+- post spam, advertising or ticket resale offers;
+- post content you do not have the right to share, or that infringes anyone's intellectual property, privacy or other rights;
+- break the law or help anyone else do so;
+- get around blocks, bans, rate limits or other safety and security measures, access accounts or data that are not yours, or probe, scan or overload our systems;
+- scrape, copy or collect data from Festie with automated tools, or reverse engineer the app except where the law allows it.
 
-- You must provide a valid email address to create an account.
-- You are responsible for maintaining the security of your account.
-- You must not share your login credentials or allow others to access your account.
-- You must notify us immediately if you suspect unauthorized access to your account.
-- We reserve the right to suspend or terminate accounts that violate these Terms.
+## 5. Your content
 
----
+- "Your content" means what you add to Festie: your display name and avatar, crew names, meetups, notes and totem photos.
+- You keep ownership of your content. You give us a worldwide, non-exclusive, royalty-free licence to host, store, copy, process and display your content only as needed to operate and improve Festie and to show it to the people you share it with (for example, your crew). The licence ends when your content is deleted, except for copies kept in backups for a limited period and content needed for a report we are reviewing.
+- You are responsible for your content and promise that you have the right to share it and that it follows these Terms.
+- We do not review content before it appears, but an automatic filter rejects disallowed words in names and meetup text, and we review every report. We may remove any content, or restrict any account, that we reasonably believe breaks these Terms or the law.
 
-## 4. Acceptable Use
+## 6. Reports, blocks and enforcement
 
-You agree **not** to use the App to:
+- Report content or people with the Report options in the app. We review reports within 24 hours. When content breaks these Terms, we remove it and remove the people responsible from Festie.
+- Block someone from their name in a crew. You will no longer see their location, meetups or picks, and they will not see your location, meetups or picks. They are not told. You can unblock them later in Settings.
+- Crew admins can remove members from their crew.
+- We may suspend or permanently ban accounts that break these Terms, without notice where needed to protect others.
 
-1. Harass, bully, threaten, or harm other users.
-2. Impersonate any person or misrepresent your identity.
-3. Upload content that is illegal, obscene, defamatory, or infringes on any third party's rights.
-4. Upload totem photos that contain nudity, violence, hate speech, or personally identifiable information of others without their consent.
-5. Scrape, crawl, or use automated tools to access the App or its data.
-6. Reverse engineer, decompile, or attempt to extract source code from the App.
-7. Interfere with, disrupt, or overload the App's servers or infrastructure (including denial-of-service attacks).
-8. Use the App for any commercial purpose, including reselling access or festival tickets.
-9. Attempt to bypass any rate limiting, authentication, or access controls.
-10. Violate any applicable law or regulation.
+## 7. Location sharing
 
----
+- Location sharing is off until you turn it on for a crew. While it is on, members of that crew can see your position while Festie is open. Your position is visible to your crew for at most 15 minutes after the last update, then deleted.
+- Only share your location with people you trust, and turn it off whenever you want. Stop sharing and leave the crew, or block the person, if anyone makes you feel unsafe.
+- Locations can be delayed, inaccurate or missing (for example with a weak signal or when someone closes the app). Do not rely on Festie for your safety or in an emergency: contact festival staff or emergency services.
 
-## 5. User-Generated Content
+## 8. Festival information
 
-### 5.1 Your Content
-You retain ownership of content you upload (e.g., totem photos). By uploading content, you grant us a limited, non-exclusive, royalty-free license to store and display it within the App for the purpose of operating the service.
+- Festie is an independent app and is not affiliated with or endorsed by any festival, organizer, venue or artist. Festival, stage and artist names are used only to identify them.
+- We take schedules from official public sources, but festivals change line-ups, times and stages, sometimes at short notice. Always check official festival sources. We are not responsible for missed sets or other consequences of schedule changes or errors.
+- Sample festivals in the app are fictional and marked "Sample".
 
-### 5.2 Content Standards
-All content you upload must:
-- Be content you have the right to share.
-- Not violate any third party's intellectual property, privacy, or other rights.
-- Comply with applicable law.
+## 9. Our app
 
-### 5.3 Removal
-We reserve the right to remove any content that violates these Terms or that we find objectionable, without notice.
+Festie, its design and its software belong to us or our licensors and are protected by law. We give you a personal, revocable, non-transferable, non-exclusive licence to use the app on Apple devices you own or control, under these Terms and the App Store's terms.
 
----
+## 10. Ending your use
 
-## 6. Location Sharing
+- You can stop using Festie at any time and delete your account in Settings, Delete account.
+- We may suspend or end your access if you break these Terms, if the law requires it, or if we stop offering Festie. Where it is reasonable, we will let you know first.
+- Sections 5 (licence for content in backups and reports), 8, 11, 12 and 14 continue to apply after your use ends.
 
-Location sharing is **opt-in** and can be stopped at any time from within the App. When active:
-- Your GPS coordinates are shared in real time with members of your group.
-- Location data is automatically deleted after 5 minutes per our data retention policy.
-- You are solely responsible for deciding when and with whom to share your location.
+## 11. Disclaimers
 
-We are not responsible for any consequences arising from your decision to share or not share your location.
+FESTIE IS PROVIDED "AS IS" AND "AS AVAILABLE". TO THE FULLEST EXTENT ALLOWED BY LAW, WE DISCLAIM ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. WE DO NOT PROMISE THAT FESTIE WILL BE UNINTERRUPTED, ERROR-FREE OR AVAILABLE AT A FESTIVAL, THAT SCHEDULES OR LOCATIONS WILL BE ACCURATE, OR THAT OTHER USERS WILL BEHAVE APPROPRIATELY.
 
----
+## 12. Limitation of liability
 
-## 7. Festival & Artist Data
+TO THE FULLEST EXTENT ALLOWED BY LAW, WE ARE NOT LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL OR PUNITIVE DAMAGES, OR FOR LOST PROFITS, DATA OR GOODWILL, ARISING FROM YOUR USE OF FESTIE OR FROM OTHER USERS' CONDUCT OR CONTENT. OUR TOTAL LIABILITY FOR ANY CLAIM ABOUT FESTIE IS LIMITED TO 50 US DOLLARS. Some places do not allow these limits, so they may not apply to you; nothing in these Terms limits rights you have under laws that cannot be waived.
 
-Artist names, set times, and stage information displayed in the App are provided for informational convenience. We do not guarantee the accuracy, completeness, or timeliness of schedule data. Always verify schedules with the official festival source. We are not affiliated with, endorsed by, or in partnership with any festival, artist, or venue unless explicitly stated.
+## 13. Changes to these Terms
 
----
+We may update these Terms. We will change the date at the top and, for significant changes, Festie will ask you to review and agree to the new Terms in the app before you continue. If you do not agree, stop using Festie and delete your account.
 
-## 8. Intellectual Property
+## 14. Governing law and disputes
 
-All software, design, trademarks, and original content in the App (excluding user-generated content) are owned by or licensed to Kevin Pi. You may not use our name, logo, or branding without prior written permission.
+These Terms are governed by the laws of __GOVERNING_LAW__, without regard to conflict-of-law rules, and disputes will be resolved in the courts of __GOVERNING_VENUE__, unless the law where you live gives you the right to bring a claim in your local courts or under your local law.
 
----
+## 15. Apple App Store terms
 
-## 9. Disclaimer of Warranties
+If you downloaded Festie from the App Store:
 
-THE APP IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. WE DO NOT WARRANT THAT THE APP WILL BE UNINTERRUPTED, ERROR-FREE, OR FREE OF VIRUSES OR OTHER HARMFUL COMPONENTS.
+- Your licence to use the app is also governed by Apple's [Licensed Application End User License Agreement](https://www.apple.com/legal/internet-services/itunes/dev/stdeula/) (the "Standard EULA"). These Terms add the rules for using our service; if they conflict with the Standard EULA about your licence to the app, the Standard EULA applies.
+- These Terms are between you and us, not Apple. We, not Apple, are solely responsible for Festie and its content, for maintenance and support, and for handling any claims about the app, including product liability claims, claims that it fails to meet legal or regulatory requirements, consumer protection claims and intellectual property infringement claims.
+- Apple has no obligation to provide maintenance or support for Festie. To the extent the law allows, Apple has no warranty obligation for the app; if the app fails to meet an applicable warranty, you may notify Apple, and Apple will refund the purchase price, if any (Festie is free).
+- You confirm that you are not located in a country subject to a U.S. Government embargo or designated as a "terrorist supporting" country, and that you are not on any U.S. Government list of prohibited or restricted parties.
+- Apple and its subsidiaries are third-party beneficiaries of these Terms and may enforce them against you.
 
----
+## 16. General
 
-## 10. Limitation of Liability
+If any part of these Terms is found unenforceable, the rest stays in effect. If we do not enforce a right, we have not waived it. You may not transfer your rights under these Terms; we may transfer ours to a successor operator of Festie. These Terms and our Privacy Policy are the whole agreement between you and us about Festie.
 
-TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, KEVIN PI SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS, DATA, OR GOODWILL, ARISING OUT OF OR IN CONNECTION WITH YOUR USE OF OR INABILITY TO USE THE APP, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+## 17. Contact
 
-OUR TOTAL LIABILITY TO YOU FOR ANY CLAIMS ARISING FROM THESE TERMS OR YOUR USE OF THE APP SHALL NOT EXCEED $50 USD.
+__LEGAL_NAME__, __POSTAL_ADDRESS__
 
----
-
-## 11. Indemnification
-
-You agree to indemnify and hold harmless Kevin Pi from and against any claims, damages, losses, and expenses (including reasonable legal fees) arising out of or related to your use of the App, your violation of these Terms, or your violation of any third-party rights.
-
----
-
-## 12. Termination
-
-We may suspend or terminate your access to the App at any time, with or without cause or notice. You may stop using the App at any time by deleting your account via the in-app settings or by contacting us.
-
-Upon termination, your license to use the App ends and we may delete your account and data in accordance with our Privacy Policy.
-
----
-
-## 13. Changes to These Terms
-
-We may update these Terms from time to time. We will notify you by updating the "Last updated" date. Your continued use of the App after any changes constitutes your acceptance of the new Terms. If you do not agree to the updated Terms, stop using the App.
-
----
-
-## 14. Governing Law & Dispute Resolution
-
-These Terms are governed by the laws of the State of California, United States, without regard to conflict-of-law principles. Any disputes arising from these Terms or your use of the App shall be resolved in the courts of California, and you consent to personal jurisdiction there.
-
----
-
-## 15. Severability
-
-If any provision of these Terms is found to be unenforceable, the remaining provisions will continue in full force and effect.
-
----
-
-## 16. Contact
-
-For questions about these Terms, contact:
-
-Kevin Pi
-Email: **legal@festie.app** (or your designated support contact)
-App: Festie (com.kevin.festivalapp)
+Email: __SUPPORT_EMAIL__
