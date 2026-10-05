@@ -215,6 +215,20 @@ export async function getCombinedSelections(groupId: string, festivalId: string)
 
 // ---- Refresh (online) --------------------------------------------------------------------------
 
+/**
+ * One set per in-flight `listMyGroups`: ids of groups written locally (created, joined or refreshed)
+ * since that refresh started. Its membership snapshot may predate those writes, so it must not purge
+ * them as stale; the next refresh settles them.
+ */
+const groupWriteTrackers = new Set<Set<string>>();
+
+/** Call before writing a group locally, so an overlapping `listMyGroups` keeps it. */
+function noteGroupWritten(groupId: string): void {
+  for (const written of groupWriteTrackers) {
+    written.add(groupId);
+  }
+}
+
 async function fetchPublicUsers(userIds: string[]): Promise<PublicUser[]> {
   const client = getSupabase();
   return selectAllRowsIn<PublicUser>(userIds, (ids, options) =>
@@ -224,66 +238,75 @@ async function fetchPublicUsers(userIds: string[]): Promise<PublicUser[]> {
 
 /**
  * Refreshes the signed-in user's groups and replaces the local copy: memberships the server no longer
- * returns are deleted locally, together with groups nobody references any more.
+ * returns are deleted locally, together with groups nobody references any more. A group created, joined
+ * or refreshed locally while this refresh was in flight is kept (its snapshot may predate it).
  */
 export async function listMyGroups(): Promise<GroupSummary[]> {
   const profile = requireCachedProfile();
   requireStoredSession();
   const client = getSupabase();
+  const writtenDuringRefresh = new Set<string>();
+  groupWriteTrackers.add(writtenDuringRefresh);
 
-  await withRefreshGuard(async (guard) => {
-    // Every read is paged: PostgREST caps each response at `max_rows` without an error, and rows
-    // missing from these results are deleted locally.
-    const membershipRows = await selectAllRows<GroupMemberRow & { groups: Group | null }>((options) =>
-      client
-        .from('group_members')
-        .select(`${MEMBER_COLUMNS}, groups(${GROUP_COLUMNS})`, options)
-        .eq('user_id', profile.id)
-        .order('id', { ascending: true }),
-    );
-
-    const memberships = membershipRows.filter((row) => row.groups);
-    const groups = memberships.map((row) => row.groups as Group);
-    const groupIds = groups.map((group) => group.id);
-
-    const members = await selectAllRowsIn<GroupMemberRow>(groupIds, (ids, options) =>
-      client.from('group_members').select(MEMBER_COLUMNS, options).in('group_id', ids).order('id', { ascending: true }),
-    );
-    const users = await fetchPublicUsers([...new Set(members.map((member) => member.user_id))]);
-
-    await withDbTransaction(async (tx) => {
-      if (guard.stale) {
-        return;
-      }
-      await upsertRows('groups', groups as unknown as Rows, tx);
-
-      const staleGroups = await tx.getAllAsync<{ id: string }>(
-        groupIds.length
-          ? `SELECT id FROM groups WHERE id NOT IN (${placeholders(groupIds.length)});`
-          : 'SELECT id FROM groups;',
-        groupIds,
+  try {
+    await withRefreshGuard(async (guard) => {
+      // Every read is paged: PostgREST caps each response at `max_rows` without an error, and rows
+      // missing from these results are deleted locally.
+      const membershipRows = await selectAllRows<GroupMemberRow & { groups: Group | null }>((options) =>
+        client
+          .from('group_members')
+          .select(`${MEMBER_COLUMNS}, groups(${GROUP_COLUMNS})`, options)
+          .eq('user_id', profile.id)
+          .order('id', { ascending: true }),
       );
-      for (const { id } of staleGroups) {
-        await purgeGroupRows(tx, id);
-      }
 
-      for (const groupId of groupIds) {
-        const groupMembers = members.filter((member) => member.group_id === groupId);
-        const memberIds = groupMembers.map((member) => member.id);
-        await tx.runAsync(
-          memberIds.length
-            ? `DELETE FROM group_members WHERE group_id = ? AND id NOT IN (${placeholders(memberIds.length)});`
-            : 'DELETE FROM group_members WHERE group_id = ?;',
-          [groupId, ...memberIds],
+      const memberships = membershipRows.filter((row) => row.groups);
+      const groups = memberships.map((row) => row.groups as Group);
+      const groupIds = groups.map((group) => group.id);
+
+      const members = await selectAllRowsIn<GroupMemberRow>(groupIds, (ids, options) =>
+        client.from('group_members').select(MEMBER_COLUMNS, options).in('group_id', ids).order('id', { ascending: true }),
+      );
+      const users = await fetchPublicUsers([...new Set(members.map((member) => member.user_id))]);
+
+      await withDbTransaction(async (tx) => {
+        if (guard.stale) {
+          return;
+        }
+        await upsertRows('groups', groups as unknown as Rows, tx);
+
+        const staleGroups = await tx.getAllAsync<{ id: string }>(
+          groupIds.length
+            ? `SELECT id FROM groups WHERE id NOT IN (${placeholders(groupIds.length)});`
+            : 'SELECT id FROM groups;',
+          groupIds,
         );
-      }
+        for (const { id } of staleGroups) {
+          if (!writtenDuringRefresh.has(id)) {
+            await purgeGroupRows(tx, id);
+          }
+        }
 
-      const ownRows = memberships.map(({ groups: _group, ...membership }) => membership);
-      await upsertRows('group_members', [...members, ...ownRows] as unknown as Rows, tx);
-      await upsertRows('users', users as unknown as Rows, tx);
-      await pruneOrphanedMembers(tx);
+        for (const groupId of groupIds) {
+          const groupMembers = members.filter((member) => member.group_id === groupId);
+          const memberIds = groupMembers.map((member) => member.id);
+          await tx.runAsync(
+            memberIds.length
+              ? `DELETE FROM group_members WHERE group_id = ? AND id NOT IN (${placeholders(memberIds.length)});`
+              : 'DELETE FROM group_members WHERE group_id = ?;',
+            [groupId, ...memberIds],
+          );
+        }
+
+        const ownRows = memberships.map(({ groups: _group, ...membership }) => membership);
+        await upsertRows('group_members', [...members, ...ownRows] as unknown as Rows, tx);
+        await upsertRows('users', users as unknown as Rows, tx);
+        await pruneOrphanedMembers(tx);
+      });
     });
-  });
+  } finally {
+    groupWriteTrackers.delete(writtenDuringRefresh);
+  }
 
   return getLocalGroups();
 }
@@ -330,6 +353,7 @@ export async function refreshGroupDetail(groupId: string): Promise<GroupDetail |
         }
         // Meetups with queue activity that may postdate the fetch keep their local state.
         const protectedMeetupIds = await guard.protectedMeetupIds(tx);
+        noteGroupWritten(groupId);
         await upsertRows('groups', [group as unknown as Record<string, unknown>], tx);
 
         const memberIds = members.map((member) => member.id);
@@ -386,6 +410,7 @@ export async function createGroup(input: { name: string; festival_id: string }):
   }
 
   const now = new Date().toISOString();
+  noteGroupWritten(created.group_id);
   await withDbTransaction(async (tx) => {
     await upsertRows(
       'groups',

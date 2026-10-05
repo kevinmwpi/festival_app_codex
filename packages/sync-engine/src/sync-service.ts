@@ -53,12 +53,19 @@ const QUEUE_COLUMNS =
 
 let syncTransport: SyncTransport | null = null;
 let getSessionState: (() => SyncSessionState | null) | null = null;
+let getLocalOwnerId: (() => Promise<string | null>) | null = null;
 let online = true;
 let listenerStarted = false;
 let unsubscribeNetInfo: (() => void) | null = null;
 let flushPromise: Promise<void> | null = null;
 let flushRequested = false;
-let parkedReleasedThisSession = false;
+/**
+ * Set by every trigger from outside the engine (app launch, foreground, token refresh, sign-in, a
+ * user action — any public `flush()` call) and by a NetInfo offline-to-online change; the next pass
+ * that can send gives parked operations a fresh round of attempts. The engine's own retry timer and
+ * enqueue-triggered flushes never release them.
+ */
+let releaseParkedRequested = true;
 let generation = 0;
 let retryHandle: unknown;
 let retryDueAt: number | null = null;
@@ -132,7 +139,7 @@ function ensureListener(): void {
     const cameOnline = !online && nextOnline;
     online = nextOnline;
     if (cameOnline) {
-      void flush();
+      void requestFlush(true).catch(() => undefined);
     }
   });
 }
@@ -156,7 +163,7 @@ function scheduleRetry(delayMs: number): void {
   retryHandle = retryScheduler(delayMs, () => {
     retryHandle = undefined;
     retryDueAt = null;
-    void flush();
+    void requestFlush(false).catch(() => undefined);
   });
 }
 
@@ -227,9 +234,17 @@ export function configureSyncService(options: {
   transport: SyncTransport;
   /** Returns the stored session (or null). When provided, `flush()` never sends without a usable session. */
   getSession?: () => SyncSessionState | null;
+  /**
+   * Resolves the auth user id that owns the local cache and queue (or null). When provided, nothing is
+   * sent unless the stored session carries an `authUserId` equal to it: a queue kept for one account is
+   * never sent with another account's session (for example between a new sign-in persisting its
+   * session and the owner check wiping the previous account's data). Requires `getSession`.
+   */
+  getLocalOwner?: () => Promise<string | null>;
 }): void {
   syncTransport = options.transport;
   getSessionState = options.getSession ?? null;
+  getLocalOwnerId = options.getLocalOwner ?? null;
   ensureListener();
 }
 
@@ -310,7 +325,7 @@ export async function enqueue(operation: SyncOperation): Promise<EnqueueResult> 
   emit({ type: 'queued', table, recordId });
 
   if (online && syncTransport) {
-    void flush().catch(() => undefined);
+    void requestFlush(false).catch(() => undefined);
   }
 
   return { queueId, recordId };
@@ -475,23 +490,48 @@ async function markTransientFailure(row: QueueRow, error: unknown, countsAsAttem
   scheduleRetry(delayMs);
 }
 
+function readSession(): SyncSessionState | null {
+  if (!getSessionState) {
+    return null;
+  }
+  try {
+    return getSessionState();
+  } catch {
+    return null;
+  }
+}
+
 function hasUsableSession(): boolean | 'expiring' {
   if (!getSessionState) {
     return true;
   }
 
-  let session: SyncSessionState | null = null;
-  try {
-    session = getSessionState();
-  } catch {
-    session = null;
-  }
-
+  const session = readSession();
   if (!session) {
     return false;
   }
 
   return session.expiresAt - Date.now() <= SESSION_EXPIRY_MARGIN_MS ? 'expiring' : true;
+}
+
+/**
+ * The auth user id the pass may send for: the stored session's user when it owns the local queue,
+ * `null` when it does not (or when that cannot be established). `undefined` when no owner check is
+ * configured.
+ */
+async function resolveSendingUser(): Promise<string | null | undefined> {
+  if (!getLocalOwnerId) {
+    return undefined;
+  }
+  const sessionUser = readSession()?.authUserId;
+  if (!sessionUser) {
+    return null;
+  }
+  try {
+    return (await getLocalOwnerId()) === sessionUser ? sessionUser : null;
+  } catch {
+    return null;
+  }
 }
 
 async function runFlushPass(transport: SyncTransport): Promise<void> {
@@ -506,10 +546,18 @@ async function runFlushPass(transport: SyncTransport): Promise<void> {
     return;
   }
 
+  const sendingUser = await resolveSendingUser();
+  if (sendingUser === null) {
+    // The stored session is not the local owner's (a different account signed in and its owner check
+    // has not wiped the previous account's queue yet). Nothing is sent; the flush that follows the
+    // owner check sends whatever is left.
+    return;
+  }
+
   const db = await getDb();
-  if (!parkedReleasedThisSession) {
-    // Parked operations get one fresh round of attempts per app session.
-    parkedReleasedThisSession = true;
+  if (releaseParkedRequested) {
+    // Parked operations get a fresh round of attempts on every external trigger (see `flush()`).
+    releaseParkedRequested = false;
     await db.runAsync('UPDATE sync_queue SET parked = 0, attempt_count = 0, next_retry_at = NULL WHERE parked = 1;');
   }
 
@@ -521,6 +569,10 @@ async function runFlushPass(transport: SyncTransport): Promise<void> {
 
   for (const row of queue) {
     if (passGeneration !== generation || !online) {
+      return;
+    }
+    if (sendingUser !== undefined && readSession()?.authUserId !== sendingUser) {
+      // The session changed account mid-pass: stop before anything is sent with the new session.
       return;
     }
 
@@ -596,9 +648,15 @@ async function runFlushPass(transport: SyncTransport): Promise<void> {
   }
 }
 
-/** Sends due queue operations in order. Concurrent calls share one run (and trigger one more pass). */
-export async function flush(): Promise<void> {
+/**
+ * Sends due queue operations in order. Concurrent calls share one run (and trigger one more pass).
+ * `releaseParked` asks the next pass to give parked operations a fresh round of attempts.
+ */
+async function requestFlush(releaseParked: boolean): Promise<void> {
   ensureListener();
+  if (releaseParked) {
+    releaseParkedRequested = true;
+  }
   const transport = syncTransport;
   if (!transport || !online) {
     return;
@@ -619,6 +677,17 @@ export async function flush(): Promise<void> {
   });
 
   return flushPromise;
+}
+
+/**
+ * Sends due queue operations in order. Concurrent calls share one run (and trigger one more pass).
+ * Call it on every outside trigger — app launch, foreground, `TOKEN_REFRESHED`, sign-in, pull to
+ * refresh: each call also gives operations parked after `MAX_SYNC_ATTEMPTS` a fresh round of attempts
+ * (the engine's own retries never do), so a write parked on a flaky festival network is retried the
+ * next time the app is used rather than only after a relaunch.
+ */
+export async function flush(): Promise<void> {
+  return requestFlush(true);
 }
 
 /** Unparks every parked operation and flushes. */
@@ -766,7 +835,8 @@ export function resetSyncServiceForTests(): void {
   listenerStarted = false;
   flushPromise = null;
   flushRequested = false;
-  parkedReleasedThisSession = false;
+  releaseParkedRequested = true;
+  getLocalOwnerId = null;
   eventListeners.clear();
   activityTrackers.clear();
   retryScheduler = (delayMs, callback) => setTimeout(callback, delayMs);

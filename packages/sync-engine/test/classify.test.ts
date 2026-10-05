@@ -32,6 +32,8 @@ describe('classifySyncError', () => {
     ['TransientAuthError', Object.assign(new Error('No session'), { name: 'TransientAuthError', code: 'session_missing' })],
     ['serialization failure', err('40001', 409)],
     ['unknown error without status', new Error('something odd')],
+    ['403 without an error code (proxy/WAF page)', new SyncTransportError('<html>blocked</html>', { status: 403 })],
+    ['404 without an error code', err('', 404)],
   ])('%s is transient', (_label, error) => {
     expect(classifySyncError(error, 'meetups', 'upsert')).toBe('transient');
   });
@@ -46,7 +48,8 @@ describe('classifySyncError', () => {
     ['P0001 not_group_member', err('P0001', 400, 'not_group_member')],
     ['P0001 content_not_allowed', err('P0001', 400, 'content_not_allowed')],
     ['P0001 invalid_input', err('P0001', 400, 'invalid_input')],
-    ['other 4xx', err('', 404)],
+    ['other 4xx with a PostgREST code', err('PGRST205', 404)],
+    ['other 4xx with a Postgres code', err('42P01', 404)],
     ['23505 on meetups', err('23505', 409)],
   ])('%s is permanent', (_label, error) => {
     expect(classifySyncError(error, 'meetups', 'upsert')).toBe('permanent');

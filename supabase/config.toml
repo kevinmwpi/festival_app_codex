@@ -44,7 +44,11 @@ token_verifications = 30
 
 [auth.email]
 enable_signup = true
-enable_confirmations = false
+# GoTrue's email provider also accepts {email, password} on /signup. With confirmations on, such a
+# signup gets no session until someone proves the mailbox (the first emailed code does that for
+# real users: new addresses receive the confirmation template below). Password tokens are refused
+# outright by the access token hook (auth.hook.custom_access_token).
+enable_confirmations = true
 double_confirm_changes = true
 # 8 digits matches the hosted project (commit da99227) and the app's code field.
 otp_length = 8
@@ -84,6 +88,13 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/demo-login/deno.json"
 entrypoint = "./functions/demo-login/index.ts"
+
+# Refuses every access token requested with a password (see 007: public.custom_access_token_hook),
+# so a password set by someone who registered an address first never yields a session.
+# Hosted: Authentication > Hooks > Customize Access Token (JWT) Claims > Postgres function.
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
 
 # MFA is not offered in v1; keep TOTP explicitly off so `supabase config push` diffs are intended.
 [auth.mfa.totp]

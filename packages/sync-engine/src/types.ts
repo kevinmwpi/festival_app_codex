@@ -45,6 +45,8 @@ export interface SyncTransport {
 export interface SyncSessionState {
   /** Access-token expiry, epoch milliseconds. */
   expiresAt: number;
+  /** `auth.users.id` of the session's user; required for the local-owner check (`getLocalOwner`). */
+  authUserId?: string;
 }
 
 /** An operation as it was enqueued (see `trackQueueActivity`). */

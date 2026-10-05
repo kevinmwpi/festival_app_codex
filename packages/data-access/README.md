@@ -31,7 +31,7 @@ write queue). Everything here is plain async functions; React Query hooks live i
 | Export | Signature | Notes |
 |---|---|---|
 | `supabaseConfigError` | `string \| null` | Non-null when `EXPO_PUBLIC_SUPABASE_URL` or `EXPO_PUBLIC_SUPABASE_ANON_KEY` (alias `EXPO_PUBLIC_SUPABASE_KEY`) is missing/invalid. Show the config-error screen; no client exists and every network call throws `ConfigError`. |
-| `configureDataSync()` | `() => void` | Call once at app start. Wires the sync engine to Supabase (`createSupabaseSyncTransport()`) with the stored-session pre-check. |
+| `configureDataSync()` | `() => void` | Call once at app start. Wires the sync engine to Supabase (`createSupabaseSyncTransport()`) with the stored-session pre-check and the local-owner gate: nothing is sent unless the stored session's user is `app_meta.local_owner_auth_user_id` (so a kept queue is never sent with another account's session before `ensureLocalOwner` runs — flush again after it). A response that cannot be PostgREST's (a 4xx without an error code, such as an HTML proxy/WAF page, or an unexpected body on a write) is reported as a connectivity failure (`status: 0`): the write stays queued, never dropped or marked synced. |
 | `setAuthAutoRefresh(active)` | `(boolean) => void` | Call with `true` on AppState `active`, `false` on `background`. |
 | `subscribeToAuthChanges(handler)` | `((event, session) => void) => () => void` | Returns an unsubscribe. No-op without config. Call `ensureLocalOwner(getStoredSession().authUserId)` once at launch (before anything is enqueued) and on `SIGNED_IN` call `ensureLocalOwner(session.user.id)` — an expired stored token is recovered with `TOKEN_REFRESHED`/`INITIAL_SESSION`, never `SIGNED_IN`; on `TOKEN_REFRESHED`/`SIGNED_IN` call `flush()`; on `SIGNED_OUT` run the `session_lost` flow. `signOut()`/`deleteAccount()` themselves usually emit `SIGNED_OUT`, so make the orchestrator re-entrancy safe. The subscription follows client replacement (see `signOut()`): `INITIAL_SESSION` is delivered once, and events from a retired client are never delivered. |
 | `getSupabase()` | `() => SupabaseClient<Database>` | Escape hatch; throws `ConfigError` without config. Prefer the functions below. |
@@ -172,7 +172,10 @@ Helpers: `toUserMessage(error)`, `getErrorCode(error)`, `getAppErrorCode(error)`
 `getFailedOperations()`, `clearFailedOperations()`, `retryParkedOperations()`,
 `subscribeToSyncEvents(listener)` (`queued` / `synced` / `failed` / `parked` / `cleared` — invalidate
 queries and toast "Couldn't save …" on `failed`). Permanently rejected writes are rolled back in the
-cache automatically.
+cache automatically. An operation that keeps failing transiently is parked after 20 attempts; the
+engine's own retries leave it parked, and every `flush()` call (launch, foreground, `TOKEN_REFRESHED`,
+sign-in, pull to refresh), a NetInfo offline→online change or `retryParkedOperations()` gives it a
+fresh round.
 
 ## Tests
 

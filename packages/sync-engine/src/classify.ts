@@ -131,7 +131,10 @@ export function isSessionUnavailableError(error: unknown): boolean {
  *   `rate_limited`, PGRST301/PGRST303/HTTP 401, any request without a user JWT, and Postgres
  *   serialization/lock/cancel states.
  * - permanent (record, drop, roll back): 42501 with a valid JWT, 23502, 23503, 23514, 22P02,
- *   PGRST204, other P0001 codes, other integrity/data errors and any other 4xx.
+ *   PGRST204, other P0001 codes, other integrity/data errors and any other 4xx that carries a
+ *   PostgREST/Postgres error code.
+ * - A 4xx without an error code did not come from PostgREST (a proxy, WAF or captive-portal page):
+ *   the server never evaluated the write, so it is transient, never dropped.
  */
 export function classifySyncError(error: unknown, table: string, _operationType?: SyncOperationType): SyncErrorClass {
   const candidate = asErrorLike(error);
@@ -172,7 +175,7 @@ export function classifySyncError(error: unknown, table: string, _operationType?
   }
 
   if (status !== null && status >= 400 && status < 500) {
-    return 'permanent';
+    return code ? 'permanent' : 'transient';
   }
 
   // Unknown failure without an HTTP status: keep it and let the attempt cap park it if it persists.

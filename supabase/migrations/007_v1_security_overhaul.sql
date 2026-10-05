@@ -506,6 +506,26 @@ grant select on public.user_blocks to authenticated;
 -- ===========================================================================
 -- 10b. Private helpers (§2.2)
 -- ===========================================================================
+-- Internal: the caller's auth user is banned (admin-tools users:ban sets
+-- auth.users.banned_until). GoTrue then refuses sign-in and token refresh, but
+-- an access token already issued stays valid until it expires, so the database
+-- refuses banned callers itself.
+create or replace function private.is_banned()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from auth.users a
+    where a.id = auth.uid()
+      and a.banned_until > now()
+  )
+$$;
+
+-- A banned caller has no profile as far as policies and RPCs are concerned.
 create or replace function private.current_app_user_id()
 returns uuid
 language sql
@@ -513,7 +533,10 @@ stable
 security definer
 set search_path = ''
 as $$
-  select u.id from public.users u where u.auth_user_id = auth.uid()
+  select u.id
+  from public.users u
+  where u.auth_user_id = auth.uid()
+    and not private.is_banned()
 $$;
 
 create or replace function private.is_group_member(p_group_id uuid)
@@ -627,6 +650,31 @@ as $$
   end
 $$;
 
+-- Totem photo visibility: a member of the group folder, and neither the
+-- meetup's creator nor the object's uploader (auth user id) is blocked either
+-- way, matching meetups_select_member.
+create or replace function private.can_view_totem(p_group_id uuid, p_meetup_id uuid, p_owner_id text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select private.is_group_member(p_group_id)
+    and not exists (
+      select 1
+      from public.meetups mt
+      where mt.id = p_meetup_id
+        and private.is_blocked_with(mt.created_by_user_id)
+    )
+    and not exists (
+      select 1
+      from public.users u
+      where u.auth_user_id = private.try_uuid(p_owner_id)
+        and private.is_blocked_with(u.id)
+    )
+$$;
+
 create or replace function private.contains_disallowed_text(p text)
 returns boolean
 language sql
@@ -705,7 +753,7 @@ as $$
 declare
   v_me uuid;
 begin
-  if auth.uid() is null then
+  if auth.uid() is null or private.is_banned() then
     raise exception using errcode = 'P0001', message = 'not_authenticated';
   end if;
   v_me := private.current_app_user_id();
@@ -745,6 +793,179 @@ begin
       limit 1
     );
   end if;
+end
+$$;
+
+-- Internal: gives the group a fresh invite code (retrying on collision) and
+-- returns it. Caller must hold the group row lock.
+create or replace function private.replace_invite_code(p_group_id uuid)
+returns text
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_code text;
+  v_attempt integer := 0;
+begin
+  loop
+    v_attempt := v_attempt + 1;
+    v_code := private.generate_invite_code();
+    begin
+      update public.groups g
+      set invite_code = v_code,
+          invite_code_rotated_at = now()
+      where g.id = p_group_id;
+      exit;
+    exception when unique_violation then
+      if v_attempt >= 10 then
+        raise;
+      end if;
+    end;
+  end loop;
+
+  return v_code;
+end
+$$;
+
+-- Internal: keeps the App Review demo crew looking live between demo logins.
+-- Caller must hold the group row lock. (Re)places each seeded fake member near
+-- a stage with a fresh recorded_at (location rows expire after 15 minutes), and
+-- moves the fake members' meetups that already started, or start within 30
+-- minutes, to the next hour but one so the crew screen and map always show an
+-- upcoming meetup. Only ever writes rows of the seeded fake members.
+create or replace function private.refresh_demo_crew_content(
+  p_group_id uuid,
+  p_festival_id uuid,
+  p_fake_ids uuid[]
+)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_stage_count integer;
+  v_lat double precision;
+  v_lng double precision;
+  r record;
+begin
+  select count(*) into v_stage_count
+  from public.stages s
+  where s.festival_id = p_festival_id
+    and s.latitude is not null
+    and s.longitude is not null;
+
+  for r in
+    select m.user_id, row_number() over (order by m.joined_at, m.id) as n
+    from public.group_members m
+    where m.group_id = p_group_id
+      and m.user_id = any (p_fake_ids)
+  loop
+    v_lat := null;
+    v_lng := null;
+    if v_stage_count > 0 then
+      select s.latitude, s.longitude into v_lat, v_lng
+      from public.stages s
+      where s.festival_id = p_festival_id
+        and s.latitude is not null
+        and s.longitude is not null
+      order by s.name, s.id
+      offset ((r.n - 1) % v_stage_count)
+      limit 1;
+    else
+      select f.latitude, f.longitude into v_lat, v_lng
+      from public.festivals f
+      where f.id = p_festival_id;
+    end if;
+
+    continue when v_lat is null or v_lng is null;
+
+    -- Rows younger than a minute are left alone (the map polls this path).
+    insert into public.location_shares as l (group_id, user_id, lat, lng, accuracy, heading, recorded_at)
+    values (
+      p_group_id,
+      r.user_id,
+      greatest(-90, least(90, v_lat + 0.00011 * r.n)),
+      greatest(-180, least(180, v_lng - 0.00008 * r.n)),
+      12,
+      null,
+      now()
+    )
+    on conflict (user_id, group_id) do update
+      set lat = excluded.lat,
+          lng = excluded.lng,
+          accuracy = excluded.accuracy,
+          heading = excluded.heading,
+          recorded_at = now()
+      where l.recorded_at < now() - interval '1 minute';
+  end loop;
+
+  update public.meetups mt
+  set starts_at = date_trunc('hour', now()) + interval '2 hours'
+  where mt.group_id = p_group_id
+    and mt.created_by_user_id = any (p_fake_ids)
+    and mt.starts_at < now() + interval '30 minutes';
+end
+$$;
+
+-- Internal: refreshes the seeded demo crew (prepare_demo_account's rules: a
+-- group named "Festie Demo Crew" on a published demo festival, created by a
+-- profile whose auth user carries app_metadata.festie_demo). With p_group_id,
+-- only when that group is the demo crew (get_group_locations); without, finds
+-- it (pg_cron). A cheap no-op for every other group.
+create or replace function private.refresh_demo_crew(p_group_id uuid default null)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_group_id uuid;
+  v_festival_id uuid;
+  v_fake_ids uuid[];
+begin
+  if p_group_id is not null and not exists (
+    select 1
+    from public.groups g
+    join public.festivals f on f.id = g.festival_id
+    where g.id = p_group_id
+      and g.name = 'Festie Demo Crew'
+      and f.is_demo
+      and f.status = 'published'
+  ) then
+    return;
+  end if;
+
+  select g.id, g.festival_id into v_group_id, v_festival_id
+  from public.groups g
+  join public.festivals f on f.id = g.festival_id
+  join public.users cu on cu.id = g.created_by_user_id
+  join auth.users ca on ca.id = cu.auth_user_id
+  where g.name = 'Festie Demo Crew'
+    and f.is_demo
+    and f.status = 'published'
+    and ca.raw_app_meta_data ->> 'festie_demo' = 'true'
+  order by g.created_at, g.id
+  limit 1;
+
+  if v_group_id is null or (p_group_id is not null and v_group_id <> p_group_id) then
+    return;
+  end if;
+
+  perform 1 from public.groups g where g.id = v_group_id for update;
+
+  select coalesce(array_agg(m.user_id order by m.user_id), '{}') into v_fake_ids
+  from public.group_members m
+  join public.users u on u.id = m.user_id
+  join auth.users a on a.id = u.auth_user_id
+  where m.group_id = v_group_id
+    and a.raw_app_meta_data ->> 'festie_demo' = 'true';
+
+  perform private.refresh_demo_crew_content(v_group_id, v_festival_id, v_fake_ids);
 end
 $$;
 
@@ -886,7 +1107,7 @@ declare
   v_value text := coalesce(p_avatar_value, '');
   v_email text;
 begin
-  if v_uid is null then
+  if v_uid is null or private.is_banned() then
     raise exception using errcode = 'P0001', message = 'not_authenticated';
   end if;
   if char_length(v_name) not between 1 and 40
@@ -923,7 +1144,7 @@ set search_path = ''
 as $$
 #variable_conflict use_column
 begin
-  if auth.uid() is null then
+  if auth.uid() is null or private.is_banned() then
     raise exception using errcode = 'P0001', message = 'not_authenticated';
   end if;
   return query
@@ -1052,8 +1273,6 @@ set search_path = ''
 as $$
 declare
   v_me uuid := private.require_profile();
-  v_code text;
-  v_attempt integer := 0;
 begin
   perform 1 from public.groups g where g.id = p_group_id for update;
   if not found or not private.is_group_member(p_group_id) then
@@ -1063,23 +1282,7 @@ begin
     raise exception using errcode = 'P0001', message = 'not_group_admin';
   end if;
 
-  loop
-    v_attempt := v_attempt + 1;
-    v_code := private.generate_invite_code();
-    begin
-      update public.groups g
-      set invite_code = v_code,
-          invite_code_rotated_at = now()
-      where g.id = p_group_id;
-      exit;
-    exception when unique_violation then
-      if v_attempt >= 10 then
-        raise;
-      end if;
-    end;
-  end loop;
-
-  return v_code;
+  return private.replace_invite_code(p_group_id);
 end
 $$;
 
@@ -1134,6 +1337,12 @@ begin
   delete from public.group_members m
   where m.group_id = p_group_id
     and m.user_id = p_user_id;
+
+  -- Every member can read the invite code and earlier invites may have been
+  -- shared, so the removed person could rejoin with it: replace it.
+  if found then
+    perform private.replace_invite_code(p_group_id);
+  end if;
 end
 $$;
 
@@ -1229,6 +1438,9 @@ begin
   if not private.is_group_member(p_group_id) then
     raise exception using errcode = 'P0001', message = 'not_group_member';
   end if;
+
+  -- App Review: keeps the demo crew's locations and meetup current.
+  perform private.refresh_demo_crew(p_group_id);
 
   delete from public.location_shares l
   where l.group_id = p_group_id
@@ -1489,10 +1701,6 @@ declare
   v_fake_ids uuid[];
   v_group_id uuid;
   v_festival_id uuid;
-  v_stage_count integer;
-  v_lat double precision;
-  v_lng double precision;
-  r record;
 begin
   if p_auth_user_id is null then
     raise exception using errcode = 'P0001', message = 'invalid_input';
@@ -1568,57 +1776,9 @@ begin
   values (v_profile_id, v_festival_id)
   on conflict (user_id, festival_id) do nothing;
 
-  -- Seeded fake members appear live: (re)place each one near a stage. Rows are
-  -- recreated because stale rows are purged after 15 minutes. Locations are
-  -- only ever written for the fake members, never for a real account.
-  select count(*) into v_stage_count
-  from public.stages s
-  where s.festival_id = v_festival_id
-    and s.latitude is not null
-    and s.longitude is not null;
-
-  for r in
-    select m.user_id, row_number() over (order by m.joined_at, m.id) as n
-    from public.group_members m
-    where m.group_id = v_group_id
-      and m.user_id = any (v_fake_ids)
-  loop
-    v_lat := null;
-    v_lng := null;
-    if v_stage_count > 0 then
-      select s.latitude, s.longitude into v_lat, v_lng
-      from public.stages s
-      where s.festival_id = v_festival_id
-        and s.latitude is not null
-        and s.longitude is not null
-      order by s.name, s.id
-      offset ((r.n - 1) % v_stage_count)
-      limit 1;
-    else
-      select f.latitude, f.longitude into v_lat, v_lng
-      from public.festivals f
-      where f.id = v_festival_id;
-    end if;
-
-    continue when v_lat is null or v_lng is null;
-
-    insert into public.location_shares (group_id, user_id, lat, lng, accuracy, heading, recorded_at)
-    values (
-      v_group_id,
-      r.user_id,
-      greatest(-90, least(90, v_lat + 0.00011 * r.n)),
-      greatest(-180, least(180, v_lng - 0.00008 * r.n)),
-      12,
-      null,
-      now()
-    )
-    on conflict (user_id, group_id) do update
-      set lat = excluded.lat,
-          lng = excluded.lng,
-          accuracy = excluded.accuracy,
-          heading = excluded.heading,
-          recorded_at = now();
-  end loop;
+  -- Seeded fake members appear live near the stages and their meetup is
+  -- upcoming; get_group_locations and pg_cron keep it that way afterwards.
+  perform private.refresh_demo_crew_content(v_group_id, v_festival_id, v_fake_ids);
 end
 $$;
 
@@ -1672,6 +1832,31 @@ security definer
 set search_path = ''
 as $$
   select private.check_rate_limit(p_key, p_action, p_max, p_window)
+$$;
+
+-- Custom Access Token auth hook (config.toml [auth.hook.custom_access_token];
+-- hosted: Authentication > Hooks). Festie signs in with emailed codes only, but
+-- GoTrue's email provider always accepts a password on /signup and /token. A
+-- password set by someone who registered an address before its owner did must
+-- never yield a session, so every token requested with a password is refused.
+-- Runs as supabase_auth_admin and reads nothing but the event.
+create or replace function public.custom_access_token_hook(event jsonb)
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  select case
+    when event ->> 'authentication_method' = 'password' then
+      jsonb_build_object(
+        'error',
+        jsonb_build_object(
+          'http_code', 403,
+          'message', 'Password sign-in is not available. Sign in with the code we email you.'
+        )
+      )
+    else jsonb_build_object('claims', event -> 'claims')
+  end
 $$;
 
 -- ===========================================================================
@@ -1799,9 +1984,13 @@ create policy user_blocks_select_own on public.user_blocks
 -- ===========================================================================
 do $$ begin
   create extension if not exists pg_cron;
-  perform cron.unschedule(jobid) from cron.job where jobname in ('purge-stale-locations','purge-rate-limit-events');
+  perform cron.unschedule(jobid) from cron.job
+  where jobname in ('purge-stale-locations','purge-rate-limit-events','refresh-demo-crew');
   perform cron.schedule('purge-stale-locations', '*/5 * * * *', 'select public.purge_stale_locations()');
   perform cron.schedule('purge-rate-limit-events', '17 * * * *', 'select public.purge_rate_limit_events()');
+  -- App Review: the demo crew stays live however long after demo login the
+  -- reviewer opens the app (no-op without a seeded demo crew).
+  perform cron.schedule('refresh-demo-crew', '*/5 * * * *', 'select private.refresh_demo_crew()');
 exception when others then raise notice 'pg_cron unavailable: %', sqlerrm;
 end $$;
 
@@ -1856,6 +2045,7 @@ grant execute on function
   private.shares_festival_group_with(uuid, uuid),
   private.is_blocked_with(uuid),
   private.can_upload_totem(uuid, uuid),
+  private.can_view_totem(uuid, uuid, text),
   private.try_uuid(text),
   private.contains_disallowed_text(text)
 to anon, authenticated;
@@ -1886,3 +2076,13 @@ grant execute on function
   public.check_rate_limit(text, text, integer, interval),
   private.check_rate_limit(text, text, integer, interval)
 to service_role;
+
+-- GoTrue calls the access token hook as supabase_auth_admin.
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'supabase_auth_admin') then
+    grant usage on schema public to supabase_auth_admin;
+    grant execute on function public.custom_access_token_hook(jsonb) to supabase_auth_admin;
+  end if;
+end
+$$;

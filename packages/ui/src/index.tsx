@@ -121,8 +121,9 @@ export function FieldLabel({ children }: PropsWithChildren) {
   return <Text style={styles.fieldLabel}>{children}</Text>;
 }
 
-export function FieldInput(props: TextInputProps) {
-  return <TextInput placeholderTextColor={colors.placeholder} style={styles.input} {...props} />;
+/** A text field. `style` is applied on top of the base field style (background, radius, padding, text). */
+export function FieldInput({ style, ...props }: TextInputProps) {
+  return <TextInput placeholderTextColor={colors.placeholder} {...props} style={[styles.input, style]} />;
 }
 
 export function InlineMessage({ message, tone = 'error' }: { message?: string | null; tone?: 'error' | 'muted' }) {
@@ -201,10 +202,16 @@ export function SecondaryButton({
  * Inline text link (e.g. "I already have a code", "Terms of Use"). Uses `colors.link` and gets a
  * 44pt-tall hit area via hitSlop.
  */
+const TEXT_LINK_ALIGN_SELF = { start: 'flex-start', center: 'center', end: 'flex-end' } as const;
+
+/**
+ * An underlined inline link, sized to its label. It sits at the start of its column unless `align`
+ * says otherwise (a parent's `alignItems` does not move it, because it sets its own `alignSelf`).
+ */
 export function TextLink({
-  label, onPress, accessibilityLabel,
+  label, onPress, accessibilityLabel, align = 'start',
 }: {
-  label: string; onPress: () => void; accessibilityLabel?: string;
+  label: string; onPress: () => void; accessibilityLabel?: string; align?: 'start' | 'center' | 'end';
 }) {
   return (
     <Pressable
@@ -212,7 +219,7 @@ export function TextLink({
       accessibilityRole="link"
       accessibilityLabel={accessibilityLabel ?? label}
       hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-      style={({ pressed }) => [styles.textLink, pressed && { opacity: 0.6 }]}
+      style={({ pressed }) => [styles.textLink, { alignSelf: TEXT_LINK_ALIGN_SELF[align] }, pressed && { opacity: 0.6 }]}
     >
       <Text style={styles.textLinkLabel}>{label}</Text>
     </Pressable>
@@ -385,7 +392,7 @@ const styles = StyleSheet.create({
   secondaryButtonLabel: { color: colors.link, fontSize: 13, fontWeight: '700' },
 
   /* Text link */
-  textLink: { alignSelf: 'flex-start', minHeight: 20 },
+  textLink: { minHeight: 20 },
   textLinkLabel: { color: colors.link, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
 
   /* Chips — matches reference: inactive = white/surface, active = primary */

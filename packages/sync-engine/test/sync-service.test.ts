@@ -189,9 +189,13 @@ describe('sync-service', () => {
     const db = await getDb();
     for (let attempt = 2; attempt <= MAX_SYNC_ATTEMPTS; attempt += 1) {
       await db.runAsync('UPDATE sync_queue SET next_retry_at = NULL;');
-      // Fire the scheduled retry (as the timer would) and wait for that flush.
+      // Fire the scheduled retry (as the timer would) and wait for that flush to record the attempt.
       scheduledCallbacks.shift()?.();
-      await flush();
+      await vi.waitFor(async () => {
+        const [current] = await getPendingOperations();
+        expect(current.attemptCount).toBe(attempt);
+        expect(current.parked || scheduledCallbacks.length > 0).toBe(true);
+      });
     }
 
     expect(transport.upsert).toHaveBeenCalledTimes(MAX_SYNC_ATTEMPTS);
@@ -204,8 +208,9 @@ describe('sync-service', () => {
     expect(operation.attemptCount).toBe(MAX_SYNC_ATTEMPTS);
     expect(events.some((event) => event.type === 'parked')).toBe(true);
 
-    // Parked operations are not retried by later flushes, but still count as pending.
-    await flush();
+    // The engine's own retries never resend a parked operation; it still counts as pending.
+    scheduledCallbacks.splice(0).forEach((callback) => callback());
+    await vi.waitFor(async () => expect(await getPendingOperations()).toHaveLength(1));
     expect(transport.upsert).toHaveBeenCalledTimes(MAX_SYNC_ATTEMPTS);
     expect(await getPendingCount()).toBe(1);
     // The optimistic local row is kept.
@@ -214,6 +219,59 @@ describe('sync-service', () => {
     transport.upsert.mockResolvedValue(undefined);
     await retryParkedOperations();
     expect(await getPendingCount()).toBe(0);
+  });
+
+  it('gives parked operations a fresh round on the next outside flush, but not on internal retries', async () => {
+    transport.upsert.mockRejectedValue(new SyncTransportError('Request timed out after 15000 ms', { status: 0 }));
+    setOnlineStatusForTests(false);
+    await enqueue({ table: 'user_set_selections', type: 'upsert', payload: selection('s1', 'set-1') });
+    const db = await getDb();
+    await db.runAsync('UPDATE sync_queue SET attempt_count = ?;', [MAX_SYNC_ATTEMPTS - 1]);
+    setOnlineStatusForTests(true);
+    await flush();
+    let [operation] = await getPendingOperations();
+    expect(operation.parked).toBe(true);
+    const sentBefore = transport.upsert.mock.calls.length;
+
+    // An enqueue for another record flushes internally: the parked operation stays parked and blocks
+    // nothing else.
+    transport.upsert.mockResolvedValue(undefined);
+    await enqueue({ table: 'user_set_selections', type: 'upsert', payload: selection('s2', 'set-2') });
+    await vi.waitFor(async () => expect(await getPendingCount()).toBe(1));
+    expect(transport.upsert.mock.calls.slice(sentBefore).map(([, body]) => (body as { id: string }).id)).toEqual(['s2']);
+    [operation] = await getPendingOperations();
+    expect(operation).toMatchObject({ recordId: 's1', parked: true });
+
+    // Foreground / token refresh / pull to refresh call flush(): the parked operation is sent again.
+    await flush();
+    expect(await getPendingCount()).toBe(0);
+    expect(events.filter((event) => event.type === 'synced').map((event) => 'recordId' in event && event.recordId)).toEqual(['s2', 's1']);
+  });
+
+  it('releases parked operations when NetInfo reports the device back online', async () => {
+    const netInfo = (await import('@react-native-community/netinfo')).default as unknown as {
+      addEventListener: ReturnType<typeof vi.fn>;
+    };
+    resetSyncServiceForTests();
+    setRetrySchedulerForTests(() => 0);
+    let netInfoListener: ((state: { isConnected: boolean; isInternetReachable: boolean }) => void) | undefined;
+    netInfo.addEventListener.mockImplementationOnce((listener: typeof netInfoListener) => {
+      netInfoListener = listener;
+      return () => undefined;
+    });
+    configureSyncService({ transport });
+    setOnlineStatusForTests(true);
+
+    transport.upsert.mockRejectedValue(new SyncTransportError('Request timed out after 15000 ms', { status: 0 }));
+    await enqueue({ table: 'user_set_selections', type: 'upsert', payload: selection('s1', 'set-1') });
+    await vi.waitFor(async () => expect((await getPendingOperations())[0].attemptCount).toBe(1));
+    const db = await getDb();
+    await db.runAsync('UPDATE sync_queue SET parked = 1, attempt_count = ?, next_retry_at = NULL;', [MAX_SYNC_ATTEMPTS]);
+    transport.upsert.mockResolvedValue(undefined);
+
+    netInfoListener?.({ isConnected: false, isInternetReachable: false });
+    netInfoListener?.({ isConnected: true, isInternetReachable: true });
+    await vi.waitFor(async () => expect(await getPendingCount()).toBe(0));
   });
 
   it('stops the pass on a network error so later operations keep their attempts', async () => {
@@ -410,6 +468,53 @@ describe('sync-service', () => {
     await flush();
     expect(transport.upsert).toHaveBeenCalledTimes(1);
     expect(await getPendingCount()).toBe(0);
+  });
+
+  it("never sends the local queue with a session that is not the local owner's", async () => {
+    let session: { expiresAt: number; authUserId?: string } | null = { expiresAt: Date.now() + 3_600_000, authUserId: 'user-a' };
+    let owner: string | null = 'user-a';
+    configureSyncService({ transport, getSession: () => session, getLocalOwner: async () => owner });
+    setOnlineStatusForTests(false);
+    await enqueue({ table: 'user_set_selections', type: 'upsert', payload: selection('s1', 'set-1') });
+    setOnlineStatusForTests(true);
+
+    // Account B's session is stored before its owner check wiped A's queue.
+    session = { expiresAt: Date.now() + 3_600_000, authUserId: 'user-b' };
+    await flush();
+    expect(transport.upsert).not.toHaveBeenCalled();
+    expect((await getPendingOperations())[0].attemptCount).toBe(0);
+
+    // A session without a user id cannot be matched to the owner either.
+    session = { expiresAt: Date.now() + 3_600_000 };
+    await flush();
+    expect(transport.upsert).not.toHaveBeenCalled();
+
+    // Nobody owns the cache yet.
+    session = { expiresAt: Date.now() + 3_600_000, authUserId: 'user-a' };
+    owner = null;
+    await flush();
+    expect(transport.upsert).not.toHaveBeenCalled();
+
+    owner = 'user-a';
+    await flush();
+    expect(transport.upsert).toHaveBeenCalledTimes(1);
+    expect(await getPendingCount()).toBe(0);
+  });
+
+  it('stops a pass when the stored session switches account mid-pass', async () => {
+    let session: { expiresAt: number; authUserId: string } = { expiresAt: Date.now() + 3_600_000, authUserId: 'user-a' };
+    configureSyncService({ transport, getSession: () => session, getLocalOwner: async () => 'user-a' });
+    setOnlineStatusForTests(false);
+    await enqueue({ table: 'user_set_selections', type: 'upsert', payload: selection('s1', 'set-1') });
+    await enqueue({ table: 'user_set_selections', type: 'upsert', payload: selection('s2', 'set-2') });
+    transport.upsert.mockImplementationOnce(async () => {
+      session = { expiresAt: Date.now() + 3_600_000, authUserId: 'user-b' };
+    });
+    setOnlineStatusForTests(true);
+
+    await flush();
+    expect(transport.upsert).toHaveBeenCalledTimes(1);
+    expect(await getPendingOperationIds('user_set_selections')).toEqual(['s2']);
   });
 
   it('treats a transport-side missing session as transient without spending an attempt', async () => {

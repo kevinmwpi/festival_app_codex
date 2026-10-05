@@ -1172,6 +1172,23 @@ select is(
   0,
   'I17 removal deletes the membership and (via trigger) the location row'
 );
+select ok(
+  (select invite_code <> 'AAAAA2' and invite_code_rotated_at = now()
+   from public.groups where id = '90000000-0000-4000-8000-000000000001'),
+  'I17a removing a member replaces the invite code every member could read'
+);
+select pg_temp.become('hank');
+select is(
+  (select count(*)::int from public.join_group('AAAAA2')),
+  0,
+  'I17b a removed member cannot rejoin with the old invite code'
+);
+select throws_ok(
+  $$ select * from public.get_group_locations('90000000-0000-4000-8000-000000000001') $$,
+  'P0001', 'not_group_member', 'I17c a removed member cannot read the crew''s locations'
+);
+select pg_temp.become('superuser');
+update public.groups set invite_code = 'AAAAA2' where id = '90000000-0000-4000-8000-000000000001';
 
 -- leave_group: last admin hands off to the earliest-joined member
 select pg_temp.become('carol');
@@ -1278,7 +1295,18 @@ select is(
 -- ===========================================================================
 -- J. Blocks
 -- ===========================================================================
+-- A photo on bob's meetup in GA, for the photo-visibility checks below.
+select pg_temp.become('superuser');
+insert into storage.objects (bucket_id, name, owner, owner_id) values
+  ('totems', '90000000-0000-4000-8000-000000000001/e0000000-0000-4000-8000-000000000007/0b000000-0000-4000-8000-000000000021.jpg',
+   'a0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000002');
 select pg_temp.become('alice');
+select is(
+  (select count(*)::int from storage.objects
+    where name = '90000000-0000-4000-8000-000000000001/e0000000-0000-4000-8000-000000000007/0b000000-0000-4000-8000-000000000021.jpg'),
+  1,
+  'J0 before any block, alice sees bob''s meetup photo (positive control)'
+);
 select throws_ok(
   $$ insert into public.user_blocks (blocker_id, blocked_id) values ('b0000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000002') $$,
   '42501', null, 'J1 user_blocks cannot be written directly'
@@ -1305,6 +1333,12 @@ select is(
   'J6 after blocking, the blocked user''s meetups disappear'
 );
 select is(
+  (select count(*)::int from storage.objects
+    where name like '90000000-0000-4000-8000-000000000001/e0000000-0000-4000-8000-000000000007/%'),
+  0,
+  'J6a after blocking, the blocked user''s meetup photos disappear too'
+);
+select is(
   (select count(*)::int from public.user_blocks where blocked_id = 'b0000000-0000-4000-8000-000000000002'),
   1,
   'J7 the blocker sees her block'
@@ -1315,12 +1349,35 @@ select is(
   0,
   'J8 the blocked user no longer sees the blocker''s meetups'
 );
+select is(
+  array(select name from storage.objects
+        where bucket_id = 'totems' and name like '90000000-0000-4000-8000-000000000001/%' order by name),
+  array['90000000-0000-4000-8000-000000000001/e0000000-0000-4000-8000-000000000007/0b000000-0000-4000-8000-000000000021.jpg'],
+  'J8a in GA the blocked user sees neither the blocker''s photos nor those of the user he blocked (erin), only his own'
+);
+select pg_temp.become('superuser');
+create policy rls_test_wide_open on storage.objects for select to public using (true);
+select pg_temp.become('bob');
+select is(
+  (select count(*)::int from storage.objects
+    where name like '90000000-0000-4000-8000-000000000001/e0000000-0000-4000-8000-000000000001/%'),
+  0,
+  'J8b the restrictive guard enforces blocks even with a wide-open permissive policy'
+);
+select pg_temp.become('superuser');
+drop policy rls_test_wide_open on storage.objects;
 select pg_temp.become('alice');
 select public.unblock_user('b0000000-0000-4000-8000-000000000002');
 select is(
   (select count(*)::int from public.meetups where id = 'e0000000-0000-4000-8000-000000000007'),
   1,
   'J9 unblocking restores visibility'
+);
+select is(
+  (select count(*)::int from storage.objects
+    where name like '90000000-0000-4000-8000-000000000001/e0000000-0000-4000-8000-000000000007/%'),
+  1,
+  'J9a unblocking restores photo visibility'
 );
 select pg_temp.become('superuser');
 insert into public.user_blocks (blocker_id, blocked_id)
@@ -1635,6 +1692,34 @@ select is(
   (select count(*)::int from public.get_group_locations('90000000-0000-4000-8000-000000000009')),
   2,
   'N8 the reviewer sees the fake members on the map'
+);
+-- Long after the demo login: location rows went stale and the seeded meetup
+-- started hours ago (it would sit under "Earlier").
+select pg_temp.become('superuser');
+update public.location_shares set recorded_at = now() - interval '20 minutes'
+where group_id = '90000000-0000-4000-8000-000000000009';
+update public.meetups set starts_at = now() - interval '3 hours'
+where id = 'e0000000-0000-4000-8000-000000000020';
+select pg_temp.become('rev');
+select is(
+  (select count(*)::int from public.get_group_locations('90000000-0000-4000-8000-000000000009')),
+  2,
+  'N8a the demo crew is still live on the map long after the demo login'
+);
+select pg_temp.become('superuser');
+select is(
+  (select starts_at from public.meetups where id = 'e0000000-0000-4000-8000-000000000020'),
+  date_trunc('hour', now()) + interval '2 hours',
+  'N8b the seeded meetup moves to an upcoming time'
+);
+update public.location_shares set recorded_at = now() - interval '20 minutes'
+where group_id = '90000000-0000-4000-8000-000000000009';
+select private.refresh_demo_crew();
+select is(
+  (select count(*)::int from public.location_shares
+    where group_id = '90000000-0000-4000-8000-000000000009' and recorded_at = now()),
+  2,
+  'N8c the scheduled refresh (no group argument) keeps the demo locations fresh too'
 );
 select pg_temp.become('superuser');
 select is(

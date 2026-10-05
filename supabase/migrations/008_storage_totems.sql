@@ -44,15 +44,20 @@ end
 $$;
 
 -- Restrictive guard: whatever other (e.g. dashboard-made) permissive policies
--- exist, totems rows are only reachable by members of the group folder, and
--- only the meetup's creator can write into a meetup folder.
+-- exist, totems rows are only reachable by members of the group folder who
+-- have no block either way with the meetup's creator or the uploader (as for
+-- meetups), and only the meetup's creator can write into a meetup folder.
 create policy totems_guard on storage.objects
   as restrictive
   for all
   to public
   using (
     bucket_id <> 'totems'
-    or private.is_group_member(private.try_uuid((storage.foldername(name))[1]))
+    or private.can_view_totem(
+      private.try_uuid((storage.foldername(name))[1]),
+      private.try_uuid((storage.foldername(name))[2]),
+      owner_id
+    )
   )
   with check (
     bucket_id <> 'totems'
@@ -67,7 +72,11 @@ create policy totems_select_member on storage.objects
   to authenticated
   using (
     bucket_id = 'totems'
-    and private.is_group_member(private.try_uuid((storage.foldername(name))[1]))
+    and private.can_view_totem(
+      private.try_uuid((storage.foldername(name))[1]),
+      private.try_uuid((storage.foldername(name))[2]),
+      owner_id
+    )
   );
 
 create policy totems_insert_meetup_creator on storage.objects

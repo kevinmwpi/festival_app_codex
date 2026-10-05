@@ -1,6 +1,7 @@
 /**
  * Minimal fake of the supabase-js client surface data-access uses. Every query records a
- * `QueryCall` and resolves to whatever the test's handler returns. Like PostgREST, a `range(from, to)`
+ * `QueryCall` and resolves to whatever the test's handler returns (no `data` for a write without
+ * `.select()`, as with PostgREST's `return=minimal`). Like PostgREST, a `range(from, to)`
  * slices an array result, `select(…, { count: 'exact' })` reports the full row count, and
  * `maxRows` (see `createFakeSupabase`) silently caps every array response.
  */
@@ -109,7 +110,9 @@ function createBuilder(table: string, handler: QueryHandler, calls: QueryCall[],
       calls.push(call);
       return Promise.resolve(handler(call))
         .then((response) => {
-          let data = response.data ?? null;
+          // Like PostgREST with `return=minimal`, a write without `.select()` never returns a body.
+          const minimalWrite = call.op !== 'select' && call.returning === null;
+          let data = minimalWrite ? null : (response.data ?? null);
           let count: number | null = null;
           if (Array.isArray(data) && !response.error) {
             count = call.count ? (response.count ?? data.length) : null;

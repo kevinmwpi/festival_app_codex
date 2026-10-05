@@ -2,7 +2,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { clearLocalUserData, enqueue, getDb, getPendingOperations, upsertRows } from '@festival/sync-engine';
 
 import { InviteNotFoundError, MeetupNotSyncedError, ValidationError } from '../src/errors';
-import { createMeetup, deleteMeetup, getLocalGroupDetail, getLocalMeetups, joinGroup, leaveGroup, listMyGroups, refreshGroupDetail } from '../src/groups';
+import {
+  createGroup,
+  createMeetup,
+  deleteMeetup,
+  getLocalGroupDetail,
+  getLocalGroups,
+  getLocalMeetups,
+  joinGroup,
+  leaveGroup,
+  listMyGroups,
+  refreshGroupDetail,
+} from '../src/groups';
 import { removeJpegMetadataSegments, stripJpegMetadata, uploadTotemPhoto } from '../src/media';
 import { blockUser } from '../src/moderation';
 import { getLocalSelections, refreshUserSelections, toggleSetSelection } from '../src/schedule';
@@ -223,6 +234,49 @@ describe('groups', () => {
     expect(await rows('SELECT id FROM meetups;')).toEqual([]);
     expect((await rows('SELECT id FROM users ORDER BY id;')).map((row) => row.id).sort()).toEqual([PROFILE_ID, OTHER].sort());
     expect(await rows('SELECT id FROM user_set_selections WHERE user_id = ?;', [LEFT_MEMBER])).toEqual([]);
+  });
+
+  it('listMyGroups keeps a crew created or joined while it was in flight', async () => {
+    const CREATED = '66666666-6666-4666-8666-666666666666';
+    const JOINED = '77777777-7777-4777-8777-777777777777';
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fake.setQueryHandler(async (call) => {
+      if (call.table === 'group_members' && call.columns?.includes('groups(')) {
+        await gate; // the membership snapshot predates both RPCs
+        return { data: [] };
+      }
+      if (call.table === 'groups' && filterValue(call, 'id') === JOINED) {
+        return {
+          data: { id: JOINED, festival_id: FESTIVAL, name: 'Joined', created_by_user_id: OTHER, invite_code: 'PQRSTU', invite_code_rotated_at: null, created_at: '2027-01-05T00:00:00Z' },
+        };
+      }
+      if (call.table === 'group_members' && filterValue(call, 'group_id') === JOINED) {
+        return { data: [{ id: 'm-me-joined', group_id: JOINED, user_id: PROFILE_ID, role: 'member', joined_at: '2027-01-05T00:00:00Z' }] };
+      }
+      if (call.table === 'groups' || call.table === 'group_members') {
+        // refreshGroupDetail after create_group fails on a flaky network; createGroup ignores it.
+        return { error: { message: 'Network request failed' }, status: 0 };
+      }
+      return { data: [] };
+    });
+    fake.setRpcHandler((name) =>
+      name === 'create_group'
+        ? { data: [{ group_id: CREATED, name: 'Crew', festival_id: FESTIVAL, invite_code: 'ABCDEF' }] }
+        : { data: [{ group_id: JOINED, group_name: 'Joined', festival_id: FESTIVAL, member_count: 2 }] },
+    );
+
+    const refresh = listMyGroups();
+    await createGroup({ name: 'Crew', festival_id: FESTIVAL });
+    await joinGroup('PQRSTU');
+    release();
+    const groups = await refresh;
+
+    // g1/g2 are no longer returned and go; the crews written during the refresh stay.
+    expect(groups.map((group) => group.id).sort()).toEqual([CREATED, JOINED].sort());
+    expect((await getLocalGroups()).map((group) => group.id).sort()).toEqual([CREATED, JOINED].sort());
   });
 
   it('refreshGroupDetail purges a group the user can no longer see', async () => {

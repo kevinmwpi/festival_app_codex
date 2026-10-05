@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flush, getFailedOperations, getPendingCount, setOnlineStatusForTests, subscribeToSyncEvents, upsertRows, type SyncEvent } from '@festival/sync-engine';
+import { flush, getFailedOperations, getPendingCount, setMeta, setOnlineStatusForTests, subscribeToSyncEvents, upsertRows, type SyncEvent } from '@festival/sync-engine';
 
+import { LOCAL_OWNER_META_KEY } from '../src/auth';
 import { deleteMeetup, getLocalMeetup, updateMeetup } from '../src/groups';
 import { uploadTotemPhoto } from '../src/media';
 import { configureDataSync } from '../src/transport';
-import { PROFILE_ID, setupDataAccessTest, storeProfile, storeSession, teardownDataAccessTest } from './helpers';
+import { AUTH_USER_ID, PROFILE_ID, setupDataAccessTest, storeProfile, storeSession, teardownDataAccessTest } from './helpers';
 import type { FakeSupabase } from './mocks/supabase-client';
 
 /** Minimal JPEG with an EXIF (APP1) segment. */
@@ -49,6 +50,8 @@ describe('meetup edits, deletes and totem cleanup', () => {
         createSignedUrl: async () => ({ data: null, error: null }),
       }) as never;
     await upsertRows('meetups', [storedMeetup()]);
+    // The stored session's user owns the local queue (ensureLocalOwner ran).
+    await setMeta(LOCAL_OWNER_META_KEY, AUTH_USER_ID);
     configureDataSync();
     setOnlineStatusForTests(false);
   });
