@@ -14,7 +14,7 @@
  *   anything resumes. A timer also stops it at `expiresAt` while the app is open.
  * - Stops on: the user, expiry, `not_group_member` (left/removed — the server already deleted the row),
  *   leaving the crew (`stopLocationSharingForGroup`), sign-out (`stopLocationSharingNow`) and a lost
- *   session.
+ *   session (the provider watches the stored session and tears down locally as soon as it is gone).
  * - Status is truthful: `sharing` only while the watcher can run, `paused` in the background,
  *   `permission_denied` when location access or Location Services were turned off mid-session.
  */
@@ -32,6 +32,8 @@ import * as Location from 'expo-location';
 import React, { createContext, useContext, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { createMMKV, type MMKV } from 'react-native-mmkv';
+
+import { useHasStoredSession } from '@/src/providers/session-state';
 
 export type LocationSharingStatus = 'off' | 'sharing' | 'paused' | 'permission_denied';
 
@@ -614,6 +616,17 @@ class LocationSharingController {
     await withTimeout(stopSharingLocation(groupId), STOP_TIMEOUT_MS);
   };
 
+  /**
+   * Local teardown when the stored session is gone or belongs to someone else (a lost session signs out
+   * without `stopLocationSharingNow`). No server call: without a session it could not run.
+   */
+  clearLocalIfSessionGone = (): void => {
+    this.ensureLoaded();
+    if (this.session && !this.sessionBelongsToCurrentUser(this.session)) {
+      this.clearLocal();
+    }
+  };
+
   /** Stops only when sharing with `groupId` (e.g. before leaving that crew). */
   stopForGroup = async (groupId: string, reason: StopReason = 'left'): Promise<void> => {
     this.ensureLoaded();
@@ -644,6 +657,11 @@ function useControllerState(): LocationSharingState {
 /** Mounted once by `AppProviders`: owns the AppState wiring and resumes a persisted session. */
 export function LocationSharingProvider({ children }: React.PropsWithChildren) {
   useEffect(() => controller.attach(), []);
+  // Stop the watcher the moment the session disappears, not at the next fix or heartbeat.
+  const hasSession = useHasStoredSession();
+  useEffect(() => {
+    if (!hasSession) controller.clearLocalIfSessionGone();
+  }, [hasSession]);
   const value = useControllerState();
   return <LocationSharingContext.Provider value={value}>{children}</LocationSharingContext.Provider>;
 }

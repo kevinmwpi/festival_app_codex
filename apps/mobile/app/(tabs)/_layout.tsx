@@ -10,6 +10,13 @@ import { useAppStore } from '@/src/state/app-store';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
+/**
+ * Unfocused tab ink. `colors.textSecondary` (70 %) is tuned for white and tinted surfaces; on the solid
+ * accent fill its 9 px labels drop to ~3.6:1. At 85 % the labels stay ≥ 4.9:1 on every accent
+ * `accessibleAccent` can produce (§5.8) while still reading lighter than the focused tab.
+ */
+const UNFOCUSED_TAB_INK = 'rgba(44, 51, 39, 0.85)';
+
 const TAB_CONFIG: Record<string, { icon: IoniconName; iconFocused: IoniconName; label: string }> = {
   festivals: { icon: 'flag-outline',          iconFocused: 'flag',           label: 'Fests'    },
   lineup:    { icon: 'musical-notes-outline', iconFocused: 'musical-notes',  label: 'Lineup'   },
@@ -22,7 +29,7 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
   const cfg = TAB_CONFIG[name];
   if (!cfg) return null;
   // Dark ink on the pastel accent keeps ≥ 4.5:1; unfocused tabs read as lighter ink, not lower opacity.
-  const tint = focused ? colors.textPrimary : colors.textSecondary;
+  const tint = focused ? colors.textPrimary : UNFOCUSED_TAB_INK;
   return (
     <View style={[styles.iconContainer, focused && styles.iconContainerFocused]}>
       <Ionicons name={focused ? cfg.iconFocused : cfg.icon} size={26} color={tint} />

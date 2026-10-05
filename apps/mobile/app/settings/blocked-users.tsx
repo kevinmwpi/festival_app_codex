@@ -20,10 +20,10 @@ import {
 } from '@festival/ui';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { router } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
+import { goBackOr } from '@/src/providers/launch-route';
 import { useCachedProfile } from '@/src/providers/session-state';
 import { useFestivalScreenTint } from '@/src/providers/screen-tint';
 
@@ -111,7 +111,7 @@ export default function BlockedUsersScreen() {
       <ScreenHeader
         title="Blocked users"
         subtitle="Privacy"
-        onBack={() => router.back()}
+        onBack={() => goBackOr('/settings')}
         backIcon={<Ionicons name="chevron-back" size={22} color={colors.textPrimary} />}
       />
 

@@ -192,6 +192,8 @@ function offlinePackLabel(state: OfflinePackState, isOffline: boolean): string |
       return isOffline ? null : 'Save map offline';
     case 'downloading':
       return `Saving map… ${state.percent}%`;
+    case 'paused':
+      return `Map ${state.percent}% saved · paused`;
     case 'complete':
       return 'Map saved offline';
     case 'error':
@@ -372,6 +374,16 @@ export default function MapScreen() {
 
   const [sheetVisible, setSheetVisible] = React.useState(false);
   const [controlsSheet, setControlsSheet] = React.useState<'sharing' | 'offline' | null>(null);
+  // The offline-map sheet only describes a saved, paused or failed pack. When the pack moves on
+  // underneath it (a reconnect resumes the download, a remove finishes), close it rather than leave
+  // copy that no longer matches the pill.
+  const packKind = offlinePack.state.kind;
+  const packSheetApplies = packKind === 'complete' || packKind === 'paused' || packKind === 'error';
+  React.useEffect(() => {
+    if (!packSheetApplies) {
+      setControlsSheet((current) => (current === 'offline' ? null : current));
+    }
+  }, [packSheetApplies]);
 
   const stagesById = React.useMemo(() => indexStagesById(bundle.data?.stages ?? []), [bundle.data]);
   const artistsById = React.useMemo(() => new Map((bundle.data?.artists ?? []).map((artist) => [artist.id, artist.name])), [bundle.data]);
@@ -503,13 +515,31 @@ export default function MapScreen() {
   const packLabel = offlinePackLabel(offlinePack.state, isOffline);
   const onPackPress = () => {
     const kind = offlinePack.state.kind;
-    if (kind === 'none' || kind === 'error') {
+    if (kind === 'none') {
       if (!onlineManager.isOnline()) return;
       void offlinePack.download();
-    } else if (kind === 'complete') {
+    } else if (kind === 'complete' || kind === 'error' || kind === 'paused') {
       setControlsSheet('offline');
     }
   };
+
+  const packState = offlinePack.state;
+  const offlineSheetMessage =
+    packState.kind === 'error'
+      ? `${packState.message}${isOffline ? '' : ' You can also remove what was saved.'}`
+      : packState.kind === 'paused'
+        ? `Part of the festival area is saved. Saving continues when you're back online.`
+        : packState.kind === 'complete'
+          ? packState.updateAvailable
+            ? "The festival area is saved on this device, so the map works without signal. A newer map downloads when you're back online."
+            : 'The festival area is saved on this device, so the map works without signal.'
+          : undefined;
+  const offlineSheetActions: SheetAction[] = [
+    ...((packState.kind === 'error' || packState.kind === 'paused') && !isOffline
+      ? [{ label: packState.kind === 'error' ? 'Try again' : 'Continue saving', onPress: () => void offlinePack.download() }]
+      : []),
+    { label: 'Remove offline map', destructive: true, hint: 'Deletes the saved map from this device', onPress: () => void offlinePack.remove() },
+  ];
 
   const controlActions: SheetAction[] =
     controlsSheet === 'sharing'
@@ -520,7 +550,7 @@ export default function MapScreen() {
           { label: 'Stop sharing my location', destructive: true, onPress: () => void sharing.stop() },
         ]
       : controlsSheet === 'offline'
-        ? [{ label: 'Remove offline map', destructive: true, onPress: () => void offlinePack.remove() }]
+        ? offlineSheetActions
         : [];
 
   return (
@@ -585,7 +615,15 @@ export default function MapScreen() {
           {packLabel ? (
             <ControlPill
               label={packLabel}
-              icon={offlinePack.state.kind === 'complete' ? 'cloud-done-outline' : 'cloud-download-outline'}
+              icon={
+                offlinePack.state.kind === 'complete'
+                  ? 'cloud-done-outline'
+                  : offlinePack.state.kind === 'paused'
+                    ? 'cloud-offline-outline'
+                    : offlinePack.state.kind === 'error'
+                      ? 'alert-circle-outline'
+                      : 'cloud-download-outline'
+              }
               busy={offlinePack.state.kind === 'downloading' || offlinePack.state.kind === 'checking'}
               onPress={offlinePack.state.kind === 'downloading' || offlinePack.state.kind === 'checking' ? undefined : onPackPress}
             />
@@ -629,7 +667,7 @@ export default function MapScreen() {
         title={controlsSheet === 'offline' ? 'Offline map' : 'Location sharing'}
         message={
           controlsSheet === 'offline'
-            ? 'The festival area is saved on this device, so the map works without signal.'
+            ? offlineSheetMessage
             : group
               ? `Your crew ${group.name} can see your location while Festie is open.`
               : undefined

@@ -16,7 +16,8 @@ export function notifySessionChanged(): void {
 /** Alias for readability at profile-save call sites. */
 export const notifyProfileChanged = notifySessionChanged;
 
-function subscribe(listener: () => void): () => void {
+/** Subscribes to `notifySessionChanged()` (for other `useSyncExternalStore` views of session state). */
+export function subscribeToSessionChanges(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -29,7 +30,7 @@ function hasStoredSession(): boolean {
 
 /** `true` while a stored session exists (even if its access token has expired). */
 export function useHasStoredSession(): boolean {
-  return useSyncExternalStore(subscribe, hasStoredSession, hasStoredSession);
+  return useSyncExternalStore(subscribeToSessionChanges, hasStoredSession, hasStoredSession);
 }
 
 /* `getCachedProfile()` parses MMKV on every call; keep one object per distinct value so the snapshot is
@@ -49,5 +50,5 @@ function cachedProfileSnapshot(): CachedProfile | null {
 
 /** The signed-in user's cached profile (`null` when signed out or not set up yet). */
 export function useCachedProfile(): CachedProfile | null {
-  return useSyncExternalStore(subscribe, cachedProfileSnapshot, cachedProfileSnapshot);
+  return useSyncExternalStore(subscribeToSessionChanges, cachedProfileSnapshot, cachedProfileSnapshot);
 }

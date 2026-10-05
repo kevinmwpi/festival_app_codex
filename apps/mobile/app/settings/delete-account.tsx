@@ -13,10 +13,11 @@ import {
   useOfflineStatus,
 } from '@festival/ui';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import React from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { goBackOr } from '@/src/providers/launch-route';
 import { getPendingCount, performSignOut, signOutErrorMessage } from '@/src/providers/session-actions';
 import { useFestivalScreenTint } from '@/src/providers/screen-tint';
 
@@ -81,7 +82,7 @@ export default function DeleteAccountScreen() {
         <ScreenHeader
           title="Delete account"
           subtitle="Permanent"
-          onBack={() => router.back()}
+          onBack={() => goBackOr('/settings')}
           backIcon={<Ionicons name="chevron-back" size={22} color={colors.textPrimary} />}
         />
 

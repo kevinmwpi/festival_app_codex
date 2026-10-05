@@ -1,10 +1,11 @@
 import { colors, InlineMessage, PrimaryButton, ScreenHeader, SectionCard, showToast, spacing } from '@festival/ui';
 import { Ionicons } from '@expo/vector-icons';
 import { usePreventRemove } from '@react-navigation/native';
-import { router, useNavigation } from 'expo-router';
+import { useNavigation } from 'expo-router';
 import React from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 
+import { goBackOr } from '@/src/providers/launch-route';
 import { ProfileFields, useProfileForm } from '@/src/providers/profile-form';
 import { useCachedProfile } from '@/src/providers/session-state';
 import { useFestivalScreenTint } from '@/src/providers/screen-tint';
@@ -27,7 +28,7 @@ export default function EditProfileScreen() {
   });
 
   React.useEffect(() => {
-    if (saved) router.back();
+    if (saved) goBackOr('/settings');
   }, [saved]);
 
   const handleSave = React.useCallback(async () => {
@@ -44,7 +45,7 @@ export default function EditProfileScreen() {
         <ScreenHeader
           title="Edit profile"
           subtitle="How your crew sees you"
-          onBack={() => router.back()}
+          onBack={() => goBackOr('/settings')}
           backIcon={<Ionicons name="chevron-back" size={22} color={colors.textPrimary} />}
         />
         <SectionCard>

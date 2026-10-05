@@ -6,6 +6,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text
 
 import { OTP_LENGTH } from '@/src/config/app-info';
 import { resetTo } from '@/src/providers/launch-route';
+import { trackSignIn } from '@/src/providers/owner-check';
 import { notifySessionChanged } from '@/src/providers/session-state';
 
 /** Pasted codes of this length are accepted with the Verify button (sign-in codes and review codes). */
@@ -31,6 +32,20 @@ export default function VerifyOtpScreen() {
   const [now, setNow] = React.useState(() => Date.now());
   const inputRef = React.useRef<TextInput>(null);
   const verifyingRef = React.useRef(false);
+  const mountedRef = React.useRef(true);
+
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // After a rejected code, bring the keyboard back for the retry. This runs once the input is editable
+  // again: focusing from the submit handler happens while it is still disabled and is ignored.
+  React.useEffect(() => {
+    if (!verifying && error) inputRef.current?.focus();
+  }, [verifying, error]);
 
   const secondsLeft = Math.max(0, Math.ceil((cooldownEndsAt - now) / 1000));
 
@@ -47,14 +62,17 @@ export default function VerifyOtpScreen() {
       setVerifying(true);
       setError(null);
       try {
-        await verifyEmailCode(email, candidate);
+        // Tracked so the launch route waits for the local owner check inside it: the session guard
+        // lands on `index` at `SIGNED_IN`, before this call has finished claiming the local cache.
+        await trackSignIn(verifyEmailCode(email, candidate));
         notifySessionChanged();
-        // The launch route picks profile setup, the join screen for a remembered invite, or the app.
-        resetTo('/');
+        // The session guard in the root layout normally removes this screen and lands on the launch
+        // route already (profile setup, the join screen for a remembered invite, or the app); this only
+        // covers the screen still being shown.
+        if (mountedRef.current) resetTo('/');
       } catch (verifyError) {
         setError(toUserMessage(verifyError));
         setCode('');
-        inputRef.current?.focus();
       } finally {
         verifyingRef.current = false;
         setVerifying(false);

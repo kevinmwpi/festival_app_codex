@@ -9,7 +9,7 @@ import {
   type GroupDetail,
   type GroupSummary,
 } from '@festival/data-access';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { queryKeys } from './query-keys';
@@ -32,24 +32,31 @@ export function useGroups() {
  */
 export function useGroupDetail(groupId: string) {
   const userKey = useUserKey();
+  const queryClient = useQueryClient();
   return useCacheFirstQuery<GroupDetail | null>({
     queryKey: queryKeys.groupDetail(userKey, groupId),
     readLocal: () => getLocalGroupDetail(groupId),
-    refresh: () => refreshGroupDetail(groupId),
+    refresh: async () => {
+      await refreshGroupDetail(groupId);
+      // The same refresh rewrites the crew's picks: re-read the cache-only combined schedule too.
+      await queryClient.invalidateQueries({ queryKey: ['group-schedule', userKey, groupId] });
+    },
     enabled: Boolean(groupId),
     refreshStaleTime: 30_000,
   });
 }
 
-/** Every member's picks for the crew's festival (cache only; refreshed with the crew detail). */
+/**
+ * Every member's picks for the crew's festival. Cache only: `refreshGroupDetail` writes them, so mount
+ * this next to `useGroupDetail(groupId)` — its refresh re-reads this query — instead of starting a
+ * second network refresh of the same crew.
+ */
 export function useCombinedSelections(groupId: string, festivalId: string | null) {
   const userKey = useUserKey();
   return useCacheFirstQuery({
     queryKey: queryKeys.groupSchedule(userKey, groupId, festivalId ?? 'none'),
     readLocal: () => (festivalId ? getCombinedSelections(groupId, festivalId) : Promise.resolve([])),
-    refresh: () => refreshGroupDetail(groupId),
     enabled: Boolean(groupId && festivalId),
-    refreshStaleTime: 30_000,
   });
 }
 

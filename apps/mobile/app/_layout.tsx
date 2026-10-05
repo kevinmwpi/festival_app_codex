@@ -12,6 +12,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { SUPPORT_EMAIL } from '@/src/config/app-info';
 import { AppProviders } from '@/src/providers/app-providers';
 import { useHasStoredSession } from '@/src/providers/session-state';
+import { useHasAcceptedTerms } from '@/src/providers/terms-acceptance';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -46,6 +47,7 @@ export default function RootLayout() {
 function RootShell() {
   const isOffline = useOfflineStatus();
   const hasSession = useHasStoredSession();
+  const acceptedTerms = useHasAcceptedTerms();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -53,10 +55,20 @@ function RootShell() {
       <View style={styles.content}>
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
           <Stack.Screen name="index" />
-          <Stack.Screen name="auth/enter-email" />
-          <Stack.Screen name="auth/verify-otp" />
+          {/* Signed-in users cannot reach sign-in (e.g. from a `festivalapp://auth/…` link): verifying a
+              second account there would switch users without the sign-out teardown. A successful
+              verify flips both guards and the router lands on `index`, which routes onward. */}
+          <Stack.Protected guard={!hasSession}>
+            <Stack.Screen name="auth/enter-email" />
+            <Stack.Screen name="auth/verify-otp" />
+          </Stack.Protected>
           <Stack.Protected guard={hasSession}>
             <Stack.Screen name="auth/profile-setup" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="auth/accept-terms" options={{ gestureEnabled: false }} />
+          </Stack.Protected>
+          {/* Crew content opens only after this account explicitly agreed to the terms (§5.2, App
+              Review 1.2) — on profile setup, or once on `auth/accept-terms` for existing accounts. */}
+          <Stack.Protected guard={hasSession && acceptedTerms}>
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="settings" />
           </Stack.Protected>

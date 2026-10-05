@@ -1,0 +1,130 @@
+/**
+ * One-time agreement to the Terms of Use and Privacy Policy for accounts that already have a profile
+ * (§5.2, App Review guideline 1.2) — e.g. an existing account on a new device, or after the terms
+ * version changes. New accounts agree on profile setup instead. The launch route sends signed-in users
+ * here until they agree; the app's tabs stay closed until then.
+ */
+import { colors, InlineMessage, PrimaryButton, radii, spacing, TextLink, typography } from '@festival/ui';
+import { Redirect } from 'expo-router';
+import React from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import { resetTo } from '@/src/providers/launch-route';
+import { performSignOut, signOutErrorMessage } from '@/src/providers/session-actions';
+import { hasCurrentUserAcceptedTerms, markTermsAccepted } from '@/src/providers/terms-acceptance';
+import { TERMS_REQUIRED_MESSAGE, TermsAgreement } from '@/src/providers/terms-agreement';
+
+/** Same tent badge colour as the launch and sign-in screens, before a festival accent applies. */
+const AUTH_ACCENT = '#FFB3D9';
+
+export default function AcceptTermsScreen() {
+  const [alreadyAccepted] = React.useState(hasCurrentUserAcceptedTerms);
+  const [agreed, setAgreed] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [signingOut, setSigningOut] = React.useState(false);
+
+  const handleContinue = React.useCallback(() => {
+    if (!agreed) {
+      setError(TERMS_REQUIRED_MESSAGE);
+      return;
+    }
+    markTermsAccepted();
+    // The launch route continues to the join screen for a remembered invite, or into the app.
+    resetTo('/');
+  }, [agreed]);
+
+  const handleSignOut = React.useCallback(() => {
+    setSigningOut(true);
+    performSignOut('sign_out').catch((signOutError: unknown) => {
+      setSigningOut(false);
+      setError(signOutErrorMessage(signOutError));
+    });
+  }, []);
+
+  if (alreadyAccepted) {
+    // Opened by a link after agreeing already: nothing to do here.
+    return <Redirect href="/" />;
+  }
+
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.content}>
+        <View style={styles.iconBox} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+          <Text style={styles.iconGlyph}>⛺</Text>
+        </View>
+
+        <View style={styles.header}>
+          <Text style={styles.eyebrow}>Before you head in</Text>
+          <Text style={styles.title} accessibilityRole="header">
+            Our Terms
+          </Text>
+          <Text style={styles.subtitle}>
+            Festie is where crews share plans, meetups and photos. Please read and agree to our terms to continue.
+          </Text>
+        </View>
+
+        <View style={styles.card}>
+          <TermsAgreement
+            agreed={agreed}
+            onChange={(next) => {
+              setAgreed(next);
+              if (next) setError(null);
+            }}
+          />
+        </View>
+
+        <InlineMessage message={error} />
+        <PrimaryButton label="Continue" disabled={!agreed || signingOut} onPress={handleContinue} />
+        <View style={styles.signOutRow}>
+          <TextLink label={signingOut ? 'Signing out…' : 'Sign out'} onPress={signingOut ? () => undefined : handleSignOut} />
+        </View>
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xxxl,
+  },
+  content: { gap: spacing.lg },
+  iconBox: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: AUTH_ACCENT,
+    borderRadius: radii.xxl,
+    height: 80,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    width: 80,
+    elevation: 4,
+  },
+  iconGlyph: { fontSize: 36 },
+  header: { alignItems: 'center', gap: spacing.sm },
+  eyebrow: { ...typography.label, color: colors.textSecondary },
+  title: { ...typography.heading, color: colors.textPrimary, fontSize: 32, textAlign: 'center' },
+  subtitle: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  card: {
+    backgroundColor: colors.surface,
+    borderColor: colors.borderCard,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    padding: spacing.xl,
+  },
+  signOutRow: { alignItems: 'center' },
+});

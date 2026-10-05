@@ -66,6 +66,13 @@ export const PRIVACY_POLICY_URL: string | null = readHttpsUrl(process.env.EXPO_P
 /** Hosted terms of use (https), or `null` → use the in-app `/legal/terms-of-use` screen. */
 export const TERMS_URL: string | null = readHttpsUrl(process.env.EXPO_PUBLIC_TERMS_URL);
 
+/**
+ * Version of the Terms of Use and Privacy Policy that every account explicitly agrees to once on this
+ * device (App Review guideline 1.2). Bump it when the terms change materially: every account is then
+ * asked to agree again on its next launch.
+ */
+export const TERMS_VERSION = '2026-10';
+
 /* ─── Version ───────────────────────────────────────────── */
 
 /** Marketing version, e.g. "1.0.0" (native value; app config as a fallback in dev). */

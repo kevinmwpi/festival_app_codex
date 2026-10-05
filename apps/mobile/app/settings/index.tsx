@@ -16,6 +16,7 @@ import {
   openSupportUrl,
   openTermsOfUse,
 } from '@/src/providers/external-links';
+import { goBackOr, HOME_HREF } from '@/src/providers/launch-route';
 import { getPendingCount, performSignOut, signOutErrorMessage } from '@/src/providers/session-actions';
 import { useCachedProfile } from '@/src/providers/session-state';
 import { useFestivalScreenTint } from '@/src/providers/screen-tint';
@@ -155,7 +156,7 @@ export default function SettingsScreen() {
       <ScreenHeader
         title="Settings"
         subtitle="Account & privacy"
-        onBack={() => router.back()}
+        onBack={() => goBackOr(HOME_HREF)}
         backIcon={<Ionicons name="chevron-back" size={22} color={colors.textPrimary} />}
       />
 

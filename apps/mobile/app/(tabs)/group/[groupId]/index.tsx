@@ -62,13 +62,11 @@ function MemberRow({
   isMe,
   busy,
   onPress,
-  onUnblock,
 }: {
   member: GroupMember;
   isMe: boolean;
   busy: boolean;
   onPress?: () => void;
-  onUnblock: () => void;
 }) {
   const name = memberName(member);
   const content = (
@@ -89,19 +87,6 @@ function MemberRow({
     </>
   );
 
-  if (member.is_blocked) {
-    return (
-      <View style={styles.memberRow}>
-        {content}
-        {busy ? (
-          <ActivityIndicator color={colors.link} />
-        ) : (
-          <TextLink label="Unblock" onPress={onUnblock} accessibilityLabel="Unblock this user" />
-        )}
-      </View>
-    );
-  }
-
   if (!onPress) {
     return <View style={styles.memberRow}>{content}</View>;
   }
@@ -109,13 +94,21 @@ function MemberRow({
   return (
     <Pressable
       onPress={onPress}
+      disabled={busy}
       accessibilityRole="button"
       accessibilityLabel={`${name}${member.role === 'admin' ? ', admin' : ''}`}
-      accessibilityHint="Shows options like report or block"
+      accessibilityHint={member.is_blocked ? 'Shows options like unblock or report' : 'Shows options like report or block'}
+      accessibilityState={{ busy }}
       style={({ pressed }) => [styles.memberRow, pressed && styles.pressed]}
     >
       {content}
-      {busy ? <ActivityIndicator color={colors.textPrimary} /> : <Text style={styles.chevron}>›</Text>}
+      {busy ? (
+        <ActivityIndicator color={member.is_blocked ? colors.link : colors.textPrimary} />
+      ) : member.is_blocked ? (
+        <Text style={styles.blockedAction}>Unblock</Text>
+      ) : (
+        <Text style={styles.chevron}>›</Text>
+      )}
     </Pressable>
   );
 }
@@ -143,14 +136,15 @@ function MeetupCard({
   onReportPhoto: () => void;
   onAddPhoto: () => void;
 }) {
-  const when = `${clock.date(meetup.starts_at)} · ${clock.time(meetup.starts_at)}`;
+  // Without the festival's time zone a label would be in device time (§5.5): show none until it's known.
+  const when = clock.timeZone ? `${clock.date(meetup.starts_at)} · ${clock.time(meetup.starts_at)}` : null;
   return (
     <View style={styles.meetupCard}>
       <View style={styles.meetupHeader}>
         <View style={styles.meetupDot} />
         <View style={styles.meetupInfo}>
           <Text style={styles.meetupTitle}>{meetup.title}</Text>
-          <Text style={styles.meetupTime}>{when.toUpperCase()}</Text>
+          {when ? <Text style={styles.meetupTime}>{when.toUpperCase()}</Text> : null}
           {placeLabel ? <Text style={styles.meetupPlace}>{placeLabel}</Text> : null}
           <Text style={styles.meetupBy}>{isMine ? 'Created by you' : `By ${creatorName}`}</Text>
           {meetup.pending_sync === 1 ? <Badge label="Waiting to sync" /> : null}
@@ -332,7 +326,7 @@ export default function GroupDetailScreen() {
 
   const confirmRemove = React.useCallback(
     (member: GroupMember) => {
-      const name = memberName(member);
+      const name = member.is_blocked ? 'this blocked user' : memberName(member);
       Alert.alert(`Remove ${name} from the crew?`, 'They lose access to the crew, its meetups and members’ locations. They can only rejoin with a new invite.', [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -344,7 +338,7 @@ export default function GroupDetailScreen() {
               await removeGroupMember(groupId, member.user_id);
               await detail.refetch();
               await invalidateGroupQueries(queryClient);
-              showToast(`${name} was removed.`);
+              showToast(member.is_blocked ? 'Removed from the crew.' : `${name} was removed.`);
             }).finally(() => setBusyMemberId(null));
           },
         },
@@ -355,16 +349,25 @@ export default function GroupDetailScreen() {
 
   const memberActions = React.useMemo((): SheetAction[] => {
     if (!memberSheet) return [];
-    const name = memberName(memberSheet);
-    const actions: SheetAction[] = [
-      { label: `Report ${name}`, onPress: () => setReportTarget({ type: 'user', id: memberSheet.user_id, label: `Report ${name}` }) },
-      { label: `Block ${name}`, destructive: true, hint: 'Asks for confirmation', onPress: () => confirmBlock(memberSheet) },
-    ];
+    let actions: SheetAction[];
+    if (memberSheet.is_blocked) {
+      // Blocked members stay reportable and removable without unblocking (which would bring their content back).
+      actions = [
+        { label: 'Unblock', hint: 'Their meetups, picks and location show again', onPress: () => unblock(memberSheet) },
+        { label: 'Report this user', onPress: () => setReportTarget({ type: 'user', id: memberSheet.user_id, label: 'Report this user' }) },
+      ];
+    } else {
+      const name = memberName(memberSheet);
+      actions = [
+        { label: `Report ${name}`, onPress: () => setReportTarget({ type: 'user', id: memberSheet.user_id, label: `Report ${name}` }) },
+        { label: `Block ${name}`, destructive: true, hint: 'Asks for confirmation', onPress: () => confirmBlock(memberSheet) },
+      ];
+    }
     if (isAdmin) {
       actions.push({ label: 'Remove from crew', destructive: true, hint: 'Asks for confirmation', onPress: () => confirmRemove(memberSheet) });
     }
     return actions;
-  }, [confirmBlock, confirmRemove, isAdmin, memberSheet]);
+  }, [confirmBlock, confirmRemove, isAdmin, memberSheet, unblock]);
 
   /* Meetups */
 
@@ -607,7 +610,6 @@ export default function GroupDetailScreen() {
                   isMe={isMe}
                   busy={busyMemberId === member.user_id}
                   onPress={isMe ? undefined : () => setMemberSheet(member)}
-                  onUnblock={() => unblock(member)}
                 />
               );
             })}
@@ -629,6 +631,7 @@ export default function GroupDetailScreen() {
       <ActionSheet
         visible={memberSheet !== null}
         title={memberSheet ? memberName(memberSheet) : undefined}
+        message={memberSheet?.is_blocked ? "You blocked this user. You don't see their meetups, picks or location, and they aren't told." : undefined}
         actions={memberActions}
         onClose={() => setMemberSheet(null)}
       />
@@ -702,6 +705,7 @@ const styles = StyleSheet.create({
   memberName: { color: colors.textPrimary, fontSize: 15, fontWeight: '700' },
   memberNameMuted: { color: colors.textSecondary, fontStyle: 'italic' },
   chevron: { color: colors.textSecondary, fontSize: 24, fontWeight: '300' },
+  blockedAction: { color: colors.link, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
 
   meetupCard: { borderTopColor: colors.border, borderTopWidth: 1, gap: spacing.sm, paddingTop: spacing.md },
   meetupHeader: { flexDirection: 'row', gap: spacing.md },

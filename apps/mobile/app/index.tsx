@@ -1,8 +1,9 @@
 /**
- * Launch router (§5.1). Decides from the stored session and the cached profile alone — no network —
- * except for a signed-in user whose profile is not cached yet, who needs one `getMyProfile()` call.
- * That case never falls back to the sign-in screen when offline: it shows a retry screen instead and
- * retries by itself when the connection comes back.
+ * Launch router (§5.1). Decides from the stored session, the cached profile and the terms agreement
+ * alone — no network — except for a signed-in user whose profile is not cached yet, who needs one
+ * `getMyProfile()` call. That case never falls back to the sign-in screen when offline: it shows a retry
+ * screen instead and retries by itself when the connection comes back. Right after a sign-in it first
+ * waits for the local owner check (a different account's cache is wiped before anything can show it).
  */
 import { toUserMessage } from '@festival/data-access';
 import { isOnline } from '@festival/sync-engine';

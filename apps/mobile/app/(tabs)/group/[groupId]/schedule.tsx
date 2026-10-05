@@ -136,8 +136,8 @@ export default function CombinedScheduleScreen() {
   if (selections.isLoading) {
     content = <LoadingState label="Loading crew picks…" />;
   } else if (rows.length === 0) {
-    content = selections.refreshError && !selections.hasRefreshed ? (
-      <ErrorState error={selections.refreshError} onRetry={() => void selections.refetch()} />
+    content = detail.refreshError && !detail.hasRefreshed ? (
+      <ErrorState error={detail.refreshError} onRetry={() => void detail.refetch()} />
     ) : (
       <EmptyState title="No picks yet" description="When crew members add sets to their schedules, they show up here." />
     );
@@ -225,8 +225,8 @@ export default function CombinedScheduleScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
-            refreshing={selections.isRefreshing && !selections.isLoading}
-            onRefresh={() => void Promise.all([selections.refetch(), detail.refetch(), bundle.refetch()])}
+            refreshing={detail.isRefreshing && !selections.isLoading}
+            onRefresh={() => void Promise.all([detail.refetch(), bundle.refetch()])}
             tintColor={colors.textPrimary}
           />
         }
@@ -269,7 +269,7 @@ export default function CombinedScheduleScreen() {
               action={<SecondaryButton label="Try again" onPress={() => void bundle.refetch()} />}
             />
           )}
-          <StaleDataNote error={selections.refreshError} />
+          <StaleDataNote error={detail.refreshError} />
         </View>
       </ScrollView>
     </View>

@@ -1,11 +1,12 @@
-import { Checkbox, checkboxLabelStyle, colors, InlineMessage, PrimaryButton, spacing, TextLink } from '@festival/ui';
+import { colors, InlineMessage, PrimaryButton, spacing, TextLink } from '@festival/ui';
 import React from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { openPrivacyPolicy, openTermsOfUse } from '@/src/providers/external-links';
 import { resetTo } from '@/src/providers/launch-route';
 import { ProfileFields, useProfileForm } from '@/src/providers/profile-form';
 import { performSignOut, signOutErrorMessage } from '@/src/providers/session-actions';
+import { markTermsAccepted } from '@/src/providers/terms-acceptance';
+import { TERMS_REQUIRED_MESSAGE, TermsAgreement } from '@/src/providers/terms-agreement';
 
 export default function ProfileSetupScreen() {
   const form = useProfileForm(null);
@@ -14,11 +15,13 @@ export default function ProfileSetupScreen() {
 
   const handleSave = React.useCallback(async () => {
     if (!agreed) {
-      form.setError('Please agree to the Terms of Use and Privacy Policy to continue.');
+      form.setError(TERMS_REQUIRED_MESSAGE);
       return;
     }
     const saved = await form.save();
     if (saved) {
+      // This account has now agreed explicitly; it is not asked again on `/auth/accept-terms`.
+      markTermsAccepted();
       // The launch route continues to the join screen for a remembered invite, or into the app.
       resetTo('/');
     }
@@ -44,39 +47,13 @@ export default function ProfileSetupScreen() {
 
           <ProfileFields form={form} />
 
-          <View style={styles.terms}>
-            <Checkbox
-              checked={agreed}
-              onChange={(next) => {
-                setAgreed(next);
-                if (next) form.setError(null);
-              }}
-              accessibilityLabel="I agree to the Terms of Use and Privacy Policy"
-              accessibilityActions={[
-                { name: 'openTerms', label: 'Open Terms of Use' },
-                { name: 'openPrivacy', label: 'Open Privacy Policy' },
-              ]}
-              onAccessibilityAction={(action) => {
-                if (action === 'openTerms') openTermsOfUse();
-                if (action === 'openPrivacy') openPrivacyPolicy();
-              }}
-              label={
-                <Text style={checkboxLabelStyle}>
-                  I agree to the{' '}
-                  <Text style={styles.link} onPress={openTermsOfUse} accessibilityRole="link">
-                    Terms of Use
-                  </Text>{' '}
-                  and{' '}
-                  <Text style={styles.link} onPress={openPrivacyPolicy} accessibilityRole="link">
-                    Privacy Policy
-                  </Text>
-                </Text>
-              }
-            />
-            <Text style={styles.termsNote}>
-              No harassment, hate or explicit content. You can report or block anyone, and we review reports within 24 hours.
-            </Text>
-          </View>
+          <TermsAgreement
+            agreed={agreed}
+            onChange={(next) => {
+              setAgreed(next);
+              if (next) form.setError(null);
+            }}
+          />
 
           <InlineMessage message={form.error} />
           <PrimaryButton
@@ -125,8 +102,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  terms: { gap: spacing.xs },
-  link: { color: colors.link, fontWeight: '700', textDecorationLine: 'underline' },
-  termsNote: { color: colors.textSecondary, fontSize: 12, lineHeight: 17, paddingLeft: 36 },
   signOutRow: { alignItems: 'center' },
 });

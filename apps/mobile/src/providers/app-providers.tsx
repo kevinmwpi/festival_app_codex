@@ -1,6 +1,5 @@
 import {
   configureDataSync,
-  ensureLocalOwner,
   getStoredSession,
   setAuthAutoRefresh,
   subscribeToAuthChanges,
@@ -18,6 +17,7 @@ import { MAPBOX_ACCESS_TOKEN } from '@/src/config/app-info';
 import { LocationSharingProvider } from '@/src/location/LocationSharingProvider';
 import { AppStoreProvider } from '@/src/state/app-store';
 
+import { runOwnerCheck, waitForOwnerCheck } from './owner-check';
 import { connectQueryClientToApp, queryClient } from './query-client';
 import { isSigningOut, performSignOut } from './session-actions';
 import { notifySessionChanged } from './session-state';
@@ -30,24 +30,11 @@ function warn(step: string, error: unknown): void {
   }
 }
 
+/** Flushes the offline queue once no local owner check is pending (never another account's queue). */
 function flushQueue(): void {
-  void flush().catch((error: unknown) => warn('flush', error));
-}
-
-/* ─── Local owner checks ────────────────────────────────── */
-
-let ownerCheckQueue: Promise<void> = Promise.resolve();
-
-/**
- * Runs `ensureLocalOwner` strictly one after another. The launch check and the `SIGNED_IN` that
- * supabase-js emits on every cold launch with an unexpired token would otherwise both read the owner
- * meta before either sets it, and both wipe — the second possibly after the user queued a write.
- * Serialised, the second sees the owner the first recorded and does nothing.
- */
-function runOwnerCheck(authUserId: string): Promise<void> {
-  const check = ownerCheckQueue.then(() => ensureLocalOwner(authUserId));
-  ownerCheckQueue = check.catch(() => undefined);
-  return check;
+  void waitForOwnerCheck()
+    .then(() => flush())
+    .catch((error: unknown) => warn('flush', error));
 }
 
 /* ─── Launch readiness ──────────────────────────────────── */
@@ -142,7 +129,8 @@ function configureServicesOnce(): void {
  * - at launch with a stored session, `ensureLocalOwner` runs before children render (nothing can
  *   enqueue for the wrong owner), then the offline queue flushes; meanwhile the splash screen stays
  *   up (hidden here once ready) over an app-coloured placeholder;
- * - `SIGNED_IN` → `ensureLocalOwner` (serialised after the launch check) + flush;
+ * - `SIGNED_IN` → `ensureLocalOwner` (serialised after the launch check; routing waits for it, see
+ *   `owner-check.ts`), cached queries reset when the account changed, then flush;
  *   `TOKEN_REFRESHED` → flush; `SIGNED_OUT` → `performSignOut('session_lost')`.
  */
 export function AppProviders({ children }: React.PropsWithChildren) {
@@ -172,8 +160,14 @@ export function AppProviders({ children }: React.PropsWithChildren) {
           const authUserId = session?.user?.id;
           if (authUserId) {
             void runOwnerCheck(authUserId)
-              .then(() => flushQueue())
-              .catch((error: unknown) => warn('ensureLocalOwner', error));
+              .then(async ({ ownerChanged }) => {
+                // A different account: anything React Query read before the wipe is discarded.
+                if (ownerChanged) {
+                  await queryClient.resetQueries();
+                }
+              })
+              .catch((error: unknown) => warn('ensureLocalOwner', error))
+              .finally(flushQueue);
           }
           break;
         }

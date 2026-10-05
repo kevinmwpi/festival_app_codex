@@ -37,19 +37,24 @@ export interface AvatarProps {
   size?: number;
   /** Defaults to "<name>'s avatar"; pass `null` to hide the avatar from screen readers. */
   accessibilityLabel?: string | null;
+  /** Neutral placeholder with a dash instead of the user's avatar (e.g. a blocked user). */
+  muted?: boolean;
 }
 
 /**
  * A profile picture: an emoji or initials on a pastel tile (40% corner radius, like the reference
  * avatars). `color` avatars use the stored colour as the fill (made fill-safe for dark text).
  */
-export function Avatar({ name, avatarType, avatarValue, size = 44, accessibilityLabel }: AvatarProps) {
+export function Avatar({ name, avatarType, avatarValue, size = 44, accessibilityLabel, muted = false }: AvatarProps) {
   const value = avatarValue?.trim() ?? '';
   let glyph: string;
   let backgroundColor: string = colors.primary;
   let isEmoji = false;
 
-  if (avatarType === 'emoji' && value) {
+  if (muted) {
+    glyph = '–';
+    backgroundColor = colors.inputBg;
+  } else if (avatarType === 'emoji' && value) {
     glyph = value;
     isEmoji = true;
   } else if (avatarType === 'color') {
@@ -75,6 +80,7 @@ export function Avatar({ name, avatarType, avatarValue, size = 44, accessibility
         style={[
           styles.avatarGlyph,
           isEmoji ? { fontSize: Math.round(size * 0.48) } : { fontSize: Math.round(size * 0.36), fontWeight: '800' },
+          muted && styles.avatarGlyphMuted,
         ]}
       >
         {glyph}
@@ -189,6 +195,7 @@ export const checkboxLabelStyle = {
 const styles = StyleSheet.create({
   avatar: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   avatarGlyph: { color: colors.textPrimary, textAlign: 'center' },
+  avatarGlyphMuted: { color: colors.textSecondary },
 
   picker: { gap: spacing.md },
   emojiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

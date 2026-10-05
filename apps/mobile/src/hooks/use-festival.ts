@@ -54,12 +54,30 @@ export interface FestivalClock {
   date: (value: string, options?: Intl.DateTimeFormatOptions) => string;
 }
 
+/**
+ * The instant whose zone abbreviation labels the festival's times: now while the festival is on,
+ * otherwise midday (UTC) of its first or last day, so an April festival viewed in winter reads `PDT`
+ * like every time on screen rather than today's `PST`.
+ */
+function labelReferenceDate(startDate: string | undefined, endDate: string | undefined): Date {
+  const now = new Date();
+  const start = startDate ? new Date(`${startDate}T12:00:00Z`) : null;
+  const end = endDate ? new Date(`${endDate}T12:00:00Z`) : null;
+  if (start && !Number.isNaN(start.getTime()) && now < start) return start;
+  if (end && !Number.isNaN(end.getTime()) && now > end) return end;
+  return now;
+}
+
 /** Festival-time formatting helpers (§4.3) bound to one festival's time zone. */
-export function useFestivalClock(festival: Pick<Festival, 'timezone'> | null | undefined): FestivalClock {
+export function useFestivalClock(
+  festival: Pick<Festival, 'timezone' | 'start_date' | 'end_date'> | null | undefined,
+): FestivalClock {
   const timeZone = festival?.timezone ?? '';
+  const startDate = festival?.start_date;
+  const endDate = festival?.end_date;
   return useMemo(() => {
     const deviceLocal = timesAreDeviceLocal(timeZone);
-    const label = festivalTimeZoneLabel(timeZone);
+    const label = festivalTimeZoneLabel(timeZone, labelReferenceDate(startDate, endDate));
     return {
       timeZone,
       deviceLocal,
@@ -69,7 +87,7 @@ export function useFestivalClock(festival: Pick<Festival, 'timezone'> | null | u
       range: (startIso: string, endIso: string) => formatFestivalTimeRange(startIso, endIso, timeZone),
       date: (value: string, options?: Intl.DateTimeFormatOptions) => formatFestivalDate(value, timeZone, options),
     };
-  }, [timeZone]);
+  }, [endDate, startDate, timeZone]);
 }
 
 /** "Apr 10 – Apr 12, 2027" from date-only festival dates (calendar dates, time-zone independent). */

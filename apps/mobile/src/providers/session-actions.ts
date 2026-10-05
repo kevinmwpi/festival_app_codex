@@ -1,10 +1,12 @@
 /**
  * Sign-out orchestration (§5.1). The only place that tears down a session: voluntary sign-out,
- * account deletion and a session lost on the server (refresh token revoked, user deleted elsewhere).
+ * account deletion and a session lost on the server (refresh token revoked, user deleted elsewhere,
+ * or a token refresh that supabase-js gave up on).
  */
 import {
   ConfigError,
   clearLocalSession,
+  clearSignedUrlCache,
   DataAccessError,
   deleteAccount,
   getStoredSession,
@@ -12,8 +14,8 @@ import {
   toUserMessage,
   TransientAuthError,
 } from '@festival/data-access';
+import { cancelAllReminders } from '@festival/notification-utils';
 import { getPendingCount as getSyncPendingCount } from '@festival/sync-engine';
-import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 
 import { stopLocationSharingNow } from '@/src/location/LocationSharingProvider';
@@ -21,6 +23,7 @@ import { resetAppStore } from '@/src/state/app-store';
 
 import { queryClient } from './query-client';
 import { notifySessionChanged } from './session-state';
+import { forgetTermsAcceptance } from './terms-acceptance';
 
 export type SignOutMode = 'sign_out' | 'delete_account' | 'session_lost';
 
@@ -58,14 +61,6 @@ export function getPendingCount(): Promise<number> {
 /** True while a `performSignOut` run is in progress. */
 export function isSigningOut(): boolean {
   return inFlight !== null;
-}
-
-/**
- * Cancels every scheduled local reminder (set and meetup reminders are the app's only scheduled
- * notifications).
- */
-async function cancelAllReminders(): Promise<void> {
-  await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
 async function bestEffort(step: string, action: () => Promise<void>): Promise<void> {
@@ -120,6 +115,29 @@ async function deleteOnServer(): Promise<{ unconfirmed: unknown } | null> {
   }
 }
 
+/**
+ * Local teardown for a session lost on the server. supabase-js removes the persisted session before it
+ * emits `SIGNED_OUT`, and it does so not only for a revoked refresh token but for any token-refresh
+ * failure it does not class as retryable: an HTTP 500 or 429 from the token endpoint, or a captive
+ * portal's HTML page. Wiping the SQLite cache and the offline queue there would throw away a
+ * festival-goer's unsynced writes over a bad Wi-Fi moment, so they are kept, still recorded under the
+ * same local owner:
+ * - the same account signing back in finds `ensureLocalOwner` unchanged and its queued writes flush;
+ * - a different account signing in is isolated by `ensureLocalOwner`, which wipes local user data,
+ *   the signed-URL cache and the foreign profile cache before that sign-in resolves;
+ * - while signed out nothing can read the cache (every data route is behind the session guard and
+ *   `getCachedProfile()` returns `null` without a session) or send the queue (the sync transport
+ *   checks the stored session first).
+ * If a stored session is somehow still present, the full local wipe runs instead.
+ */
+async function clearLostSession(): Promise<void> {
+  if (getStoredSession() !== null) {
+    await clearLocalSession();
+    return;
+  }
+  clearSignedUrlCache();
+}
+
 async function runSignOut(mode: SignOutMode): Promise<void> {
   let unconfirmedDeletion: { unconfirmed: unknown } | null = null;
 
@@ -128,21 +146,25 @@ async function runSignOut(mode: SignOutMode): Promise<void> {
     // `deleteOnServer`). Location sharing then only needs its local half — the watcher and persisted
     // session; the server cascade already removed the location rows — and reminders are cancelled
     // only once the account is really gone.
+    const deletingAuthUserId = getStoredSession()?.authUserId ?? null;
     unconfirmedDeletion = await deleteOnServer();
+    if (deletingAuthUserId && !unconfirmedDeletion) {
+      forgetTermsAcceptance(deletingAuthUserId);
+    }
     await bestEffort('stop location sharing', stopLocationSharingNow);
     await bestEffort('cancel reminders', cancelAllReminders);
   } else {
-    // 1. Stop sharing while the session can still reach the server (pointless once it is gone).
-    if (mode === 'sign_out') {
-      await bestEffort('stop location sharing', stopLocationSharingNow);
-    }
-    // 2. No reminders may fire for a signed-out user.
+    // 1. Stop sharing. The watcher and the persisted sharing session stop at once; the server row is
+    //    removed only while a session can still reach it (for `session_lost` the stored session is
+    //    already gone, so nothing is sent and the row expires on its own).
+    await bestEffort('stop location sharing', stopLocationSharingNow);
+    // 2. No reminders may fire, or stay in Notification Centre, for a signed-out user.
     await bestEffort('cancel reminders', cancelAllReminders);
     // 3. Server + local data teardown (`signOut()` never throws for network reasons).
     if (mode === 'sign_out') {
       await bestEffort('sign out', signOut);
     } else {
-      await bestEffort('local wipe', clearLocalSession);
+      await bestEffort('local session teardown', clearLostSession);
     }
   }
   notifySessionChanged();
@@ -175,8 +197,9 @@ async function runSignOut(mode: SignOutMode): Promise<void> {
  *
  * - `sign_out`: stop location sharing → cancel all reminders → data-access `signOut()` →
  *   `queryClient.clear()` → `resetAppStore()` → `router.replace(SIGN_IN_ROUTE)`.
- * - `session_lost`: as `sign_out`, without stopping sharing on the server and with only the local wipe
- *   (`clearLocalSession()`).
+ * - `session_lost`: as `sign_out`, but location sharing stops locally only and the SQLite cache and
+ *   offline queue are kept for the same account to flush after signing back in (see
+ *   `clearLostSession`; amendment to §4.1/§5.1, which specified `clearLocalSession()`).
  * - `delete_account`: data-access `deleteAccount()` **first** → stop location sharing → cancel
  *   reminders → the same cache/store/route steps. Rejects with the original error, touching nothing,
  *   when the server did not confirm and the user is still signed in. If the session was lost during the
@@ -184,15 +207,26 @@ async function runSignOut(mode: SignOutMode): Promise<void> {
  *   account was not deleted.
  *
  * Re-entrancy: a call with the same mode as the run in progress joins it, as does `session_lost` (e.g.
- * the `SIGNED_OUT` that `signOut()`/`deleteAccount()` emit themselves) and `sign_out` joining a
- * `session_lost` run (same outcome). Any other combination — notably `delete_account` while another
+ * the `SIGNED_OUT` that `signOut()`/`deleteAccount()` emit themselves). `sign_out` requested during a
+ * `session_lost` run waits for it and then also wipes the kept local data, as a voluntary sign-out
+ * promises. Any other combination — notably `delete_account` while another
  * sign-out runs — rejects with `SignOutInProgressError` without doing anything, so the UI never
  * reports a deletion that did not happen.
  */
 export function performSignOut(mode: SignOutMode): Promise<void> {
   if (inFlight) {
-    const joinable = mode === inFlight.mode || mode === 'session_lost' || (mode === 'sign_out' && inFlight.mode === 'session_lost');
-    return joinable ? inFlight.promise : Promise.reject(new SignOutInProgressError());
+    if (mode === inFlight.mode || mode === 'session_lost') {
+      return inFlight.promise;
+    }
+    if (mode === 'sign_out' && inFlight.mode === 'session_lost') {
+      return inFlight.promise.then(async () => {
+        // Only while still signed out: a new sign-in owns the local data now.
+        if (getStoredSession() === null) {
+          await bestEffort('local wipe', clearLocalSession);
+        }
+      });
+    }
+    return Promise.reject(new SignOutInProgressError());
   }
 
   // Registered before any step runs (they start on the next microtask), so an auth event emitted by
