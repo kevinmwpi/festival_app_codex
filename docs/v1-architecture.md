@@ -1,164 +1,211 @@
-# Festie v1 — Architecture Contract
+# Festie v1 — Architecture Contract (rev 2)
 
-Status: **authoritative contract for the v1 App Store overhaul** (Oct 2026).
+Status: **authoritative contract for the v1 App Store overhaul** (Oct 2026). Rev 2 folds in an
+adversarial security review and an App Store / mobile review of rev 1.
 Every implementer works from this document. If code and this document disagree, fix the code or
 amend this document explicitly — never silently diverge.
 
 Goals, in priority order:
 
-1. **Secure** — no user can read or change data they should not; verified by automated tests.
-2. **Passes App Review** — account deletion, UGC report/block/filter, reviewer login, accurate privacy disclosures, no dead UI.
-3. **Works at a festival** — launches and shows cached schedule/groups with no signal; times are correct in the festival's timezone; location sharing is truthful.
-4. **Design** — build on the merged `match_aistudio` design language (pastel palette, 40px card radii, Georgia-italic headings, uppercase micro-labels, per-festival accent via `deriveAccentColors`). New screens must look native to it. Only change existing visuals where needed for function, accessibility, or consistency.
+1. **Secure** — no user can read or change data they should not; proven by automated tests that would fail if a rule were missing.
+2. **Passes App Review** — in-app account deletion, UGC filter/report/block/eject, a reviewer login that survives the reviewer deleting the account, accurate privacy disclosures, no dead UI.
+3. **Works at a festival** — launches into cached schedule/groups with no signal and an expired token; times are right in the festival's timezone; location sharing is truthful.
+4. **Design** — build on the merged `match_aistudio` design language (pastel palette, 40px card radii, Georgia-italic headings, uppercase micro-labels, per-festival accent via `deriveAccentColors`). New screens must look native to it. Change existing visuals only for function, accessibility or consistency.
 
-Non-goals for v1: chat (removed), background location, social login, universal links (custom scheme + typed code only), push notifications from the server (local notifications only).
+Non-goals for v1: chat (removed), background location, social login, universal links (custom scheme + typed code + App Store link), server push notifications.
+
+Global conventions:
+
+- **One error convention.** Every app-level database error is `raise exception using errcode = 'P0001', message = '<code>'`, including triggers and rate limits. Codes: `not_authenticated, profile_required, not_group_member, not_group_admin, group_full, rate_limited, content_not_allowed, invalid_input, festival_not_found, meetup_not_found, cannot_remove_self`. (`invite_not_found` is not raised — see `join_group`.) PostgREST returns HTTP 400 for P0001; clients classify by `error.code === 'P0001'` + `error.message`.
+- **An RPC that must persist something on a failure path returns the failure as a value and never raises** (a raise rolls back the whole RPC transaction).
+- Never `select('*')` or embed `users(*)` against `public.users`.
 
 ---
 
 ## 1. Identity model
 
-- `auth.users` (Supabase Auth) is the identity. `public.users` is the **profile**.
-- New column `public.users.auth_user_id uuid unique references auth.users(id) on delete cascade`.
-  - Backfill: `update public.users u set auth_user_id = a.id from auth.users a where lower(a.email) = lower(u.email) and u.auth_user_id is null;`
-  - Profiles that cannot be matched are orphans from dev testing: delete them (cascades are fixed first, see §2.3).
-  - Then `alter column auth_user_id set not null`.
-- `public.users.email` is retained for support lookups but is **never readable by other users and never writable by clients**. Unique index on `lower(email)`.
-- `public.current_app_user_id()` → `select id from public.users where auth_user_id = auth.uid()`;
-  `language sql stable security definer set search_path = ''`. **No RLS policy may query a table whose own policy calls back into the querying table** — all cross-table checks go through the `security definer` helpers below.
+- `auth.users` is the identity; `public.users` is the profile.
+- `public.users.auth_user_id uuid not null unique references auth.users(id) on delete cascade` (backfilled in 007, §2.1 step 3).
+- `public.users.email` kept for support only: never readable by `anon`/`authenticated` (column grants, §2.4), never client-writable. Unique index on `lower(email)`.
+- `private.current_app_user_id()` → `select id from public.users where auth_user_id = auth.uid()`.
+- No RLS policy may query a table whose own policy calls back into the querying table; all cross-table checks go through `private` security-definer helpers.
 
 ## 2. Database
 
-### 2.1 Migration files
+### 2.1 Migration files and order
 
-- Keep `001`–`005_rate_limiting.sql` byte-for-byte (already applied to the hosted project).
-- Rename `005_user_festivals_and_festival_theme.sql` → `006_user_festivals_and_festival_theme.sql` and make it **idempotent** (`create table if not exists`, `drop policy if exists` before each `create policy`, `add column if not exists`) so it succeeds whether or not the hosted DB already has it.
-- New `007_v1_security_overhaul.sql`: everything in §2.2–§2.8. **Fully idempotent** (drop-if-exists every policy/function/trigger it defines; `if not exists` on tables/columns/indexes; guarded `do $$` blocks for constraints). It must apply cleanly (a) on a fresh database after 001–006 and (b) on a database where 001–006 were already applied with arbitrary dashboard-made policies on these tables — so it first **drops every existing policy** on every public table it manages and on `storage.objects` for bucket `totems` (loop over `pg_policies`).
-- Optional `008_seed_moderation_terms.sql` for the word list (data only).
+- `001`–`005_rate_limiting.sql`: unchanged byte-for-byte (already applied on hosted).
+- `005_user_festivals_and_festival_theme.sql` → renamed `006_user_festivals_and_festival_theme.sql`, made idempotent (`create table if not exists`, `add column if not exists`, `drop policy if exists` before each `create policy`). Uses `extensions.uuid_generate_v4()`.
+- `007_v1_security_overhaul.sql` — core schema/RLS/RPCs. **Idempotent** and safe on (a) a fresh DB after 001–006 and (b) a hosted DB with arbitrary dashboard edits and only one of the two old `005` files applied. Statement order:
+  0. `set local lock_timeout = '5s';` `create schema if not exists private; revoke all on schema private from public; grant usage on schema private to anon, authenticated, service_role;` (`private` is never added to the API schemas.)
+  1. Create-if-missing or `to_regclass`-guard every legacy table referenced (`auth_attempts`, `group_invite_generations`, `user_festivals`).
+  2. Drop **every** existing policy on every `public` table this migration manages (loop over `pg_policies where schemaname = 'public'`).
+  3. Foreign keys: for `groups.created_by_user_id`, `meetups.created_by_user_id`, `chat_messages.sender_user_id`, find the existing FK via `pg_constraint`, drop it, re-add with an explicit name (`on delete set null` for groups — after `alter column ... drop not null` — and `on delete cascade` for the other two).
+  4. Users: add `auth_user_id` if missing. Dedupe by `lower(email)`: keep the row whose email equals `auth.users.email` exactly, else the oldest; others become orphans. Backfill `auth_user_id`; delete orphans; repair groups (promote earliest-joined member where no admin remains; delete groups with no members). Then `set not null`, unique index on `lower(email)`.
+  5. Normalize legacy data: `display_name = coalesce(nullif(left(btrim(display_name), 40), ''), 'Festie user')`; same pattern for `groups.name` (60, 'My crew'), `meetups.title` (80, 'Meetup'), `meetups.notes` (500, null if blank); unknown `avatar_type` → `'initials'`; unknown `role` → `'member'`.
+  6. Regenerate invite codes not matching `^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$` (covers legacy `pending-xxxxxx`), then add that check.
+  7. `delete from public.location_shares;` (ephemeral) then add `unique (user_id, group_id)`.
+  8. New tables/columns (§2.3); constraints as `drop constraint if exists X; add constraint X ...`.
+  9. Festivals: add columns; `update public.festivals set status = 'draft' where is_demo = false;` (nothing real is published until entered through admin-tools with a `source_url`).
+  10. Privileges (§2.4), functions (`create or replace` only; `drop function` only for removed legacy functions, after step 2), policies (§2.5).
+  11. pg_cron block (§2.7).
+  12. Triggers last (§2.3).
+- `008_storage_totems.sql` — all `storage.*` statements, isolated so a hosted permission quirk cannot roll back 007 (§2.8).
+- `009_seed_moderation_terms.sql` — data only (`insert ... on conflict do nothing`).
+- CI grep fails on `alter table storage.`, `create (or replace )?function storage.`, `delete from storage.` in migrations.
 
-### 2.2 Helper functions (all `security definer`, `stable` unless noted, `set search_path = ''`, fully-qualified names, `revoke execute ... from public, anon`, `grant execute ... to authenticated`)
+### 2.2 Helper functions — schema `private`
+
+All: `security definer`, `stable` (except `try_uuid`: `immutable`, not definer), `set search_path = ''`, fully qualified names. Execute granted to `anon, authenticated` (needed for policy evaluation; harmless because `private` is not exposed over the API).
 
 | Function | Returns | Semantics |
 |---|---|---|
 | `current_app_user_id()` | uuid | profile id of `auth.uid()` or null |
 | `is_group_member(p_group_id uuid)` | boolean | caller is a member |
-| `is_group_admin(p_group_id uuid)` | boolean | caller is member with role `admin` |
-| `shares_group_with(p_user_id uuid)` | boolean | caller and p_user_id are both members of at least one common group |
-| `is_blocked_between(p_a uuid, p_b uuid)` | boolean | either user blocked the other |
-| `try_uuid(p text)` | uuid | `immutable`; returns null instead of raising on malformed input (not security definer) |
+| `is_group_admin(p_group_id uuid)` | boolean | caller is a member with role `admin` |
+| `shares_group_with(p_user_id uuid)` | boolean | caller and user share ≥ 1 group |
+| `shares_festival_group_with(p_user_id uuid, p_festival_id uuid)` | boolean | caller and user share a group whose `festival_id = p_festival_id` |
+| `is_blocked_with(p_other uuid)` | boolean | caller blocked p_other or p_other blocked caller |
+| `can_upload_totem(p_group_id uuid, p_meetup_id uuid)` | boolean | meetup exists with that id and group, created by caller, caller is member |
+| `try_uuid(p text)` | uuid | null instead of raising on malformed input |
 | `contains_disallowed_text(p text)` | boolean | case-insensitive whole-word match against `public.moderation_terms` |
+| `check_rate_limit(p_key text, p_action text, p_max int, p_window interval)` | boolean | `pg_advisory_xact_lock(hashtextextended(key||'|'||action,0))`; count events in window; if ≥ max return false; else insert event, return true. **Execute: service_role only** (definer RPCs owned by `postgres` still call it). |
+
+Trigger functions and internal helpers (admin hand-off, invite generator) also live in `private`, no grants beyond what triggers need.
+
+End of 007: `revoke execute on all functions in schema public, private from public, anon, authenticated;` then grant the whitelist; plus `alter default privileges in schema public, private revoke execute on functions from public, anon, authenticated;`. A test compares the exact set of functions executable by `anon` and by `authenticated` against the whitelist.
 
 ### 2.3 Tables & constraints
 
-Existing tables keep their names/columns unless listed. Changes:
-
-- `users`: `auth_user_id` (§1). `display_name` 1–40 chars after trim (check). `avatar_type in ('initials','emoji','color')`. `avatar_value` ≤ 100.
-- `festivals`: add `status text not null default 'published' check (status in ('draft','published'))`, `is_demo boolean not null default false`, `latitude double precision`, `longitude double precision`, `default_zoom double precision default 15`, `bounds_sw_lat`, `bounds_sw_lng`, `bounds_ne_lat`, `bounds_ne_lng` (double precision, nullable), `source_url text`, `updated_at timestamptz default now()`. Keep `accent_color`, `image_url`, `map_asset_url`, `version`.
-- `stages`: add `latitude double precision`, `longitude double precision`. Keep `map_x`/`map_y` (legacy, unused by v1 client).
-- `groups`: `created_by_user_id` becomes **nullable**, FK `on delete set null`. Add `invite_code_rotated_at timestamptz`. `name` 1–60 after trim. Drop the legacy `pending-` placeholder concept entirely.
-- `group_members`: `role in ('admin','member')`.
-- `meetups`: `created_by_user_id` FK `on delete cascade`. Add `latitude double precision`, `longitude double precision`, `totem_path text`, `created_at timestamptz not null default now()`, `updated_at timestamptz not null default now()`. Check: `totem_path is null or totem_path like group_id::text || '/' || id::text || '/%'`. `totem_image_url` and `custom_map_x/y` retained but unused (legacy). Title 1–80, notes ≤ 500.
-- `location_shares`: **unique (user_id, group_id)** (dedupe existing rows first, keep newest). lat ∈ [-90,90], lng ∈ [-180,180], accuracy ≥ 0, heading ∈ [0,360) or null.
-- `chat_messages`: FK sender `on delete cascade`. **Locked**: RLS on, no policies, all privileges revoked from `anon`, `authenticated`.
-- `group_invite_generations`, `auth_attempts`: locked the same way (service role only).
+- `users`: `auth_user_id` (§1); check `char_length(btrim(display_name)) between 1 and 40`; `avatar_type in ('initials','emoji','color')`; `avatar_value` ≤ 100.
+- `festivals`: add `status text not null default 'draft' check (status in ('draft','published'))`, `is_demo boolean not null default false`, `latitude`, `longitude`, `default_zoom double precision default 15`, `bounds_sw_lat`, `bounds_sw_lng`, `bounds_ne_lat`, `bounds_ne_lng` (double precision, nullable), `source_url text`, `updated_at timestamptz default now()`. Keep `accent_color`, `image_url`, `map_asset_url`, `version`.
+- `stages`: add `latitude`, `longitude` (double precision). `map_x/map_y` legacy, unused.
+- `groups`: `created_by_user_id` nullable, FK `on delete set null`; `name` 1–60; invite code check (§2.1 step 6); add `invite_code_rotated_at timestamptz`.
+- `group_members`: `role in ('admin','member')`. `after delete` trigger (private, definer): delete that user's `location_shares` row for that group.
+- `meetups`: FK creator `on delete cascade`; add `latitude`, `longitude`, `totem_path text`, `created_at timestamptz not null default now()`, `updated_at timestamptz not null default now()`; check `totem_path is null or totem_path like group_id::text || '/' || id::text || '/%'`; title 1–80; notes ≤ 500. `totem_image_url`, `custom_map_x/y` legacy, unused.
+- `user_set_selections`: trigger (or composite FK on `sets(id, festival_id)`) enforcing `festival_id = sets.festival_id`.
+- `location_shares`: `unique (user_id, group_id)`; lat ∈ [-90,90], lng ∈ [-180,180], accuracy ≥ 0 or null, heading ∈ [0,360) or null.
+- `chat_messages`, `group_invite_generations`, `auth_attempts`: locked (RLS on, no policies, no grants to anon/authenticated).
 - New `user_blocks(blocker_id uuid references users on delete cascade, blocked_id uuid references users on delete cascade, created_at timestamptz default now(), primary key (blocker_id, blocked_id), check (blocker_id <> blocked_id))`.
-- New `reports(id uuid pk default gen_random_uuid(), reporter_id uuid references users on delete set null, target_type text check in ('user','group','meetup','photo'), target_id uuid not null, group_id uuid null references groups on delete set null, reason text check in ('spam','harassment','hate','sexual','violence','impersonation','other'), details text check (char_length(details) <= 500), status text not null default 'open' check in ('open','reviewed','actioned','dismissed'), created_at timestamptz default now(), unique (reporter_id, target_type, target_id))`.
-- New `moderation_terms(term text primary key)` — locked (no client access); read only via `contains_disallowed_text`.
-- New `rate_limit_events(key text, action text, created_at timestamptz default now())` + index — locked; used by RPCs via a `security definer` helper `check_rate_limit(p_key text, p_action text, p_max int, p_window interval)` that raises `rate_limited` (SQLSTATE `P0429`) when exceeded and records the event otherwise.
-- Triggers (`before insert or update`): reject disallowed text in `users.display_name`, `groups.name`, `meetups.title`, `meetups.notes` with SQLSTATE `P0422` message `content_not_allowed`. `meetups.updated_at` maintenance; `meetups.created_by_user_id` and `group_id` immutable on update.
+- New `reports(id uuid pk default gen_random_uuid(), reporter_id uuid references users on delete set null, target_type text check in ('user','group','meetup','photo'), target_id uuid not null, group_id uuid references groups on delete set null, reason text check in ('spam','harassment','hate','sexual','violence','impersonation','other'), details text check (char_length(details) <= 500), target_snapshot text, status text not null default 'open' check in ('open','reviewed','actioned','dismissed'), created_at timestamptz default now(), unique (reporter_id, target_type, target_id))`. For `photo`, `target_id` = the meetup id. `target_snapshot` = text of the target at report time (name/title/notes/totem_path).
+- New `moderation_terms(term text primary key)` — locked.
+- New `rate_limit_events(key text not null, action text not null, created_at timestamptz not null default now())`, index `(key, action, created_at)` — locked.
+- Triggers (private, created last, **column-scoped** so FK actions and unrelated updates never fire them):
+  - `before insert or update of display_name on users`, `... of name on groups`, `... of title, notes on meetups`: when `tg_op = 'INSERT' or new.col is distinct from old.col`, raise `content_not_allowed` if `contains_disallowed_text`.
+  - `before update of created_by_user_id, group_id on meetups`: immutable (raise `invalid_input`).
+  - `before update on meetups`: maintain `updated_at`.
 
 ### 2.4 Privileges
 
-- `revoke all on all tables in schema public from anon, authenticated;` then grant explicitly:
-  - `anon` + `authenticated`: `select` on `festivals`, `stages`, `artists`, `sets` (RLS restricts to published festivals).
+- `revoke all on all tables in schema public from anon, authenticated;` + `alter default privileges in schema public revoke all on tables from anon, authenticated;`. Then:
+  - `anon, authenticated`: `select` on `festivals`, `stages`, `artists`, `sets`.
   - `authenticated`:
-    - `users`: `select (id, display_name, avatar_type, avatar_value, created_at)` only. **No** insert/update/delete (use RPCs).
+    - `users`: `select (id, display_name, avatar_type, avatar_value, created_at)` only.
     - `user_festivals`: select, insert, delete.
     - `user_set_selections`: select, insert, update, delete.
     - `groups`: select, `update (name)`, delete.
-    - `group_members`: select, delete.
+    - `group_members`: select **only** (leave/remove via RPCs).
     - `meetups`: select, insert, update, delete.
-    - `location_shares`: select (writes via RPC only).
-    - `user_blocks`: select, insert, delete.
-    - `reports`: insert (select own via policy).
-- Also `alter default privileges in schema public revoke all on tables from anon, authenticated;` so future tables are closed by default.
+    - `location_shares`: select (writes via RPC).
+    - `user_blocks`: select (writes via `block_user`/`unblock_user`).
+    - `reports`: **none** (`report_content` is the only path).
+- `service_role` keeps Supabase defaults.
 
-### 2.5 RLS policies (RLS enabled on **every** public table)
+### 2.5 RLS policies (enabled on every public table). `me` = `private.current_app_user_id()`
 
 | Table | Policy |
 |---|---|
 | festivals | select: `status = 'published'` |
-| stages, sets | select: parent festival published |
+| stages, sets | select: `exists (select 1 from public.festivals f where f.id = festival_id and f.status = 'published')` |
 | artists | select: true |
-| users | select: `id = current_app_user_id() or shares_group_with(id)` |
-| user_festivals | all ops: `user_id = current_app_user_id()` |
-| user_set_selections | select: `user_id = me or (shares a group whose festival_id = user_set_selections.festival_id with user_id and not is_blocked_between(me, user_id))`; insert/update (using+check)/delete: `user_id = me` |
-| groups | select: `is_group_member(id)`; update: `is_group_admin(id)`; delete: `is_group_admin(id)` |
-| group_members | select: `is_group_member(group_id)`; delete: `user_id = me or is_group_admin(group_id)` (prefer RPCs `leave_group` / `remove_group_member`, which also handle admin hand-off) |
-| meetups | select: `is_group_member(group_id) and not is_blocked_between(me, created_by_user_id)`; insert: `is_group_member(group_id) and created_by_user_id = me`; update: `created_by_user_id = me` (check same + still member); delete: `created_by_user_id = me or is_group_admin(group_id)` |
-| location_shares | select: `is_group_member(group_id) and recorded_at > now() - interval '15 minutes' and not is_blocked_between(me, user_id)`; no direct writes |
-| user_blocks | select/insert/delete: `blocker_id = me` (insert also requires `blocked_id <> me`) |
-| reports | select: `reporter_id = me`; insert: `reporter_id = me` |
-| chat_messages, group_invite_generations, auth_attempts, moderation_terms, rate_limit_events | no policies (locked) |
+| users | select: `id = me or private.shares_group_with(id)` |
+| user_festivals | select/insert/delete: `user_id = me` |
+| user_set_selections | select: `user_id = me or (private.shares_festival_group_with(user_id, festival_id) and not private.is_blocked_with(user_id))`; insert check / update using+check / delete using: `user_id = me` |
+| groups | select: `private.is_group_member(id)`; update/delete: `private.is_group_admin(id)` |
+| group_members | select: `private.is_group_member(group_id)` |
+| meetups | select: `private.is_group_member(group_id) and not private.is_blocked_with(created_by_user_id)`; insert: `private.is_group_member(group_id) and created_by_user_id = me`; update: using `created_by_user_id = me`, check `created_by_user_id = me and private.is_group_member(group_id)`; delete: `created_by_user_id = me or private.is_group_admin(group_id)` |
+| location_shares | select: `private.is_group_member(group_id) and recorded_at > now() - interval '15 minutes' and not private.is_blocked_with(user_id)` |
+| user_blocks | select: `blocker_id = me` |
+| everything else | no policies (locked) |
 
-### 2.6 RPCs (`security definer`, `set search_path = ''`, `revoke execute from public, anon`, `grant execute to authenticated`; each raises a clear error code)
+### 2.6 Client RPCs — schema `public`
+
+`security definer`, `set search_path = ''`, owner `postgres`, execute granted to `authenticated` only. Any RPC that reads roles or counts for a group first takes `select 1 from public.groups where id = p_group_id for update`.
 
 | RPC | Args | Returns | Rules |
 |---|---|---|---|
-| `upsert_my_profile` | `p_display_name text, p_avatar_type text, p_avatar_value text` | `table(id uuid, display_name text, avatar_type text, avatar_value text)` | requires `auth.uid()`; inserts with `auth_user_id = auth.uid()`, `email = auth.jwt()->>'email'` or updates own row; validation + moderation via constraints/trigger |
-| `get_my_profile` | — | same shape, 0 or 1 row | |
-| `create_group` | `p_name text, p_festival_id uuid` | `table(group_id uuid, name text, festival_id uuid, invite_code text)` | festival must be published; rate limit 10/day per user; atomic insert of group + admin membership; invite code = 6 chars from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` via `extensions.gen_random_bytes`, retry on collision |
-| `join_group` | `p_invite_code text` | `table(group_id uuid, group_name text, festival_id uuid, member_count int)` | normalize `upper(regexp_replace(code,'[^A-Za-z0-9]','','g'))`; **exact** equality on `invite_code`; failed attempts rate limited 10/hour per user (`rate_limited`); unknown code → `invite_not_found`; max 50 members → `group_full`; already member → returns group (idempotent) |
-| `rotate_invite_code` | `p_group_id uuid` | `text` | admin only |
-| `leave_group` | `p_group_id uuid` | void | removes own membership + own location share; if caller was the last admin and members remain, promote the earliest-joined member; if no members remain, delete group |
-| `remove_group_member` | `p_group_id uuid, p_user_id uuid` | void | admin only; cannot remove self (use leave) |
-| `share_location` | `p_group_id uuid, p_lat double precision, p_lng double precision, p_accuracy double precision, p_heading double precision` | void | member only; validates ranges; upsert on (user_id, group_id), `recorded_at = now()`; rate limit 1 per 5 s per user+group (silently ignore extra, do not raise) |
-| `stop_sharing_location` | `p_group_id uuid` | void | deletes own row |
-| `get_group_locations` | `p_group_id uuid` | `table(user_id uuid, display_name text, avatar_type text, avatar_value text, lat double precision, lng double precision, accuracy double precision, heading double precision, recorded_at timestamptz)` | member only; last 15 min; excludes caller; excludes blocked either direction |
-| `block_user` / `unblock_user` | `p_user_id uuid` | void | blocking also deletes nothing else; RLS filters do the hiding |
-| `report_content` | `p_target_type text, p_target_id uuid, p_reason text, p_details text default null` | uuid | caller must be able to see the target (member of its group / shares group with user); upsert-ignore duplicates; rate limit 20/day |
-| `prepare_account_deletion` | `p_auth_user_id uuid` | `table(storage_path text)` | **service_role only** (revoke from authenticated). Hands off admin roles in every group (same rules as `leave_group`), deletes empty groups, returns totem storage paths of meetups the user created so the edge function can remove the objects |
-| `purge_stale_locations` | — | int | **service_role/postgres only**; deletes `location_shares` older than 15 minutes |
+| `upsert_my_profile` | `p_display_name text, p_avatar_type text, p_avatar_value text` | `table(id uuid, display_name text, avatar_type text, avatar_value text)` | requires `auth.uid()`; insert with `auth_user_id = auth.uid()`, `email = auth.jwt()->>'email'`, or update own row |
+| `get_my_profile` | — | same shape, 0–1 rows | |
+| `create_group` | `p_name text, p_festival_id uuid` | `table(group_id uuid, name text, festival_id uuid, invite_code text)` | festival must be published (`festival_not_found`); `check_rate_limit('user:'||me,'create_group',10,'1 day')` false → raise `rate_limited`; atomic group + admin membership; code = 6 chars from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` via `extensions.gen_random_bytes`, retry on collision |
+| `join_group` | `p_invite_code text` | `table(group_id uuid, group_name text, festival_id uuid, member_count int)` | if ≥ 10 `join_fail` events for `user:<me>` in the last hour → raise `rate_limited`. Normalize `upper(regexp_replace(code,'[^A-Za-z0-9]','','g'))`; **exact** equality. Unknown → insert a `join_fail` event and **return zero rows** (client maps to "invite not found"). Group locked `for update`; ≥ 50 members → `group_full`; already a member → return the group |
+| `rotate_invite_code` | `p_group_id uuid` | text | admin only |
+| `leave_group` | `p_group_id uuid` | void | remove own membership (trigger clears location); last admin with members left → promote earliest-joined; no members left → delete group |
+| `remove_group_member` | `p_group_id uuid, p_user_id uuid` | void | admin only; self → `cannot_remove_self` |
+| `share_location` | `p_group_id uuid, p_lat, p_lng, p_accuracy, p_heading double precision` | void | member only; validate ranges; `insert ... on conflict (user_id, group_id) do update set ..., recorded_at = now() where public.location_shares.recorded_at < now() - interval '5 seconds'`; also delete rows in this group older than 15 min |
+| `stop_sharing_location` | `p_group_id uuid` | void | delete own row |
+| `get_group_locations` | `p_group_id uuid` | `table(user_id uuid, display_name text, avatar_type text, avatar_value text, lat, lng, accuracy, heading double precision, recorded_at timestamptz)` | member only; purge > 15 min first; exclude caller and blocked-either-way |
+| `block_user` / `unblock_user` | `p_user_id uuid` | void | insert/delete `user_blocks` (block requires `shares_group_with` or an existing block; idempotent) |
+| `report_content` | `p_target_type text, p_target_id uuid, p_reason text, p_details text default null` | uuid | visibility: user → `shares_group_with`; group → member; meetup/photo → member of the meetup's group; else `invalid_input`; `check_rate_limit('user:'||me,'report',20,'1 day')`; duplicate → return existing id; stores `target_snapshot` |
+| `prepare_account_deletion` | `p_auth_user_id uuid` | `table(storage_path text)` | **service_role only**. Locks and hands off admin roles in each group (same rules as `leave_group`), deletes empty groups, returns `select name from storage.objects where bucket_id = 'totems' and owner_id = p_auth_user_id::text union select totem_path from public.meetups where created_by_user_id = <profile> and totem_path is not null` |
+| `prepare_demo_account` | `p_auth_user_id uuid` | void | **service_role only**. Ensures the demo profile exists, re-joins the seeded "Festie Demo Crew" group, refreshes `recorded_at = now()` on the seeded fake members' location rows |
+| `purge_stale_locations` | — | int | **service_role only**; deletes `location_shares` older than 15 minutes |
+| `purge_rate_limit_events` | — | int | **service_role only**; deletes `rate_limit_events`/`auth_attempts` older than 24 h |
 
-Error convention: `raise exception using errcode = 'P0001', message = '<code>'` where `<code>` ∈
-`not_authenticated, profile_required, not_group_member, not_group_admin, invite_not_found, group_full, rate_limited, content_not_allowed, invalid_input, festival_not_found`. The client maps codes to friendly messages.
+### 2.7 Scheduled jobs (in 007)
 
-### 2.7 Scheduled jobs
+```sql
+do $$ begin
+  create extension if not exists pg_cron;
+  perform cron.unschedule(jobid) from cron.job where jobname in ('purge-stale-locations','purge-rate-limit-events');
+  perform cron.schedule('purge-stale-locations', '*/5 * * * *', 'select public.purge_stale_locations()');
+  perform cron.schedule('purge-rate-limit-events', '17 * * * *', 'select public.purge_rate_limit_events()');
+exception when others then raise notice 'pg_cron unavailable: %', sqlerrm;
+end $$;
+```
+Retention never depends on cron alone (the location RPCs purge too).
 
-In 007, inside a guarded block: if `pg_cron` is available (`select 1 from pg_available_extensions where name='pg_cron'`), `create extension if not exists pg_cron` and schedule (idempotently, unschedule-by-name first):
-- `purge-stale-locations` every 5 minutes → `select public.purge_stale_locations();`
-- `purge-rate-limit-events` hourly → delete `rate_limit_events` and `auth_attempts` older than 24 h.
-If pg_cron is unavailable the migration must still succeed (raise notice).
+### 2.8 Storage — `008_storage_totems.sql`
 
-### 2.8 Storage
-
-- Bucket `totems`: `public = false`, `file_size_limit = 5242880`, `allowed_mime_types = {image/jpeg,image/png,image/heic,image/webp}` (update existing row).
-- Object path: `<group_id>/<meetup_id>/<random>.jpg`.
-- Policies on `storage.objects` (bucket_id = 'totems'):
-  - select: `is_group_member(try_uuid((storage.foldername(name))[1]))`
-  - insert: member of folder[1] **and** a meetup with id `try_uuid(folder[2])` exists in that group created by `current_app_user_id()`
-  - delete: `owner = auth.uid()` or `is_group_admin(try_uuid(folder[1]))`
-- Clients read via `createSignedUrl(path, 3600)` only. No public URLs anywhere.
+- Bucket `totems`: `public = false`, `file_size_limit = 5242880`, `allowed_mime_types = '{image/jpeg}'` (client always re-encodes to JPEG, so EXIF stripping always applies). Insert-or-update the row.
+- Path `<group_id>/<meetup_id>/<uuid>.jpg`; uploads use `upsert: false`.
+- Drop the known 004 policy names and any `storage.objects` policy whose qual/with_check mentions `totems`.
+- Restrictive guard: `create policy totems_guard on storage.objects as restrictive for all to public using (bucket_id <> 'totems' or private.is_group_member(private.try_uuid((storage.foldername(name))[1]))) with check (bucket_id <> 'totems' or private.can_upload_totem(private.try_uuid((storage.foldername(name))[1]), private.try_uuid((storage.foldername(name))[2])));`
+- Permissive, `to authenticated`: select (member of folder[1]); insert (`can_upload_totem`); delete (`owner_id = (select auth.uid())::text or private.is_group_admin(folder[1])`). No update policy.
+- Clients read via `createSignedUrl(path, 3600)` only.
 
 ### 2.9 Generated types
 
-`packages/data-access/src/database.types.ts` must be hand-updated to match the final schema exactly (tables, new columns, RPC `Functions` signatures). Keep the Supabase CLI generated shape.
+`packages/data-access/src/database.types.ts` hand-updated to match the final schema exactly (tables, columns, `public` RPCs under `Functions`). `users.Row` contains only the selectable columns.
 
 ---
 
 ## 3. Edge functions (`supabase/functions`)
 
-Remove: `request-otp`, `verify-otp`, `create_group_invite`, `join_group_from_invite`, `upload_totem_photo` (replaced by Supabase Auth + RPCs + storage RLS). Remove now-unused `_shared` helpers.
+Remove `request-otp`, `verify-otp`, `create_group_invite`, `join_group_from_invite`, `upload_totem_photo` and unused `_shared` helpers.
 
-Add:
+1. **`delete-account`** (`verify_jwt = true`, but the function's own check is authoritative): POST, no body.
+   1. `auth.getUser(jwt)`: `error.code === 'user_not_found'` → 200 `{ deleted: true }` (idempotent); any other error → 401.
+   2. Service role `rpc('prepare_account_deletion', { p_auth_user_id })`.
+   3. `storage.from('totems').remove(chunk)` in chunks of ≤ 1000; any error → retryable 500.
+   4. `auth.admin.deleteUser(id)` (cascades through `users.auth_user_id`).
+   5. 200 `{ deleted: true }`. No PII in logs.
+2. **`demo-login`** (`verify_jwt = false`) — the only App Review path:
+   - Enabled only when `DEMO_LOGIN_EMAIL` is set and `DEMO_LOGIN_CODE` matches `^\d{8,10}$`; otherwise always 404.
+   - Rate limits via `check_rate_limit` (service role): per IP using the **last** `x-forwarded-for` entry (`demo-login:ip:<addr>`, 20/h) and global `demo-login:global` (30 failed/h).
+   - Compare SHA-256 digests of `lower(email)` and of the code with a timing-safe equal, always evaluating both. Mismatch → 401 `{ error: 'invalid_code' }`, identical for wrong email vs wrong code.
+   - On match: ensure the auth user exists (`auth.admin.createUser({ email, email_confirm: true })` if missing), `rpc('prepare_demo_account')`, then `auth.admin.generateLink({ type: 'magiclink', email })` → 200 `{ token_hash: properties.hashed_token, verification_type: properties.verification_type }`.
+   - Client verifies with `verifyOtp({ token_hash, type: 'email' })`.
+3. Shared: method check, JSON body size cap, no CORS headers needed (native clients only; OPTIONS → 204).
 
-1. **`delete-account`** (`verify_jwt = true`): POST, no body. Resolves user from the bearer token via `auth.getUser(jwt)`. With the service role: `rpc('prepare_account_deletion', { p_auth_user_id })` → remove returned storage paths **and** every `totems` object whose `owner = auth user id` → `auth.admin.deleteUser(id)` (cascades through `public.users.auth_user_id`). Returns `{ deleted: true }`. Idempotent (already-deleted user → 200). Logs no PII.
-2. **`demo-login`** (`verify_jwt = false`): the **only** App Review path. POST `{ email, code }`. Enabled only when secrets `DEMO_LOGIN_EMAIL` and `DEMO_LOGIN_CODE` (≥ 8 chars) are both set; otherwise always 404. If `lower(email)` matches and `code` matches (constant-time compare), call `auth.admin.generateLink({ type: 'magiclink', email })` and return `{ token_hash: properties.hashed_token }`. Any mismatch → 401 `{ error: 'invalid_code' }` (same body/timing for wrong email and wrong code). Rate limit 20/hour per client IP (`x-forwarded-for` first hop) via `rate_limit_events` with key `ip:<addr>`.
+`supabase/config.toml` (local dev; hosted is applied with `supabase config push` after review, see runbook):
+- `[api] schemas = ["public", "graphql_public"]` (stop exposing `storage`).
+- `[auth] site_url` = non-localhost placeholder documented in the runbook; `additional_redirect_urls = ["festivalapp://"]`.
+- `[auth.email] enable_signup = true, enable_confirmations = false, otp_length = 8, otp_expiry = 600` (8 matches the hosted project; see commit `da99227`).
+- `[auth.email.template.magic_link]` and `[auth.email.template.confirmation]`: `subject` + `content_path = "./supabase/templates/<name>.html"`; templates show `{{ .Token }}` prominently and contain **no link**.
+- `[auth.rate_limit] email_sent = 200, token_verifications = 30`.
+- `[functions.delete-account] verify_jwt = true`, `[functions.demo-login] verify_jwt = false`.
 
-Shared: strict JSON body parsing with size cap, method check, CORS limited to what native clients need (no browser use is intended; keep `*` only on OPTIONS-safe responses or drop CORS).
-
-`supabase/config.toml`: `[functions.delete-account] verify_jwt = true`, `[functions.demo-login] verify_jwt = false`; `[auth.email] enable_signup = true, otp_length = 6, otp_expiry = 600, enable_confirmations = false`; `[auth.rate_limit] email_sent = 30, token_verifications = 30`; `[storage.buckets.totems] public = false`. Document custom SMTP requirement in the runbook (Supabase's default SMTP only delivers to project team members).
-
-Verification: `deno check` every function (install via `npm i -g deno` if available) and unit-test pure helpers with `deno test` where feasible.
+Verification: `deno check` every function (`deno` is installed); `deno test` pure helpers (digest compare, XFF parsing, chunking).
 
 ---
 
@@ -166,151 +213,210 @@ Verification: `deno check` every function (install via `npm i -g deno` if availa
 
 ### 4.1 `@festival/data-access`
 
-- Supabase client: reads `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` (alias `EXPO_PUBLIC_SUPABASE_KEY`). **No silent fallbacks** — export `supabaseConfigError: string | null`; when config is missing, create no network client and every call throws `ConfigError`. App shows a config error screen.
-- Auth API (replace custom OTP functions):
-  - `requestEmailCode(email)` → `supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })`.
-  - `verifyEmailCode(email, code)` → `supabase.auth.verifyOtp({ email, token: code, type: 'email' })`; on failure, try `functions.invoke('demo-login', { body: { email, code } })` once; if it returns `token_hash`, `verifyOtp({ token_hash, type: 'magiclink' })`. Otherwise rethrow the original error. Accept codes of 6–10 digits.
-  - `getSessionOffline()` → `supabase.auth.getSession()` (no network). **Routing decisions must use this, never `getUser()`.**
-  - `signOut()` → clears auth session, MMKV profile cache, local SQLite user data (`clearLocalUserData()` in sync-engine: everything except festival catalog tables), pending queue, scheduled local notifications, location-sharing state.
-  - `deleteAccount()` → `functions.invoke('delete-account')`, then the same local wipe as `signOut()`.
-- Profile: `getMyProfile()` (RPC, caches to MMKV `profile-cache`), `getCachedProfile()` (sync, MMKV), `saveMyProfile(input)` (RPC `upsert_my_profile`). Never select `email` from `users`.
-- Groups: `createGroup` → RPC `create_group`; `joinGroup(code)` → RPC `join_group`; `leaveGroup`, `removeGroupMember`, `rotateInviteCode`; group detail/members cached to SQLite as today; member selects use explicit columns.
-- Meetups: create/update via sync queue (direct table upsert under RLS); `deleteMeetup(id)` via sync queue delete. Payload uses `latitude/longitude`, never `custom_map_x/y`.
-- Totem photos: `uploadTotemPhoto(file, meetup)` → EXIF strip (keep piexif) → `storage.from('totems').upload('<group_id>/<meetup_id>/<uuid>.jpg')` → `update meetups set totem_path`. `getTotemSignedUrl(path)` with in-memory cache (expire 50 min).
-- Location: `shareLocation(groupId, coords)` → RPC; `stopSharingLocation(groupId)` → RPC; `getGroupLocations(groupId)` → RPC.
-- Moderation: `reportContent(...)`, `blockUser(id)`, `unblockUser(id)`, `listBlockedUsers()` (select own `user_blocks` rows; display names only for users still visible, else "Blocked user").
-- Festivals: only published rows come back (RLS). `fetchAndCacheFestival` compares `version` with a light query first (`select id, version`), downloads the bundle only when changed. Festival rows include lat/lng/bounds/timezone.
-- Selections: `refreshUserSelections` must **not** drop rows with `pending_sync = 1`, and must not resurrect rows that have a queued delete. Merge rule: server rows replace local rows only where no pending local op exists for that id/set.
-- Error mapping: `toUserMessage(error)` translates the §2.6 codes, network errors, and auth errors into friendly copy.
+**Config & client**
+- Reads `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` (alias `EXPO_PUBLIC_SUPABASE_KEY`). No fallbacks: export `supabaseConfigError: string | null`; if set, no client is created and calls throw `ConfigError`.
+- `createClient(..., { global: { fetch: fetchWithTimeout(15_000) } })` (AbortController).
+
+**Session (offline-safe)**
+- `getStoredSession(): { authUserId: string; expiresAt: number } | null` — **synchronous**; parses MMKV `festival-auth` / key `supabase_session`; requires `refresh_token` and `user.id`; never calls `supabase.auth.*`. Routing and launch paths use only this and `getCachedProfile()`. `supabase.auth.getSession()/getUser()` are never awaited on launch or render paths.
+- Every authenticated write path (sync flush, RPCs) first checks the stored session; if missing → throw `TransientAuthError` without sending (prevents anon-key requests being misread as permission errors).
+
+**Auth**
+- `requestEmailCode(email)` → `auth.signInWithOtp({ email, options: { shouldCreateUser: true } })`.
+- `verifyEmailCode(email, code)`:
+  1. `auth.verifyOtp({ email, token: code, type: 'email' })`.
+  2. Only if that fails with an `AuthApiError` (4xx — never on `AuthRetryableFetchError`) **and** the code is 8–10 digits **and** demo-login has not returned 404 in this app session: `functions.invoke('demo-login', { body: { email, code } })`; on `token_hash` → `auth.verifyOtp({ token_hash, type: 'email' })`.
+  3. Otherwise rethrow the original error.
+- `signOut()` and `deleteAccount()` (data-access part only):
+  1. Server call (`auth.signOut({ scope: 'local' })` / `functions.invoke('delete-account')` — delete must succeed before continuing; sign-out ignores failure).
+  2. Remove MMKV `festival-auth`/`supabase_session` directly, regardless of step 1.
+  3. `clearLocalUserData()` (sync-engine), clear MMKV `profile-cache`, clear the signed-URL cache.
+  4. Clear `app_meta.local_owner_auth_user_id`.
+- `ensureLocalOwner(authUserId)`: on `SIGNED_IN`, if it differs from `app_meta.local_owner_auth_user_id`, wipe local user data first, then set it.
+
+**Profile**: `getMyProfile()` (RPC, online, writes MMKV `profile-cache` including `auth_user_id`), `getCachedProfile()` (sync), `saveMyProfile(input)` (RPC). Offline-capable paths (enqueue, cache reads, routing) resolve identity **only** via `getCachedProfile()`.
+
+**Reads are cache-first**: screens render from SQLite/MMKV immediately; background refresh only when NetInfo reports online.
+- `refreshFestivalCatalog()`: published festivals (light columns) → upsert → delete local festivals/stages/sets not returned. Called on launch and pull-to-refresh when online.
+- `fetchAndCacheFestival(id)`: light `select id, version` first; full bundle only when changed.
+- `listMyGroups()`: replaces the current user's memberships locally (delete local rows not returned, and groups no longer referenced). A `not_group_member` error on any group call purges that group locally.
+- Cache `user_festivals` in SQLite.
+
+**Groups/meetups/photos**
+- `createGroup` → `create_group`; `joinGroup(code)` → `join_group` (zero rows → `InviteNotFoundError`); `leaveGroup`, `removeGroupMember`, `rotateInviteCode`. Member selects use explicit columns.
+- Meetups: create/update/delete via the sync queue (direct table writes under RLS); payload uses `latitude/longitude`.
+- `uploadTotemPhoto(file, meetup)`: `flush()` first; if the meetup still has a pending op → throw `meetup_not_synced` ("Add the photo once this meetup syncs"); EXIF strip (piexif) on a JPEG re-encode → upload `<group_id>/<meetup_id>/<uuid>.jpg` (`upsert: false`) → `update meetups set totem_path` (online, not queued) → update local row. `getTotemSignedUrl(path)` with in-memory cache (50 min).
+
+**Location**: `shareLocation(groupId, coords)`, `stopSharingLocation(groupId)`, `getGroupLocations(groupId)` → RPCs.
+
+**Moderation**: `reportContent(type, targetId, reason, details?)`; `blockUser(id)` (RPC, then delete that user's rows from local meetups / combined selections caches and invalidate); `unblockUser(id)`; `listBlockedUsers()`.
+
+**Selections**: upsert with `{ onConflict: 'user_id,set_id', ignoreDuplicates: true }`; delete by `user_id` + `set_id`. `refreshUserSelections` never drops rows with `pending_sync = 1` and never resurrects rows with a queued delete.
+
+**Errors**: `toUserMessage(error)` maps P0001 codes, 23505/23514, network, timeout and auth errors to friendly copy.
 
 ### 4.2 `@festival/sync-engine`
 
-- Local SQLite schema mirrors new columns (festival lat/lng/bounds/status/is_demo, stage lat/lng, meetup latitude/longitude/totem_path/created_at/updated_at). Bump a schema version in `app_meta` and migrate (add columns) on open.
+- Local schema v2: on schema-version bump, drop and recreate every cache table except `sync_queue` and `app_meta`, then refetch. Local `users` has **no email**; `groups.created_by_user_id` nullable; new columns per §2.3 (festival status/is_demo/lat/lng/bounds/default_zoom/source_url, stage lat/lng, meetup latitude/longitude/totem_path/created_at/updated_at); `user_festivals` table.
 - `MUTABLE_TABLES = { user_set_selections, meetups }`.
-- Add `clearLocalUserData()` and `getPendingOperationIds(table)`.
-- Permanent errors (RLS violation `42501`, check violation `23514`, `P0001` codes other than `rate_limited`) are **dropped from the queue** after recording the failure (expose `getFailedOperations()` for UI), not retried forever; transient errors keep exponential backoff.
+- Transport strips payloads to a per-table server whitelist — meetups: `id, group_id, title, stage_id, starts_at, notes, latitude, longitude, created_by_user_id`; user_set_selections: `id, user_id, festival_id, set_id, selected_at, note`. Never sends `pending_sync, synced_at, totem_path, custom_map_*, created_at, updated_at`.
+- `flush()` checks the stored session first (expired-within-60 s or missing → treat as transient, do not send).
+- Error classification:
+  - **Transient** (keep, exponential backoff ≤ 30 s, cap attempts at 20 then park): network/timeout, HTTP 5xx/408/429, `rate_limited`, PGRST301/PGRST303/HTTP 401, any request sent without a user JWT.
+  - **Permanent** (record in `getFailedOperations()`, drop, roll back the optimistic local row): 42501 with a valid JWT, 23502, 23503, 23514, 22P02, PGRST204, other P0001 codes.
+  - **Success**: 23505 on user_set_selections; delete matching 0 rows.
+- Add `clearLocalUserData()`, `getPendingOperationIds(table)`, `getPendingCount()`, `getFailedOperations()`, `clearFailedOperations()`.
 
-### 4.3 `@festival/domain` — time & schedule (unit tested with vitest)
+### 4.3 `@festival/domain` — time & schedule (vitest)
 
-All festival times render in the **festival's IANA timezone**, not the device's:
-- `formatFestivalTime(iso, tz)` → e.g. `9:30 PM`; `formatFestivalDate(dateOrIso, tz, opts)`.
-- `festivalDayKey(iso, tz, dayStartHour = 6)` → `YYYY-MM-DD` of the festival day (a 1:00 AM set belongs to the previous day).
-- `minutesIntoFestivalDay(iso, tz, dayStartHour = 6)` → for timeline positioning.
-- `listFestivalDays(rows, tz)`.
-- Use `Intl.DateTimeFormat(..., { timeZone })` with `formatToParts`; provide a tested fallback if `timeZone` throws (Hermes supports it, but guard).
-- Existing conflict detection stays; add tests for overlapping/adjacent sets across midnight.
+- `formatFestivalTime(iso, tz)` → `9:30 PM` in the festival tz.
+- `formatFestivalDate(value, tz, opts)`: **date-only strings** (`/^\d{4}-\d{2}-\d{2}$/`) are calendar dates → `Date.UTC(y, m-1, d)` formatted with `timeZone: 'UTC'`; timestamps are formatted in `tz`.
+- `festivalDayKey(iso, tz, dayStartHour = 6)` → `YYYY-MM-DD` of the festival day (1:00 AM belongs to the previous day).
+- `minutesIntoFestivalDay(iso, tz, dayStartHour = 6)`.
+- `listFestivalDays(festival, sets)` = calendar days `start_date..end_date` plus any set day outside that range.
+- `festivalTimeZoneLabel(tz)` (may be `GMT+2`; tests must not assert an abbreviation).
+- All `formatToParts` calls use `hourCycle: 'h23'`; parser maps `24` → `00`.
+- If `Intl.DateTimeFormat(…, { timeZone })` throws: format in device time and expose `timesAreDeviceLocal = true` so the UI hint says "Times shown in your device's time zone". Unit-test both branches.
+- Conflict detection: add tests across midnight and adjacent (end == start → no conflict).
 
 ### 4.4 `@festival/map-utils`
 
-- `getFestivalCamera(festival)` → `{ center: [lng, lat], zoom, bounds? } | null` (null when the festival has no coordinates).
+- `getFestivalCamera(festival)` → `{ center: [lng, lat], zoom, bounds? } | null` (null without coordinates).
+- `getFestivalBounds(festival)` → bounds or center ± ~1.5 km.
 - `getStageCoordinate(stage)`, `getMeetupCoordinate(meetup, stagesById)` → `[lng, lat] | null`.
-- Remove all hard-coded city coordinates.
+- No hard-coded city coordinates anywhere.
 
 ### 4.5 `@festival/notification-utils`
 
-- Reminders scheduled at the correct absolute instant (ISO from DB is absolute — just don't re-interpret in local time). Reminder copy uses festival-time formatting.
-- `cancelAllReminders()` used by sign-out/delete.
-- Ask permission contextually (first time the user adds a set or meetup), handle denial gracefully.
+- Reminders at the absolute instant from the DB; copy uses festival-time formatting.
+- `cancelAllReminders()`; permission asked contextually (first set/meetup), denial handled.
 
 ---
 
 ## 5. Mobile app (`apps/mobile`)
 
-### 5.1 Shell & routing
+### 5.1 Shell, routing, sign-out
 
-- `app/_layout.tsx`: fonts + splash (from design branch), `AppProviders`, config-error screen if `supabaseConfigError`.
-- `app/index.tsx`: `getSessionOffline()` → no session → `/auth/enter-email`; session + cached profile → `/(tabs)/festivals`; session, no cached profile → try `getMyProfile()` (online) → profile-setup if none; offline with no cache → show retry state (not the login screen).
-- Auth listener: on `SIGNED_OUT` route to enter-email.
-- Persist `activeFestivalId` and `selectedGroupId` in MMKV (zustand persist or manual). Default festival: first followed festival, else first published festival; no hard-coded UUID.
-- Remove `app/(tabs)/chat`, `app/modal.tsx`, `components/EditScreenInfo.tsx` and other Expo template leftovers not used.
+- `app/_layout.tsx`: fonts + splash, `AppProviders`, config-error screen if `supabaseConfigError`. Wrap `(tabs)` and `settings` in `<Stack.Protected guard={hasSession}>` (expo-router 55).
+- `app/index.tsx` routing: stored session + cached profile with matching `auth_user_id` → `/(tabs)/festivals` (even if the token is expired; auto-refresh fixes it online). Stored session, no cached profile → online: `getMyProfile()` → profile-setup if none; offline: retry screen (never the login screen). No stored session → `/auth/enter-email`.
+- `app/+native-intent.tsx`: `redirectSystemPath({ path })` stores `code` in MMKV `pending-invite-code` when the path starts with `group/join`, returns the path. After sign-in/profile setup, `index` routes to `/(tabs)/group/join?code=<pending>` and clears the key.
+- `src/providers/session-actions.ts` → `performSignOut(mode: 'sign_out' | 'delete_account' | 'session_lost')`, in order: `await stopLocationSharingNow()` (skip for `session_lost`) → `await cancelAllReminders()` → data-access `signOut()`/`deleteAccount()` (for `session_lost`, only the local wipe) → `queryClient.clear()` → `resetAppStore()` → `router.replace('/auth/enter-email')`. Voluntary sign-out warns if `getPendingCount() > 0`.
+- Auth listener: `SIGNED_OUT` → `performSignOut('session_lost')`; `SIGNED_IN` → `ensureLocalOwner`.
+- React-query keys for user data include the auth user id.
+- Remove `app/(tabs)/chat`, `app/modal.tsx`, unused Expo template components.
 
 ### 5.2 Auth screens
 
-- Enter email: remove the non-functional Google/Apple buttons; keep the design's visual balance. Inline validation; friendly errors; links to Terms & Privacy (already present).
-- Verify code: 6–10 digit input (auto-advance, paste support, one hidden `TextInput` with `textContentType="oneTimeCode"`), resend with 60 s cooldown, uses `verifyEmailCode` (demo fallback is transparent).
-- Profile setup: display name (1–40), avatar choice; server moderation error surfaced clearly.
+- Enter email: remove the "Your Name" field (it overwrites the email, `enter-email.tsx:55-63`) and both social buttons; rebalance with spacing only. On `requestEmailCode` error (429/5xx) show the message plus an "I already have a code" link to verify.
+- Verify code: `OTP_LENGTH` (from `src/config/app-info.ts`, = 8) boxes over one hidden `TextInput` (`textContentType="oneTimeCode"`, `autoComplete="one-time-code"`); auto-submit only at `OTP_LENGTH` digits; a Verify button accepts pasted 6–10 digits; resend with 60 s cooldown.
+- Profile setup: display name (1–40), avatar; an explicit "I agree to the Terms of Use and Privacy Policy" checkbox (linked) is required to continue.
 
-### 5.3 Settings (new, `app/settings/` stack, opened from an avatar/gear button in the Fests screen header)
+### 5.3 Settings (`app/settings/`, opened from an avatar button in the Fests header)
 
-Sections, styled with existing `@festival/ui` primitives (add `ListRow`, `DestructiveButton` to the UI package if needed):
-- Profile: edit name/avatar.
-- Privacy: Blocked users (list + unblock), Location sharing status (which group, until when, stop).
-- Notifications: open system settings if denied.
-- About: Privacy Policy, Terms of Use, Contact support (`mailto:` using `SUPPORT_EMAIL` from `src/config/app-info.ts`), app version/build.
-- Sign out.
-- Delete account: explains what is deleted, requires typing `DELETE`, calls `deleteAccount()`, then routes to enter-email. Must work in ≤ 3 taps from Settings (Apple 5.1.1(v)).
+Built with `@festival/ui` primitives: Profile (edit name/avatar) · Privacy (Blocked users with Unblock; location sharing status + Stop) · Notifications (open system settings if denied) · About (Privacy Policy, Terms, Contact support via `mailto:SUPPORT_EMAIL`, Support URL, version/build) · Sign out · **Delete account** (explains what is deleted, type `DELETE` to confirm, ≤ 3 taps from Settings).
 
 ### 5.4 Groups & meetups
 
-- Create group (RPC) → share sheet (`Share.share`) with message: `Join my crew "<name>" on Festie. Code: ABC123 — or tap festivalapp://group/join?code=ABC123`.
-- Join screen reads `code` from `useLocalSearchParams` and pre-fills; deep link `festivalapp://group/join?code=...` must route to it (verify the expo-router path; `(tabs)` group segments are not part of the URL).
-- Group detail: members list; tapping another member opens actions: **Report**, **Block** (confirm), and for admins **Remove from group**. Footer: **Leave group** (confirm). Admin: rotate invite code.
-- Meetups: list; creator can delete; others can **Report**. Totem photo shown via signed URL; photo has Report action.
-- Report sheet: reason picker (§2.3 reasons) + optional details; success toast "Thanks — we'll review this within 24 hours." (runbook commits the developer to that SLA).
-- Create meetup: stage picker (primary); custom pin **only** when the festival has coordinates and Mapbox is configured (tap on map → lat/lng); otherwise stage + notes. Remove the old normalized-grid picker.
-- Blocked users' content is hidden server-side; client also hides them in member lists as "Blocked user" with Unblock.
+- `(tabs)/group/_layout.tsx` exports `unstable_settings = { initialRouteName: 'index' }`.
+- Create group → share sheet: `Join my crew "<name>" on Festie. Code: ABC123 — open festivalapp://group/join?code=ABC123 — get the app: https://apps.apple.com/app/id6761392490`.
+- Join screen pre-fills `code` from params (no auto-join).
+- Group detail: members (tap another member → Report / Block (confirm) / admin: Remove); Leave group (confirm); admin: rotate code; blocked users shown as "Blocked user" with Unblock.
+- Meetups: creator can delete; others can Report; totem via signed URL with Report on the photo.
+- Report sheet: reason picker + optional details → toast "Thanks — we'll review this within 24 hours."
+- Create meetup: stage picker; custom pin only when the festival has coordinates **and** Mapbox is configured (tap → lat/lng). Remove the normalized-grid picker.
 
 ### 5.5 Schedule & lineup
 
-- All time labels via `@festival/domain` festival-time helpers using `festival.timezone`; day tabs via `festivalDayKey`; timeline positions via `minutesIntoFestivalDay`.
-- Show "Times shown in festival local time (PDT)" hint where times appear.
-- Show the not-affiliated disclaimer on festival detail/lineup: "Festie is an independent app and is not affiliated with or endorsed by any festival, organizer, or artist. Schedules may change — check official sources."
-- Demo festivals (`is_demo`) show a small "Demo" badge.
+- All time labels via §4.3 helpers with `festival.timezone`; day tabs from `listFestivalDays`; timeline from `minutesIntoFestivalDay`.
+- Hint "Times shown in festival local time (<label>)" or the device-time variant.
+- Disclaimer on festival detail/lineup: "Festie is an independent app and is not affiliated with or endorsed by any festival, organizer, or artist. Schedules can change — check official sources."
+- Demo festivals show a "Sample" badge and sort last.
 
 ### 5.6 Map & live location
 
-- Mapbox config plugin added to `app.json` per `@rnmapbox/maps` install docs (check `node_modules/@rnmapbox/maps/plugin/install.md`). Download token via EAS secret env (`RNMAPBOX_MAPS_DOWNLOAD_TOKEN`) documented in runbook.
-- Camera from `getFestivalCamera`; stage pins from stage lat/lng; meetup pins; friend pins.
-- Fallback (no token, or festival without coordinates): a styled card listing stages, next sets, meetups — **no fake map, no hard-coded city**.
-- Offline pack: festival bounds (or center ± ~1.5 km), zoom 13–17, named `festival-<id>`; button state reflects real pack status (`offlineManager.getPack`).
-- **Location sharing** (`src/location/LocationSharingProvider.tsx`, mounted in `AppProviders`):
-  - State persisted in MMKV: `{ groupId, startedAt, expiresAt }` or null. Sharing auto-expires after 8 hours (user can choose 1 h / 4 h / until I stop ≤ 24 h).
-  - Foreground only: watch position (`Accuracy.Balanced`, `distanceInterval` 25 m, `timeInterval` 30 s) only while sharing is active **and** `AppState === 'active'` **and** permission is granted; stop the watcher when backgrounded; resume on foreground.
-  - Sends via `shareLocation` RPC, throttled to ≥ 15 s.
-  - Turning off / expiry / leaving group / sign out → `stopSharingLocation` + clear state.
-  - Exposes `useLocationSharing()` → `{ status: 'off'|'sharing'|'paused'|'permission_denied', groupId, expiresAt, start(groupId, durationMs), stop() }`. UI must reflect real status (e.g. "Paused while Festie is in the background").
-  - Before first start: explainer sheet ("Only members of <group> can see your location, only while Festie is open, for the time you choose. Positions are deleted within 15 minutes.").
-- Friend locations: `getGroupLocations` every 30 s **only while the map screen is focused** (`useFocusEffect`); show "last seen N min ago".
+- Mapbox: `src/config/app-info.ts` exports `MAPBOX_ACCESS_TOKEN` + `isMapboxConfigured()`; `AppProviders` calls `Mapbox.setAccessToken()` and `Mapbox.setTelemetryEnabled(false)` once.
+- Camera from `getFestivalCamera`; stage, meetup, friend pins. `Mapbox.UserLocation` only when permission is already granted.
+- Fallback (no token or no coordinates): styled card listing stages, next sets, meetups. No fake map.
+- Offline pack: `getPack('festival-<id>')` first; `createPack(options, onProgress, onError)`; state from `pack.status()`; delete + recreate when `festival.version` changes.
+- **Location sharing** — `src/location/LocationSharingProvider.tsx` (MOBILE-B), mounted by `AppProviders`:
+  - Persisted (MMKV) `{ groupId, startedAt, expiresAt }`. Durations: 1 h, 4 h, 8 h (default), "Until I stop" (max 24 h).
+  - Foreground only: `watchPositionAsync({ accuracy: Balanced, distanceInterval: 25 })` while sharing and permission granted. Pause only on AppState `background` (`inactive` changes nothing); resume on `active`.
+  - Heartbeat every 120 s while sharing: re-send last fix (cached or `getLastKnownPositionAsync()`); client throttle ≥ 15 s.
+  - On every `active`: if `now >= expiresAt` → `stopSharingLocation` + clear before resuming.
+  - Stop on: user off, expiry, `not_group_member`, leave/removal, sign-out.
+  - API: `useLocationSharing()` → `{ status: 'off'|'sharing'|'paused'|'permission_denied', groupId, expiresAt, start(groupId, durationMs), stop() }` and `stopLocationSharingNow()` (idempotent, 3 s timeout).
+  - First-start explainer: "Only members of <group> can see your location, only while Festie is open, for the time you choose. Your position is visible to your crew for at most 15 minutes after the last update, then deleted."
+- Friend locations polled every 30 s only while the map is focused (`useFocusEffect`); "last seen N min ago".
 
-### 5.7 App config (`apps/mobile/app.json`, `eas.json`)
+### 5.7 App config (MOBILE-A owns all of it)
 
-- Delete the stray root `app.json` and root `eas.json` (wrong bundle id); `apps/mobile` is the only Expo project. Bundle id / package: `com.kevin.festivalapp`.
-- Android permissions de-duplicated: `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, `CAMERA` only; `blockedPermissions: ["android.permission.RECORD_AUDIO", "android.permission.ACCESS_BACKGROUND_LOCATION"]`.
-- iOS: no microphone permission (`expo-image-picker` plugin `microphonePermission: false`), `NSLocationWhenInUseUsageDescription` = accurate copy about group sharing + map position; camera/photos copy about totem photos. No background modes.
-- Remove `expo-insights` unless it is disclosed (prefer removal).
-- `eas.json`: production/preview env documents required vars; nothing secret committed.
+- Delete stray root `app.json` and root `eas.json`. Bundle id/package `com.kevin.festivalapp`.
+- Add `apps/mobile/app.config.ts` extending `app.json` that **throws** when `EAS_BUILD_PROFILE` is `preview`/`production` and `EXPO_PUBLIC_SUPABASE_URL` or the anon key is missing.
+- Plugins:
+  - `expo-location`: `{ locationWhenInUsePermission: "Festie uses your location while the app is open to show you on the festival map and, only when you turn on sharing, to show your position to members of the crew you choose.", locationAlwaysAndWhenInUsePermission: false, locationAlwaysPermission: false, isIosBackgroundLocationEnabled: false, isAndroidBackgroundLocationEnabled: false }`.
+  - `expo-image-picker`: totem-photo `photosPermission`/`cameraPermission`, `microphonePermission: false`.
+  - `@rnmapbox/maps` per `node_modules/@rnmapbox/maps/plugin/install.md` (10.3 needs no download token — verify in the podspec).
+  - Remove duplicate keys from `ios.infoPlist`.
+- Android: permissions `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, `CAMERA`; `blockedPermissions`: `RECORD_AUDIO`, `ACCESS_BACKGROUND_LOCATION`, `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`, `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`.
+- Remove `expo-insights`.
+- `eas.json`: document required env vars; nothing secret committed.
 
-### 5.8 Design rules for new/changed UI
+### 5.8 Design rules
 
-- Use tokens from `@festival/ui/theme` and existing primitives; add primitives to `@festival/ui` instead of one-off styles when reused twice.
-- Accessibility: every icon-only control gets `accessibilityLabel` + `accessibilityRole`; hit areas ≥ 44×44; `textSecondary` must meet WCAG AA for body text (raise opacity if needed — a "smooth" token tweak, not a redesign).
-- Destructive actions use a consistent destructive style + confirmation.
-- Empty, loading, error, and offline states for every data screen.
+- Tokens/primitives from `@festival/ui`. MOBILE-A adds first: `ListRow`, `DestructiveButton`, `IconButton` (required `accessibilityLabel`, 44×44), `Badge`, `showToast`, tokens `colors.link` (≥ 4.5:1 on white and on accent `bgTint`, e.g. `#2F5DA8`), `colors.destructive` (`#B42318`), `colors.destructiveBg` (`#FDECEC`), `layout.tabBarClearance = 120`.
+- Pastel `primary` and festival accents are fill-only, never text. Text links and secondary-button labels use `colors.link`; breadcrumbs use `textPrimary`.
+- `textSecondary` alpha ≥ 0.68.
+- Every scrollable screen under `(tabs)` adds `layout.tabBarClearance` bottom padding.
+- Empty, loading, error and offline states on every data screen; destructive actions confirm.
 
 ---
 
-## 6. Content & admin tooling
+## 6. Content, moderation & admin tooling
 
-- Delete `seed-data/coachella-2026.json` and `seed-data/lollapalooza-2026.json` (fabricated lineups under real trademarks).
-- `seed-data/demo-festival.json`: clearly fictional "Festie Demo Fest", `is_demo: true`, `status: published`, upcoming dates in 2027, fictional artists, real coordinates of a large open public space so the map works, stage coordinates inside it, accent color.
-- `apps/admin-tools`: validate input (schema check with precise errors: ids are UUIDs, times have offsets, sets within festival dates, stage/artist references exist, end > start, lat/lng ranges), support `status`, `is_demo`, coordinates, bump `version` automatically on change; `--dry-run`. Add CSV import (`stages.csv`, `artists.csv`, `sets.csv`) → JSON converter documented in `docs/festival-data.md` so real festival data can be entered from public schedules with a `source_url`.
+- Delete `seed-data/coachella-2026.json`, `seed-data/lollapalooza-2026.json`, `seed-data/sample-festival.json`; remove root scripts `supabase:seed:festival|coachella|lolla|all`.
+- `seed-data/demo-festival.json`: fictional "Festie Demo Fest", `is_demo: true`, `status: 'published'`, upcoming 2027 dates, fictional artists, real coordinates of a large public open space, stage coordinates inside it, accent color.
+- `apps/admin-tools` commands (service role):
+  - `festival:seed <file> [--dry-run]` — strict validation (UUIDs, offsets on times, sets within festival dates ±1 day, references exist, end > start, lat/lng ranges, `source_url` required unless `is_demo`), auto-bumps `version`.
+  - `festival:import-csv <dir>` — `festival.csv`, `stages.csv`, `artists.csv`, `sets.csv` → validated JSON.
+  - `festival:shift-dates <file> --start <YYYY-MM-DD>` — moves a demo festival so "now/next" states are live during review.
+  - `demo:seed` — demo festival + ≥ 2 fake member auth users/profiles + "Festie Demo Crew" group + their selections + a meetup with a totem photo by a fake member + location rows near stages.
+  - `reports:list`, `reports:remove-content <id>` (delete meetup + storage object, or clear the photo), `users:ban <user_id>` (`auth.admin.updateUserById(id, { ban_duration: '876000h' })`, remove memberships and location rows, mark reports actioned).
+- `docs/festival-data.md`: how to enter a real festival from public official schedules (factual data, nominative names, no logos/artwork, `source_url`).
 
-## 7. Verification gates (must pass before merge)
+## 7. Verification gates
 
-1. `npm run build` and `npm run lint` (tsc) — zero errors.
+1. `npm run build` and `npm run lint` — zero errors.
 2. `npm run test` — domain, sync-engine, data-access unit tests.
-3. `npm run db:test` — spins a throwaway local Postgres 16 (`/usr/lib/postgresql/16/bin`), loads `supabase/tests/local/supabase-stubs.sql` (roles `anon`/`authenticated`/`service_role`, `auth.users`, `auth.uid()`/`auth.jwt()`/`auth.role()` from `request.jwt.claims`, `storage.buckets`/`storage.objects`/`storage.foldername`, `extensions` schema with `uuid-ossp` + `pgcrypto`), applies migrations 001→007 in order, then runs `supabase/tests/rls.sql` assertions, and also re-applies 007 a second time to prove idempotency. Must cover every row of §2.5/§2.6 including negative cases (wildcard invite codes, self-insert into group_members, admin escalation, tampering with others' meetups, email column hidden, storage cross-group access, block filtering, account-deletion cascade).
-4. `deno check` on edge functions (if deno can be installed).
-5. `npx expo export --platform ios` in `apps/mobile` succeeds (Metro + Hermes bundle).
-6. `.github/workflows/ci.yml` runs gates 1–3 (and 5 if fast enough) on push/PR.
+3. `npm run db:test` — throwaway local Postgres 16 (`/usr/lib/postgresql/16/bin`, non-root OS user) or `DATABASE_URL` (CI service). `supabase/tests/local/supabase-stubs.sql` bootstraps:
+   - superuser `supabase_admin`; roles `anon`, `authenticated` (NOLOGIN), `service_role` (NOLOGIN BYPASSRLS), `authenticator` (LOGIN NOINHERIT, granted the three), `supabase_auth_admin`, `supabase_storage_admin`, and `postgres` as NOSUPERUSER CREATEROLE owning schema `public`;
+   - `alter database ... set search_path = "$user", public, extensions`; schema `extensions` with `uuid-ossp` and `pgcrypto`;
+   - usage on `public`, `extensions`, `auth`, `storage` for the API roles, plus Supabase's `alter default privileges for role postgres in schema public grant all on tables, sequences, functions to anon, authenticated, service_role`;
+   - `auth.users` (owned by `supabase_auth_admin`, `grant select, references to postgres`), `auth.uid()/role()/jwt()` reading `request.jwt.claims` (and legacy `request.jwt.claim.sub`);
+   - `storage.buckets`, `storage.objects` (with `owner`, `owner_id text`, `path_tokens`), RLS on, owned by `supabase_storage_admin`, `grant supabase_storage_admin to postgres`; `storage.foldername` exactly as Supabase defines it; a statement-level BEFORE DELETE trigger emulating `protect_delete`;
+   - a minimal pgTAP-compatible shim (`plan/ok/is/throws_ok/lives_ok/finish`) unless `postgresql-16-pgtap` is installed.
+   Then: apply 001→009 as `postgres`; apply a **dirty fixture** after 006 (case-duplicate emails, 81-char name, `pending-` code, duplicate location rows, permissive dashboard-style policies on `users` and `storage.objects`) before 007; run `supabase/tests/rls.sql`; re-apply 007–009 to prove idempotency. Impersonate with `set local role authenticated` + `set_config('request.jwt.claims', json_build_object('sub', …, 'role', 'authenticated', 'email', …)::text, true)`. Every negative assertion is paired with a positive control under the same identity. Covers every row of §2.4–§2.8, the function-exposure whitelist, rate limits (11th wrong invite → `rate_limited`), wildcard codes, admin hand-off races, account-deletion cascade (`set role supabase_auth_admin; delete from auth.users ...`), and moderation-trigger-vs-cascade.
+4. `deno check` + `deno test` for edge functions.
+5. `npx expo export --platform ios` in `apps/mobile`.
+6. `.github/workflows/ci.yml` runs gates 1–5 and the storage-SQL grep.
+7. Release gates (manual, in the runbook): ≥ 1 real upcoming festival published with `source_url`; hosted email templates send codes; demo login works on hosted; first TestFlight upload has no ITMS-91053; App Privacy answers match `docs/app-store-privacy.md`; age rating declares UGC and location sharing; festival times spot-checked on physical iOS and Android devices.
 
-## 8. Ownership map (who edits what during the overhaul)
+## 8. Ownership and interfaces
 
 | Slice | Owns |
 |---|---|
-| BE-DB | `supabase/migrations/**`, `supabase/tests/**`, `scripts/db-test.sh`, root `package.json` script `db:test`, `seed-data/**`, `apps/admin-tools/**`, `docs/festival-data.md` |
+| BE-DB | `supabase/migrations/**`, `supabase/tests/**`, `scripts/db-test.sh`, **all of root `package.json`**, `seed-data/**`, `apps/admin-tools/**`, `docs/festival-data.md` |
 | DA | `packages/data-access/**`, `packages/sync-engine/**`, `packages/domain/**`, `packages/map-utils/**` |
-| BE-FN | `supabase/functions/**`, `supabase/config.toml` |
-| MOBILE-A (shell) | `apps/mobile/app/_layout.tsx`, `app/index.tsx`, `app/+not-found.tsx`, `app/auth/**`, `app/settings/**`, `apps/mobile/src/providers/**`, `apps/mobile/src/config/**`, `packages/ui/**`, `apps/mobile/app.json`, `apps/mobile/eas.json`, `apps/mobile/package.json`, root `app.json`/`eas.json` deletion, template leftovers |
-| MOBILE-B (features) | `apps/mobile/app/(tabs)/**`, `apps/mobile/src/state/**`, `apps/mobile/src/location/**`, `apps/mobile/src/hooks/**`, `packages/notification-utils/**` |
-| DOCS | `docs/**` (except `festival-data.md`), `apps/mobile/app/legal/**`, `README.md`, `.github/workflows/ci.yml` |
+| BE-FN | `supabase/functions/**`, `supabase/config.toml`, `supabase/templates/**` |
+| MOBILE-A (shell) | `apps/mobile/app/_layout.tsx`, `app/index.tsx`, `app/+not-found.tsx`, `app/+native-intent.tsx`, `app/auth/**`, `app/settings/**`, `apps/mobile/src/providers/**`, `apps/mobile/src/config/**`, `packages/ui/**`, `apps/mobile/app.json`, `apps/mobile/app.config.ts`, `apps/mobile/eas.json`, `apps/mobile/package.json`, root `app.json`/`eas.json` deletion, template leftovers |
+| MOBILE-B (features) | `apps/mobile/app/(tabs)/**`, `apps/mobile/src/state/**`, `apps/mobile/src/location/**`, `apps/mobile/src/hooks/**`, `apps/mobile/src/components/**`, `packages/notification-utils/**` |
+| DOCS | `docs/**` (except `festival-data.md`, `v1-architecture.md`), `apps/mobile/app/legal/**`, `README.md`, `.github/workflows/ci.yml` |
+
+Interfaces between slices:
+
+- MOBILE-B `src/location/LocationSharingProvider.tsx` exports `LocationSharingProvider({ children })`, `useLocationSharing()` (§5.6), `stopLocationSharingNow(): Promise<void>`.
+- MOBILE-B `src/state/app-store.tsx` exports `AppStoreProvider`, `useAppStore` (persisted `activeFestivalId`, `selectedGroupId`, accent; default festival = first followed, else first published non-demo, else demo), `resetAppStore()`.
+- MOBILE-A `src/providers/app-providers.tsx` mounts `QueryClientProvider > AppStoreProvider > LocationSharingProvider > children`, exports `queryClient`; owns `session-actions.ts` and `app/+native-intent.tsx`.
+- MOBILE-B adds the header avatar button in `(tabs)/festivals/index.tsx` → `router.push('/settings')`.
+- `cancelAllReminders()` is called by the app orchestrator, never by data-access.
+- BE-FN's deploy script changes go into root `package.json` via BE-DB (or the integrator).
+- DOCS owns the legal copy; canonical location retention copy: "visible to your crew for at most 15 minutes after the last update, then deleted".
