@@ -21,8 +21,9 @@ export const colors = {
   /** Text — dark forest-green, matches reference #2C3327 */
   textPrimary: '#2C3327',
   /**
-   * Secondary text. Alpha 0.7 keeps ≥ 4.5:1 on white (5.07:1) and on every pastel
-   * `deriveAccentColors(accent).bgTint` / `surfaceTint` (worst case 4.73:1).
+   * Secondary text. Alpha 0.7 keeps ≥ 4.5:1 on white (5.07:1), on every pastel
+   * `deriveAccentColors(accent).bgTint` / `surfaceTint` (worst case 4.73:1) and on any
+   * admin-entered accent once `accessibleAccent` has lifted it (worst case 4.54:1).
    */
   textSecondary: 'rgba(44, 51, 39, 0.7)',
   /** TextInput placeholder — same contrast floor as secondary text. */
@@ -32,8 +33,8 @@ export const colors = {
 
   /**
    * Text links and secondary-button labels. Pastel `primary` and festival accents are
-   * fill-only and never used as text. Contrast: 6.46:1 on white, ≥ 6.03:1 on any pastel
-   * accent `bgTint`/`surfaceTint` (≥ 4.91:1 even on a 12% black tint).
+   * fill-only and never used as text. Contrast: 6.46:1 on white, ≥ 5.70:1 on any pastel
+   * accent `bgTint`/`surfaceTint`, ≥ 5.2:1 on any accent tint after `accessibleAccent`.
    */
   link: '#2F5DA8',
   linkPressed: '#244A87',
@@ -128,12 +129,62 @@ export const typography = {
 
 function parseHex(hex: string): [number, number, number] {
   const clean = hex.replace('#', '');
-  if (clean.length !== 6) return [178, 206, 254]; // #B2CEFE fallback
+  if (!/^[0-9A-Fa-f]{6}$/.test(clean)) return [178, 206, 254]; // #B2CEFE fallback
   return [
     parseInt(clean.slice(0, 2), 16),
     parseInt(clean.slice(2, 4), 16),
     parseInt(clean.slice(4, 6), 16),
   ];
+}
+
+function toHex([r, g, b]: [number, number, number]): string {
+  return `#${[r, g, b].map((channel) => channel.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+}
+
+/** WCAG 2.x relative luminance of an sRGB colour (0 = black, 1 = white). */
+function relativeLuminance([r, g, b]: [number, number, number]): number {
+  const linear = (channel: number) => {
+    const c = channel / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+}
+
+function mixTowardWhite(rgb: [number, number, number], amount: number): [number, number, number] {
+  return rgb.map((channel) => Math.round(channel + (255 - channel) * amount)) as [number, number, number];
+}
+
+/**
+ * Lowest relative luminance a festival accent may have. Every pastel accent in the design (#B2CEFE,
+ * #FFB3D9, #FFD6A5, #C8B6FF, …) is above it (≥ 0.53), so they are used unchanged. At this floor, for
+ * any hue: `textPrimary` on `solid` ≥ 6.8:1, `colors.link` ≥ 5.2:1 and `textSecondary` ≥ 4.5:1 on
+ * `bgTint` / `surfaceTint` / `chipBg` (also stacked: a tinted card on a tinted screen).
+ */
+export const MIN_ACCENT_LUMINANCE = 0.5;
+
+/**
+ * Returns a fill-safe version of a festival `accent_color`. `festival.accent_color` is free-form admin
+ * input, so a saturated or dark brand colour is mixed toward white (keeping its hue) just enough to
+ * reach `MIN_ACCENT_LUMINANCE`; pastel accents come back unchanged (upper-cased). Invalid input falls
+ * back to `colors.primary`. Idempotent.
+ */
+export function accessibleAccent(accentHex: string): string {
+  const rgb = parseHex(accentHex);
+  if (relativeLuminance(rgb) >= MIN_ACCENT_LUMINANCE) {
+    return toHex(rgb);
+  }
+  // Luminance grows monotonically with the white mix: bisect for the smallest sufficient amount.
+  let low = 0;
+  let high = 1;
+  for (let step = 0; step < 16; step += 1) {
+    const middle = (low + high) / 2;
+    if (relativeLuminance(mixTowardWhite(rgb, middle)) >= MIN_ACCENT_LUMINANCE) {
+      high = middle;
+    } else {
+      low = middle;
+    }
+  }
+  return toHex(mixTowardWhite(rgb, high));
 }
 
 export function rgba(hex: string, alpha: number): string {
@@ -142,25 +193,27 @@ export function rgba(hex: string, alpha: number): string {
 }
 
 /**
- * Derive soft tints from a festival's accent_color for festival-aware screens.
+ * Derive soft tints from a festival's accent_color for festival-aware screens. The accent is first
+ * passed through `accessibleAccent`, so the contrast guarantees above hold for any admin-entered colour.
  *
  * bgTint  → very soft screen background (replaces global colors.background)
- * solid   → the accent hex itself (for tab bar, icon boxes, CTA buttons)
+ * solid   → the (fill-safe) accent itself (for tab bar, icon boxes, CTA buttons; label with `textPrimary`)
  * shadow  → drop shadow colour matching the accent
  *
  * Accents are pastel and fill-only: never use `solid` as a text colour. `text` is kept for
  * backward compatibility and resolves to the accessible `colors.link`.
  */
 export function deriveAccentColors(accentHex: string) {
+  const accent = accessibleAccent(accentHex);
   return {
     /** ~5% opacity screen background */
-    bgTint: rgba(accentHex, 0.07),
+    bgTint: rgba(accent, 0.07),
     /** Card wash */
-    surfaceTint: rgba(accentHex, 0.12),
+    surfaceTint: rgba(accent, 0.12),
     /** Active chip fill */
-    chipBg: rgba(accentHex, 0.18),
-    solid: accentHex,
-    shadow: rgba(accentHex, 0.2),
+    chipBg: rgba(accent, 0.18),
+    solid: accent,
+    shadow: rgba(accent, 0.2),
     /** Readable text colour on any accent tint (accents themselves are never text). */
     text: colors.link,
   };

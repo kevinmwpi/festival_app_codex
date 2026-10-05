@@ -22,6 +22,7 @@ import { formatIssues, validateFestivalSeed } from './festival/validate';
 import { banUser, describeBan, resolveBanTarget } from './moderation/ban';
 import { formatReportTable, listReports, planContentRemoval, REPORT_STATUSES, type ReportStatus } from './moderation/reports';
 import { addTerms, listTerms, normalizeTerms, removeTerms } from './moderation/terms';
+import { storageSweepOrphans } from './storage/command';
 
 const HELP = `Festie admin tools (service role). Usage:
 
@@ -42,6 +43,9 @@ Moderation
   moderation:list-terms
   moderation:add-terms <term...> [--dry-run]
   moderation:remove-terms <term...> [--dry-run]
+
+Storage
+  storage:sweep-orphans [--dry-run]                Delete totem photos no meetup references (older than 24 h)
 
 Environment: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SECRET_KEY).
 See docs/festival-data.md.`;
@@ -302,6 +306,7 @@ const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
   'moderation:list-terms': moderationListTerms,
   'moderation:add-terms': (args) => moderationChangeTerms(args, 'add'),
   'moderation:remove-terms': (args) => moderationChangeTerms(args, 'remove'),
+  'storage:sweep-orphans': (args) => storageSweepOrphans(args, log),
 };
 
 export async function main(argv: string[]): Promise<number> {

@@ -1,8 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import { configureReminderNotifications } from '@festival/notification-utils';
+import { colors } from '@festival/ui';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { useSyncEventBridge } from '@/src/hooks/use-sync-events';
 import { useAppStore } from '@/src/state/app-store';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -18,21 +21,26 @@ const TAB_CONFIG: Record<string, { icon: IoniconName; iconFocused: IoniconName; 
 function TabIcon({ name, focused }: { name: string; focused: boolean }) {
   const cfg = TAB_CONFIG[name];
   if (!cfg) return null;
+  // Dark ink on the pastel accent keeps ≥ 4.5:1; unfocused tabs read as lighter ink, not lower opacity.
+  const tint = focused ? colors.textPrimary : colors.textSecondary;
   return (
     <View style={[styles.iconContainer, focused && styles.iconContainerFocused]}>
-      <Ionicons
-        name={focused ? cfg.iconFocused : cfg.icon}
-        size={26}
-        color={focused ? '#FFFFFF' : 'rgba(0,0,0,0.45)'}
-      />
-      <Text style={[styles.iconLabel, focused && styles.iconLabelFocused]}>{cfg.label}</Text>
+      <Ionicons name={focused ? cfg.iconFocused : cfg.icon} size={26} color={tint} />
+      <Text style={[styles.iconLabel, { color: tint }, focused && styles.iconLabelFocused]} allowFontScaling={false}>
+        {cfg.label}
+      </Text>
     </View>
   );
 }
 
 export default function TabLayout() {
-  // Tab bar background = selected festival accent colour, exactly as in the reference
+  // Tab bar background = selected festival accent colour (fill only), as in the reference.
   const accent = useAppStore((s) => s.activeFestivalAccent);
+
+  useSyncEventBridge();
+  React.useEffect(() => {
+    configureReminderNotifications();
+  }, []);
 
   return (
     <Tabs
@@ -64,7 +72,6 @@ export default function TabLayout() {
       <Tabs.Screen name="group"     options={{ title: 'Group',    tabBarIcon: ({ focused }) => <TabIcon name="group"     focused={focused} /> }} />
       <Tabs.Screen name="map"       options={{ title: 'Map',      tabBarIcon: ({ focused }) => <TabIcon name="map"       focused={focused} /> }} />
       <Tabs.Screen name="index" options={{ href: null }} />
-      <Tabs.Screen name="chat"  options={{ href: null }} />
     </Tabs>
   );
 }
@@ -73,21 +80,17 @@ const styles = StyleSheet.create({
   iconContainer: {
     alignItems: 'center',
     gap: 4,
-    opacity: 0.45,
   },
   iconContainerFocused: {
-    opacity: 1,
     transform: [{ scale: 1.1 }],
   },
   iconLabel: {
-    color: 'rgba(0,0,0,0.6)',
     fontSize: 9,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
   iconLabelFocused: {
-    color: '#FFFFFF',
     fontWeight: '800',
   },
 });

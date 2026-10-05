@@ -1,158 +1,169 @@
-import { useGroups } from '@festival/data-access';
-import { colors, deriveAccentColors, radii, spacing } from '@festival/ui';
+import {
+  Badge,
+  colors,
+  deriveAccentColors,
+  EmptyState,
+  layout,
+  radii,
+  spacing,
+  useOfflineStatus,
+} from '@festival/ui';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React from 'react';
-import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { ScreenHeader } from '@/src/components/ScreenHeader';
+import { ErrorState, LoadingState, StaleDataNote } from '@/src/components/StateViews';
+import { useFestivalsById, useGroups } from '@/src/hooks/use-groups';
+import { useLocationSharing } from '@/src/location/LocationSharingProvider';
 import { useAppStore } from '@/src/state/app-store';
-import { useQueryClient } from '@tanstack/react-query';
 
-/* ─── Screen ─────────────────────────────────────────────── */
+function CrewActions() {
+  return (
+    <View style={styles.actionRow}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Create a crew"
+        style={({ pressed }) => [styles.actionBtn, { backgroundColor: colors.primary }, pressed && styles.pressed]}
+        onPress={() => router.push('/(tabs)/group/create')}
+      >
+        <Ionicons name="add-circle-outline" size={18} color={colors.textPrimary} />
+        <Text style={styles.actionBtnLabel}>Create</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Join a crew with a code"
+        style={({ pressed }) => [styles.actionBtn, styles.actionBtnSecondary, pressed && styles.pressed]}
+        onPress={() => router.push('/(tabs)/group/join')}
+      >
+        <Ionicons name="enter-outline" size={18} color={colors.textPrimary} />
+        <Text style={styles.actionBtnLabel}>Join</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 export default function GroupsScreen() {
-  const groupsQuery = useGroups();
-  const queryClient = useQueryClient();
+  const groups = useGroups();
+  const festivalsById = useFestivalsById();
+  const sharing = useLocationSharing();
+  const isOffline = useOfflineStatus();
   const activeFestivalAccent = useAppStore((s) => s.activeFestivalAccent);
   const setSelectedGroupId = useAppStore((s) => s.setSelectedGroupId);
-
   const screenBg = deriveAccentColors(activeFestivalAccent).bgTint;
 
-  const handleRefresh = React.useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: ['groups'] });
-  }, [queryClient]);
+  const list = groups.data ?? [];
+  const hasGroups = list.length > 0;
 
-  const groups = groupsQuery.data ?? [];
-  const hasGroups = groups.length > 0;
+  let body: React.ReactNode;
+  if (groups.isLoading) {
+    body = <LoadingState label="Loading your crews…" />;
+  } else if (!hasGroups && groups.isRefreshing && !groups.hasRefreshed) {
+    body = <LoadingState label="Checking for your crews…" />;
+  } else if (!hasGroups && groups.refreshError && !isOffline) {
+    body = <ErrorState error={groups.refreshError} onRetry={() => void groups.refetch()} />;
+  } else if (!hasGroups) {
+    body = (
+      <View style={styles.emptyCard}>
+        <Ionicons name="people" size={48} color={colors.textPrimary} style={{ marginBottom: 4 }} />
+        <Text style={styles.emptyTitle} accessibilityRole="header">
+          Festival is better with friends
+        </Text>
+        <Text style={styles.emptyDesc}>
+          {isOffline
+            ? "You're offline. Crews you've joined appear here once you connect."
+            : 'Create a crew to compare schedules, plan meetups, and find each other on the map.'}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Create a crew"
+          style={({ pressed }) => [styles.createBtn, pressed && styles.pressed]}
+          onPress={() => router.push('/(tabs)/group/create')}
+        >
+          <Text style={styles.createBtnLabel}>Create Crew</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Join a crew with a code"
+          style={({ pressed }) => [styles.joinBtn, pressed && styles.pressed]}
+          onPress={() => router.push('/(tabs)/group/join')}
+        >
+          <Text style={styles.joinBtnLabel}>Join with Code</Text>
+        </Pressable>
+      </View>
+    );
+  } else {
+    body = (
+      <>
+        <CrewActions />
+        {list.map((group) => {
+          const festival = festivalsById.get(group.festival_id);
+          const memberLabel = `${group.member_count} member${Number(group.member_count) === 1 ? '' : 's'}`;
+          const sharingHere = sharing.groupId === group.id && sharing.status !== 'off';
+          return (
+            <Pressable
+              key={group.id}
+              accessibilityRole="button"
+              accessibilityLabel={`${group.name}, ${festival?.name ?? 'festival'}, ${memberLabel}${group.my_role === 'admin' ? ', you are an admin' : ''}${sharingHere ? ', sharing your location' : ''}`}
+              onPress={() => {
+                setSelectedGroupId(group.id);
+                router.push(`/(tabs)/group/${group.id}`);
+              }}
+              style={({ pressed }) => [styles.groupCard, pressed && { transform: [{ scale: 0.98 }] }]}
+            >
+              <View style={styles.groupIcon}>
+                <Ionicons name="people" size={22} color={colors.textPrimary} />
+              </View>
+              <View style={styles.groupBody}>
+                <Text style={styles.groupName} numberOfLines={2}>
+                  {group.name}
+                </Text>
+                <Text style={styles.groupMeta} numberOfLines={1}>
+                  {[festival?.name, memberLabel].filter(Boolean).join(' · ').toUpperCase()}
+                </Text>
+                <View style={styles.badges}>
+                  {group.my_role === 'admin' ? <Badge label="Admin" /> : null}
+                  {festival?.is_demo ? <Badge label="Sample" tone="sample" /> : null}
+                  {sharingHere ? <Badge label="Sharing location" tone="success" /> : null}
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            </Pressable>
+          );
+        })}
+        <StaleDataNote error={groups.refreshError} />
+      </>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: screenBg }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.wordmark}>Festie</Text>
-        <Text style={[styles.breadcrumb, { color: activeFestivalAccent }]}>My Group</Text>
-      </View>
-
+      <ScreenHeader crumbs={['My Crews']} />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={groupsQuery.isFetching} onRefresh={() => void handleRefresh()} tintColor={activeFestivalAccent} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={groups.isRefreshing && !groups.isLoading}
+            onRefresh={() => void groups.refetch()}
+            tintColor={colors.textPrimary}
+          />
+        }
       >
-        {/* Empty / no group state — matches reference "Festival is better with friends" card */}
-        {!hasGroups && !groupsQuery.isLoading && (
-          <View style={styles.emptyCard}>
-            <Ionicons name="people" size={48} color={colors.primary} style={{ marginBottom: 4 }} />
-            <Text style={styles.emptyTitle}>Festival is better with friends</Text>
-            <Text style={styles.emptyDesc}>
-              Create a group to compare schedules, plan meetups, and share your totem.
-            </Text>
-
-            <Pressable
-              style={({ pressed }) => [styles.createBtn, { backgroundColor: colors.primary }, pressed && { transform: [{ scale: 0.96 }] }]}
-              onPress={() => router.push('/(tabs)/group/create')}
-            >
-              <Text style={styles.createBtnLabel}>Create Group</Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [styles.joinBtn, pressed && { transform: [{ scale: 0.96 }] }]}
-              onPress={() => router.push('/(tabs)/group/join')}
-            >
-              <Text style={styles.joinBtnLabel}>Join with Code</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {/* Groups list */}
-        {hasGroups && (
-          <>
-            {/* Top action buttons */}
-            <View style={styles.actionRow}>
-              <Pressable
-                style={({ pressed }) => [styles.actionBtn, { backgroundColor: colors.primary }, pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] }]}
-                onPress={() => router.push('/(tabs)/group/create')}
-              >
-                <Ionicons name="add-circle-outline" size={18} color={colors.textPrimary} />
-                <Text style={styles.actionBtnLabel}>Create</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [styles.actionBtn, styles.actionBtnSecondary, pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] }]}
-                onPress={() => router.push('/(tabs)/group/join')}
-              >
-                <Ionicons name="enter-outline" size={18} color={colors.textPrimary} />
-                <Text style={styles.actionBtnLabel}>Join</Text>
-              </Pressable>
-            </View>
-
-            {/* Group cards — reference uses bg-[#FDFD96] yellow for group card */}
-            {groups.map((group) => (
-              <Pressable
-                key={group.id}
-                onPress={() => { setSelectedGroupId(group.id); router.push(`/(tabs)/group/${group.id}`); }}
-                style={({ pressed }) => [styles.groupCard, pressed && { transform: [{ scale: 0.98 }] }]}
-              >
-                {/* Member avatars row — DiceBear style */}
-                <View style={styles.memberRow}>
-                  <View style={styles.avatarCircle}>
-                    <Image
-                      source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${group.name}` }}
-                      style={styles.avatarImg}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.groupBody}>
-                  <Text style={styles.groupName}>{group.name}</Text>
-                  <Text style={styles.groupCode}>
-                    Invite Code: <Text style={styles.groupCodeValue}>{group.invite_code}</Text>
-                  </Text>
-                </View>
-
-                <Ionicons name="chevron-forward" size={18} color="rgba(44,51,39,0.3)" />
-              </Pressable>
-            ))}
-          </>
-        )}
-
-        {groupsQuery.isLoading && (
-          <View style={styles.loadingCard}>
-            <Text style={styles.loadingText}>Loading your groups…</Text>
-          </View>
-        )}
+        {body}
       </ScrollView>
     </View>
   );
 }
 
-/* ─── Styles ─────────────────────────────────────────────── */
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl + 4,
-    paddingBottom: spacing.sm,
-    gap: 4,
-  },
-  wordmark: {
-    fontFamily: 'Georgia',
-    fontStyle: 'italic',
-    fontSize: 40,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    letterSpacing: -0.5,
-  },
-  breadcrumb: {
-    fontSize: 11,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: spacing.lg, paddingBottom: 120, gap: spacing.md },
+  scrollContent: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: layout.tabBarClearance, gap: spacing.md },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
 
-  /* Empty state card */
   emptyCard: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
@@ -180,7 +191,10 @@ const styles = StyleSheet.create({
   createBtn: {
     width: '100%',
     alignItems: 'center',
+    backgroundColor: colors.primary,
     borderRadius: 16,
+    minHeight: layout.minTouchTarget,
+    justifyContent: 'center',
     paddingVertical: 16,
     shadowColor: '#000',
     shadowOpacity: 0.08,
@@ -193,13 +207,14 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     borderRadius: 16,
+    minHeight: layout.minTouchTarget,
+    justifyContent: 'center',
     paddingVertical: 16,
     borderWidth: 2,
     borderColor: colors.primary,
   },
-  joinBtnLabel: { color: colors.primary, fontSize: 13, fontWeight: '700' },
+  joinBtnLabel: { color: colors.link, fontSize: 13, fontWeight: '700' },
 
-  /* Action row (when groups exist) */
   actionRow: { flexDirection: 'row', gap: spacing.sm },
   actionBtn: {
     flex: 1,
@@ -208,7 +223,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     borderRadius: radii.xl,
-    paddingVertical: spacing.md,
+    minHeight: layout.minTouchTarget + 8,
     shadowColor: '#000',
     shadowOpacity: 0.06,
     shadowRadius: 6,
@@ -222,7 +237,7 @@ const styles = StyleSheet.create({
   },
   actionBtnLabel: { color: colors.textPrimary, fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1 },
 
-  /* Group card — reference: bg-[#FDFD96] (yellow), rounded-[40px] */
+  /* Crew card — reference yellow, 40px radius */
   groupCard: {
     backgroundColor: '#FDFD96',
     borderRadius: radii.card,
@@ -236,22 +251,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
-  memberRow: { flexDirection: 'row' },
-  avatarCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  groupIcon: {
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#FDFD96',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    borderRadius: 20,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
   },
-  avatarImg: { width: 40, height: 40 },
   groupBody: { flex: 1, gap: 4 },
   groupName: {
     color: colors.textPrimary,
@@ -260,9 +267,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
   },
-  groupCode: { color: colors.textSecondary, fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
-  groupCodeValue: { color: colors.textPrimary, fontWeight: '800' },
-
-  loadingCard: { backgroundColor: colors.surface, borderRadius: radii.card, padding: spacing.xl, alignItems: 'center' },
-  loadingText: { color: colors.textSecondary, fontSize: 14 },
+  groupMeta: { color: colors.textSecondary, fontSize: 10, fontWeight: '700', letterSpacing: 1 },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
 });

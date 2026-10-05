@@ -16,14 +16,28 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.kevin.festivalapp",
       "buildNumber": "1",
-      "config": {
-        "usesNonExemptEncryption": false
-      },
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Festie uses your location to show your position on the festival map and help friends find you.",
-        "NSCameraUsageDescription": "Festie needs camera access to take totem photos for meetup coordination.",
-        "NSPhotoLibraryUsageDescription": "Festie needs photo library access to select totem photos.",
         "ITSAppUsesNonExemptEncryption": false
+      },
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": ["35F9.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+            "NSPrivacyAccessedAPITypeReasons": ["E174.1", "85F4.1"]
+          }
+        ]
       }
     },
     "android": {
@@ -38,18 +52,15 @@
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA"
+      ],
+      "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.CAMERA",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO"
       ]
     },
     "web": {
@@ -64,14 +75,25 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow Festie to use your location to share with your group."
+          "locationWhenInUsePermission": "Festie uses your location while the app is open to show you on the festival map and, only when you turn on sharing, to show your position to members of the crew you choose.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Festie to access your photos for totem images.",
-          "cameraPermission": "Allow Festie to use your camera for totem photos."
+          "photosPermission": "Festie opens your photo library only when you choose a totem photo for a meetup, so your crew can spot where to meet.",
+          "cameraPermission": "Festie uses your camera only when you take a totem photo for a meetup, so your crew can spot where to meet.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsVersion": "11.18.2"
         }
       ],
       "expo-sharing",
@@ -79,7 +101,6 @@
       "expo-web-browser"
     ],
     "extra": {
-      "defaultFestivalId": "11111111-1111-4111-8111-111111111111",
       "eas": {
         "projectId": "59195106-7885-444b-8813-a6760fd93f4a"
       }

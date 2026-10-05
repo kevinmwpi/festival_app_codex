@@ -1,0 +1,88 @@
+import {
+  fetchAndCacheFestival,
+  getLocalFestivalBundle,
+  type Festival,
+  type FestivalBundle,
+} from '@festival/data-access';
+import {
+  festivalTimeZoneLabel,
+  formatFestivalDate,
+  formatFestivalTime,
+  formatFestivalTimeRange,
+  timesAreDeviceLocal,
+} from '@festival/domain';
+import { useMemo } from 'react';
+
+import { useAppStore } from '@/src/state/app-store';
+
+import { queryKeys } from './query-keys';
+import { useCacheFirstQuery } from './use-cache-first-query';
+
+/**
+ * A festival's cached bundle (festival, stages, artists, sets), refreshed in the background with the
+ * cheap version check of `fetchAndCacheFestival` (the full bundle only downloads when it changed).
+ */
+export function useFestivalBundle(festivalId: string | null | undefined) {
+  return useCacheFirstQuery<FestivalBundle | null>({
+    queryKey: queryKeys.festivalBundle(festivalId ?? 'none'),
+    readLocal: () => (festivalId ? getLocalFestivalBundle(festivalId) : Promise.resolve(null)),
+    refresh: festivalId ? () => fetchAndCacheFestival(festivalId) : undefined,
+    enabled: Boolean(festivalId),
+    refreshStaleTime: 5 * 60_000,
+  });
+}
+
+/** The active festival (app store) and its cached bundle. */
+export function useActiveFestival() {
+  const festivalId = useAppStore((state) => state.activeFestivalId);
+  const accent = useAppStore((state) => state.activeFestivalAccent);
+  const bundle = useFestivalBundle(festivalId);
+  return { festivalId, accent, bundle, festival: bundle.data?.festival ?? null };
+}
+
+export interface FestivalClock {
+  timeZone: string;
+  /** `true` when the festival zone cannot be resolved and times are in device time. */
+  deviceLocal: boolean;
+  /** Short zone label, e.g. `PDT` or `GMT+2`. */
+  label: string;
+  /** "Times shown in festival local time (PDT)" or the device-time variant (§5.5). */
+  hint: string;
+  time: (iso: string) => string;
+  range: (startIso: string, endIso: string) => string;
+  /** Formats a day key / date-only string / timestamp as a festival date. */
+  date: (value: string, options?: Intl.DateTimeFormatOptions) => string;
+}
+
+/** Festival-time formatting helpers (§4.3) bound to one festival's time zone. */
+export function useFestivalClock(festival: Pick<Festival, 'timezone'> | null | undefined): FestivalClock {
+  const timeZone = festival?.timezone ?? '';
+  return useMemo(() => {
+    const deviceLocal = timesAreDeviceLocal(timeZone);
+    const label = festivalTimeZoneLabel(timeZone);
+    return {
+      timeZone,
+      deviceLocal,
+      label,
+      hint: deviceLocal ? "Times shown in your device's time zone" : `Times shown in festival local time (${label})`,
+      time: (iso: string) => formatFestivalTime(iso, timeZone),
+      range: (startIso: string, endIso: string) => formatFestivalTimeRange(startIso, endIso, timeZone),
+      date: (value: string, options?: Intl.DateTimeFormatOptions) => formatFestivalDate(value, timeZone, options),
+    };
+  }, [timeZone]);
+}
+
+/** "Apr 10 – Apr 12, 2027" from date-only festival dates (calendar dates, time-zone independent). */
+export function formatFestivalDateRange(festival: Pick<Festival, 'start_date' | 'end_date' | 'timezone'>): string {
+  const sameYear = festival.start_date.slice(0, 4) === festival.end_date.slice(0, 4);
+  const start = formatFestivalDate(festival.start_date, festival.timezone, {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
+  if (festival.start_date === festival.end_date) {
+    return formatFestivalDate(festival.start_date, festival.timezone, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  const end = formatFestivalDate(festival.end_date, festival.timezone, { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${start} – ${end}`;
+}

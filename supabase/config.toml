@@ -1,9 +1,13 @@
+# Local development config for the Supabase CLI (`supabase start`, `supabase functions serve`).
+# The hosted project is aligned with `supabase config push` only after review (release runbook).
+# Reference: https://supabase.com/docs/guides/local-development/cli/config
 project_id = "festival-app"
 
 [api]
 enabled = true
 port = 54321
-schemas = ["public", "storage", "graphql_public"]
+# `storage` is deliberately not exposed: clients use the Storage API, never PostgREST on storage.*
+schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
@@ -16,12 +20,63 @@ major_version = 17
 enabled = true
 port = 54323
 
-[auth]
-enabled = true
-site_url = "http://localhost:8081"
-additional_redirect_urls = ["festivalapp://auth"]
-jwt_expiry = 3600
-
 [storage]
 enabled = true
 file_size_limit = "5MiB"
+
+[auth]
+enabled = true
+# Placeholder (non-localhost). Sign-in uses typed email codes, so no email contains a link to it;
+# the hosted value is set per the release runbook.
+site_url = "https://festivalapp.invalid"
+additional_redirect_urls = ["festivalapp://"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+enable_anonymous_sign_ins = false
+
+[auth.rate_limit]
+# Emails sent per hour (project-wide, needs custom SMTP on hosted).
+email_sent = 200
+# OTP verifications per 5 minutes per IP.
+token_verifications = 30
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+double_confirm_changes = true
+# 8 digits matches the hosted project (commit da99227) and the app's code field.
+otp_length = 8
+# Codes expire after 10 minutes.
+otp_expiry = 600
+
+# Sign-in code for an existing account (signInWithOtp).
+[auth.email.template.magic_link]
+subject = "Your Festie sign-in code"
+content_path = "./supabase/templates/magic_link.html"
+
+# Sign-in code for a brand-new account (first signInWithOtp for an address).
+[auth.email.template.confirmation]
+subject = "Your Festie sign-in code"
+content_path = "./supabase/templates/confirmation.html"
+
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+deno_version = 2
+
+# The function still checks the token itself (auth.getUser); the gateway check is defence in depth.
+[functions.delete-account]
+enabled = true
+verify_jwt = true
+import_map = "./functions/delete-account/deno.json"
+entrypoint = "./functions/delete-account/index.ts"
+
+# App Review sign-in: called before the reviewer has a session. Returns 404 unless
+# DEMO_LOGIN_EMAIL and DEMO_LOGIN_CODE are set as function secrets.
+[functions.demo-login]
+enabled = true
+verify_jwt = false
+import_map = "./functions/demo-login/deno.json"
+entrypoint = "./functions/demo-login/index.ts"

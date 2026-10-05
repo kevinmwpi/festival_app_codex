@@ -1,18 +1,24 @@
-import { Link, Stack } from 'expo-router';
-import { StyleSheet } from 'react-native';
+import { colors, EmptyState, PrimaryButton, spacing } from '@festival/ui';
+import { router, Stack } from 'expo-router';
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
 
-import { Text, View } from '@/components/Themed';
+import { resetTo } from '@/src/providers/launch-route';
 
 export default function NotFoundScreen() {
   return (
     <>
-      <Stack.Screen options={{ title: 'Oops!' }} />
+      <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.container}>
-        <Text style={styles.title}>This screen doesn't exist.</Text>
-
-        <Link href="/" style={styles.link}>
-          <Text style={styles.linkText}>Go to home screen!</Text>
-        </Link>
+        <EmptyState
+          title="Nothing here"
+          description="This link doesn't lead anywhere in Festie. It may be out of date."
+          action={
+            <View style={styles.action}>
+              <PrimaryButton label="Go to Festie" onPress={() => (router.canGoBack() ? router.back() : resetTo('/'))} />
+            </View>
+          }
+        />
       </View>
     </>
   );
@@ -20,21 +26,10 @@ export default function NotFoundScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: colors.background,
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: spacing.lg,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  link: {
-    marginTop: 15,
-    paddingVertical: 15,
-  },
-  linkText: {
-    fontSize: 14,
-    color: '#2e78b7',
-  },
+  action: { alignSelf: 'stretch', marginTop: spacing.md },
 });

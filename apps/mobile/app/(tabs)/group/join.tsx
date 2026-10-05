@@ -1,80 +1,106 @@
-import { joinGroupFromInvite } from '@festival/data-access';
-import { colors, FieldInput, FieldLabel, InlineMessage, PrimaryButton, Screen, SectionCard, spacing } from '@festival/ui';
-import { router } from 'expo-router';
+import { isWellFormedInviteCode, joinGroup, normaliseInviteCode, toUserMessage } from '@festival/data-access';
+import {
+  colors,
+  FieldInput,
+  FieldLabel,
+  InlineMessage,
+  layout,
+  PrimaryButton,
+  SectionCard,
+  spacing,
+  useOfflineStatus,
+} from '@festival/ui';
+import { useQueryClient } from '@tanstack/react-query';
+import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+
+import { SubScreenHeader } from '@/src/components/ScreenHeader';
+import { invalidateGroupQueries } from '@/src/hooks/query-keys';
+import { useAppStore } from '@/src/state/app-store';
+
+function firstParam(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value) ?? '';
+}
 
 export default function JoinGroupScreen() {
-  const [inviteCode, setInviteCode] = React.useState('');
+  const params = useLocalSearchParams<{ code?: string | string[] }>();
+  const queryClient = useQueryClient();
+  const isOffline = useOfflineStatus();
+  const setSelectedGroupId = useAppStore((state) => state.setSelectedGroupId);
+  // Pre-filled from an invite link; the user still confirms (never auto-joins).
+  const [inviteCode, setInviteCode] = React.useState(() => normaliseInviteCode(firstParam(params.code)).slice(0, 6));
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
+
+  const paramCode = firstParam(params.code);
+  React.useEffect(() => {
+    if (paramCode) {
+      setInviteCode(normaliseInviteCode(paramCode).slice(0, 6));
+      setError(null);
+    }
+  }, [paramCode]);
+
+  const wellFormed = isWellFormedInviteCode(inviteCode);
 
   const handleJoin = React.useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await joinGroupFromInvite(inviteCode.trim());
+      const result = await joinGroup(inviteCode);
+      setSelectedGroupId(result.group_id);
+      await invalidateGroupQueries(queryClient);
       router.replace(`/(tabs)/group/${result.group_id}`);
     } catch (joinError) {
-      setError(joinError instanceof Error ? joinError.message : 'Unable to join with that code.');
+      // InviteNotFoundError, rate_limited and group_full all map to specific copy.
+      setError(toUserMessage(joinError));
     } finally {
       setLoading(false);
     }
-  }, [inviteCode]);
+  }, [inviteCode, queryClient, setSelectedGroupId]);
 
   return (
-    <Screen scroll>
-      <View style={styles.header}>
-        <Text style={styles.title}>Join a Crew</Text>
-        <Text style={styles.subtitle}>ENTER YOUR INVITE CODE</Text>
-      </View>
-
-      <SectionCard subtitle="Codes are 6 characters and case-insensitive — paste or type whatever you received.">
-        <FieldLabel>Invite code</FieldLabel>
-        <FieldInput
-          autoCapitalize="characters"
-          autoCorrect={false}
-          onChangeText={setInviteCode}
-          placeholder="AB12CD"
-          value={inviteCode}
-          style={styles.codeInput}
-        />
-        <InlineMessage message={error} />
-        <PrimaryButton
-          disabled={loading || inviteCode.trim().length < 6}
-          label={loading ? 'Joining...' : 'Join group'}
-          loading={loading}
-          onPress={() => void handleJoin()}
-        />
-      </SectionCard>
-    </Screen>
+    <View style={styles.container}>
+      <SubScreenHeader title="Join a Crew" label="Enter your invite code" />
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <SectionCard subtitle="Codes are 6 letters and numbers. Paste or type the code a friend sent you.">
+          <FieldLabel>Invite code</FieldLabel>
+          <FieldInput
+            autoCapitalize="characters"
+            autoCorrect={false}
+            autoComplete="off"
+            onChangeText={(text) => {
+              setInviteCode(normaliseInviteCode(text).slice(0, 6));
+              setError(null);
+            }}
+            placeholder="AB12CD"
+            value={inviteCode}
+            style={styles.codeInput}
+            accessibilityLabel="Invite code"
+            returnKeyType="go"
+            onSubmitEditing={() => {
+              if (wellFormed && !loading) void handleJoin();
+            }}
+          />
+          {inviteCode.length === 6 && !wellFormed ? (
+            <InlineMessage message="That doesn't look like a Festie code. Check it and try again." />
+          ) : null}
+          {isOffline ? <InlineMessage tone="muted" message="Joining a crew needs a connection." /> : null}
+          <InlineMessage message={error} />
+          <PrimaryButton disabled={loading || !wellFormed} label="Join crew" loading={loading} onPress={() => void handleJoin()} />
+        </SectionCard>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: spacing.xs,
-    paddingBottom: spacing.sm,
-  },
-  title: {
-    color: colors.textPrimary,
-    fontSize: 28,
-    fontWeight: '700',
-    fontStyle: 'italic',
-  },
-  subtitle: {
-    color: colors.textSecondary,
-    fontSize: 10,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    marginTop: spacing.xs,
-  },
+  container: { backgroundColor: colors.background, flex: 1 },
+  content: { gap: spacing.md, padding: spacing.lg, paddingBottom: layout.tabBarClearance },
   codeInput: {
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: 6,
     textAlign: 'center',
-    textTransform: 'uppercase',
   },
 });

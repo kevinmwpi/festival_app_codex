@@ -12,9 +12,46 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from 'react-native';
-import { colors, radii, spacing } from './theme';
+import { accessibleAccent, colors, layout, radii, spacing } from './theme';
 
-export { colors, radii, spacing, typography, deriveAccentColors, rgba } from './theme';
+export {
+  accessibleAccent,
+  colors,
+  deriveAccentColors,
+  layout,
+  MIN_ACCENT_LUMINANCE,
+  radii,
+  rgba,
+  spacing,
+  typography,
+} from './theme';
+export {
+  Badge,
+  DestructiveButton,
+  IconButton,
+  ListRow,
+  ListSection,
+  ScreenHeader,
+  type BadgeProps,
+  type BadgeTone,
+  type DestructiveButtonProps,
+  type IconButtonProps,
+  type ListRowProps,
+  type ScreenHeaderProps,
+} from './controls';
+export {
+  Avatar,
+  AVATAR_EMOJIS,
+  AvatarPicker,
+  Checkbox,
+  checkboxLabelStyle,
+  getInitials,
+  type AvatarKind,
+  type AvatarPickerProps,
+  type AvatarProps,
+  type CheckboxProps,
+} from './identity';
+export { showToast, ToastHost, type ToastTone } from './toast';
 
 /* ─── Connectivity ──────────────────────────────────────── */
 
@@ -26,7 +63,7 @@ export function useOfflineStatus(): boolean {
 export function OfflineBanner({ visible, label = 'Offline — showing cached data' }: { visible: boolean; label?: string }) {
   if (!visible) return null;
   return (
-    <View style={styles.banner}>
+    <View style={styles.banner} accessibilityRole="alert">
       <Text style={styles.bannerText}>{label}</Text>
     </View>
   );
@@ -85,12 +122,19 @@ export function FieldLabel({ children }: PropsWithChildren) {
 }
 
 export function FieldInput(props: TextInputProps) {
-  return <TextInput placeholderTextColor="rgba(44,51,39,0.3)" style={styles.input} {...props} />;
+  return <TextInput placeholderTextColor={colors.placeholder} style={styles.input} {...props} />;
 }
 
 export function InlineMessage({ message, tone = 'error' }: { message?: string | null; tone?: 'error' | 'muted' }) {
   if (!message) return null;
-  return <Text style={tone === 'error' ? styles.errorText : styles.mutedText}>{message}</Text>;
+  return (
+    <Text
+      style={tone === 'error' ? styles.errorText : styles.mutedText}
+      accessibilityRole={tone === 'error' ? 'alert' : undefined}
+    >
+      {message}
+    </Text>
+  );
 }
 
 /* ─── Buttons ───────────────────────────────────────────── */
@@ -100,11 +144,15 @@ export function PrimaryButton({
 }: {
   label: string; onPress: () => void; disabled?: boolean; loading?: boolean; accentColor?: string;
 }) {
-  const bg = accentColor ?? colors.primary;
+  // The dark label must stay readable on any admin-entered festival accent.
+  const bg = accentColor ? accessibleAccent(accentColor) : colors.primary;
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: Boolean(disabled || loading), busy: Boolean(loading) }}
       style={({ pressed }) => [
         styles.primaryButton,
         { backgroundColor: bg },
@@ -121,10 +169,52 @@ export function PrimaryButton({
   );
 }
 
-export function SecondaryButton({ label, onPress }: { label: string; onPress: () => void }) {
+/**
+ * Outlined button; the label uses the accessible `colors.link` (pastel primary is border only).
+ * `disabled`, `loading` and `accessibilityLabel` are optional additions.
+ */
+export function SecondaryButton({
+  label, onPress, disabled, loading, accessibilityLabel,
+}: {
+  label: string; onPress: () => void; disabled?: boolean; loading?: boolean; accessibilityLabel?: string;
+}) {
+  const inactive = Boolean(disabled || loading);
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.7 }]}>
-      <Text style={styles.secondaryButtonLabel}>{label}</Text>
+    <Pressable
+      onPress={onPress}
+      disabled={inactive}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityState={{ disabled: inactive, busy: Boolean(loading) }}
+      style={({ pressed }) => [styles.secondaryButton, inactive && styles.buttonDisabled, pressed && { opacity: 0.7 }]}
+    >
+      {loading ? (
+        <ActivityIndicator color={colors.link} size="small" />
+      ) : (
+        <Text style={styles.secondaryButtonLabel}>{label}</Text>
+      )}
+    </Pressable>
+  );
+}
+
+/**
+ * Inline text link (e.g. "I already have a code", "Terms of Use"). Uses `colors.link` and gets a
+ * 44pt-tall hit area via hitSlop.
+ */
+export function TextLink({
+  label, onPress, accessibilityLabel,
+}: {
+  label: string; onPress: () => void; accessibilityLabel?: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="link"
+      accessibilityLabel={accessibilityLabel ?? label}
+      hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+      style={({ pressed }) => [styles.textLink, pressed && { opacity: 0.6 }]}
+    >
+      <Text style={styles.textLinkLabel}>{label}</Text>
     </Pressable>
   );
 }
@@ -136,13 +226,25 @@ export function Chip({
 }: {
   label: string; active?: boolean; onPress?: () => void; accentColor?: string;
 }) {
-  const activeBg = accentColor ?? colors.primary;
+  const activeBg = accentColor ? accessibleAccent(accentColor) : colors.primary;
   const content = (
     <View style={[styles.chip, active && { backgroundColor: activeBg }]}>
       <Text style={[styles.chipLabel, active ? styles.chipLabelActive : styles.chipLabelInactive]}>{label}</Text>
     </View>
   );
-  return onPress ? <Pressable onPress={onPress}>{content}</Pressable> : content;
+  return onPress ? (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
+    >
+      {content}
+    </Pressable>
+  ) : (
+    content
+  );
 }
 
 export function SegmentedControl<T extends string>({
@@ -162,6 +264,9 @@ export function SegmentedControl<T extends string>({
           <Pressable
             key={option.value}
             onPress={() => onChange(option.value)}
+            accessibilityRole="button"
+            accessibilityLabel={option.label}
+            accessibilityState={{ selected: active }}
             style={[styles.segment, active && styles.segmentActive]}
           >
             <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>{option.label}</Text>
@@ -243,7 +348,7 @@ const styles = StyleSheet.create({
   },
 
   /* Error / Muted */
-  errorText: { color: '#e53e3e', fontSize: 13 },
+  errorText: { color: colors.destructive, fontSize: 13 },
   mutedText: { color: colors.textSecondary, fontSize: 13 },
 
   /* Primary Button */
@@ -277,7 +382,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md + 2,
   },
-  secondaryButtonLabel: { color: colors.primary, fontSize: 13, fontWeight: '700' },
+  secondaryButtonLabel: { color: colors.link, fontSize: 13, fontWeight: '700' },
+
+  /* Text link */
+  textLink: { alignSelf: 'flex-start', minHeight: 20 },
+  textLinkLabel: { color: colors.link, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
 
   /* Chips — matches reference: inactive = white/surface, active = primary */
   chip: {
@@ -305,12 +414,14 @@ const styles = StyleSheet.create({
 
   /* Segments */
   segmented: { flexDirection: 'row', gap: spacing.sm },
+  /* Inactive segments read as faded via a translucent fill (not view opacity) so labels keep ≥ 4.5:1. */
   segment: {
-    backgroundColor: colors.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
     borderRadius: radii.md,
+    minHeight: layout.minTouchTarget,
+    justifyContent: 'center',
     paddingHorizontal: spacing.xl,
     paddingVertical: 10,
-    opacity: 0.5,
   },
   segmentActive: {
     backgroundColor: colors.primary,
@@ -321,6 +432,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-  segmentLabel: { color: colors.textPrimary, fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 2 },
+  segmentLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 2 },
   segmentLabelActive: { color: colors.textPrimary, fontWeight: '800' },
 });

@@ -18,7 +18,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
         */}
         <ScrollViewStyleReset />
 
-        {/* Using raw CSS styles as an escape-hatch to ensure the background color never flickers in dark-mode. */}
+        {/* Raw CSS so the background never flickers before the app renders. */}
         <style dangerouslySetInnerHTML={{ __html: responsiveBackground }} />
         {/* Add any additional <head> elements that you want globally available on web... */}
       </head>
@@ -27,12 +27,8 @@ export default function Root({ children }: { children: React.ReactNode }) {
   );
 }
 
+// The app is light-only (`userInterfaceStyle: "light"`); match the default screen background.
 const responsiveBackground = `
 body {
-  background-color: #fff;
-}
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #000;
-  }
+  background-color: #FFF5F9;
 }`;

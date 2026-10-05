@@ -1,75 +1,112 @@
-import { getUserFestivals, toggleUserFestival, useFestivals } from '@festival/data-access';
-import type { FestivalRow } from '@festival/data-access';
-import { colors, deriveAccentColors, radii, spacing } from '@festival/ui';
+import {
+  getLocalFestivals,
+  getLocalUserFestivals,
+  refreshFestivalCatalog,
+  refreshUserFestivals,
+  toggleUserFestival,
+  toUserMessage,
+  type Festival,
+} from '@festival/data-access';
+import {
+  Badge,
+  colors,
+  deriveAccentColors,
+  EmptyState,
+  IconButton,
+  layout,
+  radii,
+  SecondaryButton,
+  showToast,
+  spacing,
+  useOfflineStatus,
+} from '@festival/ui';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import React from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { Avatar } from '@/src/components/Avatar';
+import { FestivalDisclaimer } from '@/src/components/FestivalNotes';
+import { ScreenHeader } from '@/src/components/ScreenHeader';
+import { ErrorState, LoadingState, StaleDataNote } from '@/src/components/StateViews';
+import { queryKeys } from '@/src/hooks/query-keys';
+import { useCacheFirstQuery } from '@/src/hooks/use-cache-first-query';
 import { useCurrentProfile } from '@/src/hooks/use-current-profile';
-import { useAppStore } from '@/src/state/app-store';
-
-function formatDateRange(start: string, end: string): string {
-  const s = new Date(start);
-  const e = new Date(end);
-  return `${s.toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${e.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`;
-}
+import { formatFestivalDateRange } from '@/src/hooks/use-festival';
+import { useUserKey } from '@/src/hooks/use-session';
+import { ensureActiveFestival, useAppStore } from '@/src/state/app-store';
 
 function FestivalCard({
   festival,
-  isAttending,
+  isFollowing,
   isActive,
+  busy,
   onToggle,
   onSelect,
 }: {
-  festival: FestivalRow;
-  isAttending: boolean;
+  festival: Festival;
+  isFollowing: boolean;
   isActive: boolean;
+  busy: boolean;
   onToggle: () => void;
   onSelect: () => void;
 }) {
-  const accentHex = festival.accent_color ?? colors.primary;
-  const derived = deriveAccentColors(accentHex);
+  const accent = deriveAccentColors(festival.accent_color ?? colors.primary);
+  const dates = formatFestivalDateRange(festival);
+  const meta = [festival.venue_name, dates].filter(Boolean).join(' • ');
 
   return (
     <Pressable
       onPress={onSelect}
+      accessibilityRole="button"
+      accessibilityLabel={`${festival.name}${festival.is_demo ? ', sample festival' : ''}, ${meta}`}
+      accessibilityHint="Opens this festival's lineup"
+      accessibilityState={{ selected: isActive }}
       style={({ pressed }) => [
         styles.card,
-        // card background = soft tint of festival accent, exactly as reference: style={{ backgroundColor: fest.bg }}
-        { backgroundColor: derived.bgTint || '#FFF5F9' },
+        // Card background = soft tint of the festival accent, as in the reference.
+        { backgroundColor: accent.bgTint },
         isActive && styles.cardActive,
         pressed && { transform: [{ scale: 0.98 }] },
       ]}
     >
       <View style={styles.cardInner}>
-        {/* Festival icon box — solid accent, matches reference w-16 h-16 rounded-3xl */}
-        <View style={[styles.iconBox, { backgroundColor: accentHex }]}>
-          <Ionicons name="flag" size={28} color="rgba(255,255,255,0.9)" />
+        <View style={[styles.iconBox, { backgroundColor: accent.solid }]}>
+          <Ionicons name="flag" size={28} color={colors.textPrimary} />
         </View>
 
-        {/* Text block */}
         <View style={styles.cardText}>
-          <Text style={styles.festivalName} numberOfLines={2}>{festival.name}</Text>
-          <Text style={styles.festivalMeta}>
-            {[festival.venue_name, formatDateRange(festival.start_date, festival.end_date)]
-              .filter(Boolean).join(' • ').toUpperCase()}
+          {festival.is_demo ? <Badge label="Sample" tone="sample" /> : null}
+          <Text style={styles.festivalName} numberOfLines={2}>
+            {festival.name}
           </Text>
+          <Text style={styles.festivalMeta}>{meta.toUpperCase()}</Text>
         </View>
 
-        {/* Attending toggle — white border, green check / gray plus */}
         <Pressable
-          onPress={(e) => { e.stopPropagation(); onToggle(); }}
+          onPress={(event) => {
+            event.stopPropagation();
+            onToggle();
+          }}
+          disabled={busy}
+          accessibilityRole="button"
+          accessibilityLabel={isFollowing ? `Unfollow ${festival.name}` : `Follow ${festival.name}`}
+          accessibilityState={{ selected: isFollowing, busy }}
+          hitSlop={4}
           style={({ pressed }) => [
             styles.toggleButton,
-            isAttending ? styles.toggleAttending : styles.toggleNotAttending,
+            isFollowing ? styles.toggleFollowing : styles.toggleNotFollowing,
             pressed && { transform: [{ scale: 0.88 }] },
           ]}
         >
-          {isAttending
-            ? <Ionicons name="checkmark" size={20} color="#FFFFFF" />
-            : <Ionicons name="add" size={20} color={colors.textSecondary} />}
+          {busy ? (
+            <ActivityIndicator size="small" color={colors.textPrimary} />
+          ) : isFollowing ? (
+            <Ionicons name="checkmark" size={20} color={colors.textPrimary} />
+          ) : (
+            <Ionicons name="add" size={20} color={colors.textPrimary} />
+          )}
         </Pressable>
       </View>
     </Pressable>
@@ -78,74 +115,123 @@ function FestivalCard({
 
 export default function FestivalsScreen() {
   const queryClient = useQueryClient();
-  const profileQuery = useCurrentProfile();
-  const userId = profileQuery.data?.id ?? '';
-  const festivalsQuery = useFestivals();
+  const userKey = useUserKey();
+  const isOffline = useOfflineStatus();
+  const profile = useCurrentProfile().data;
   const activeFestivalId = useAppStore((s) => s.activeFestivalId);
+  const setActiveFestival = useAppStore((s) => s.setActiveFestival);
   const activeFestivalAccent = useAppStore((s) => s.activeFestivalAccent);
-  const setActiveFestival = useAppStore((s) => s.setActiveFestivalId);
-  const setActiveFestivalAccent = useAppStore((s) => s.setActiveFestivalAccent);
-
-  // Screen bg derived from active festival accent
   const screenBg = deriveAccentColors(activeFestivalAccent).bgTint;
+  const [busyId, setBusyId] = React.useState<string | null>(null);
 
-  const userFestivalsQuery = useQuery({
-    queryKey: ['user-festivals', userId],
-    queryFn: () => getUserFestivals(userId),
-    enabled: !!userId,
+  const catalog = useCacheFirstQuery({
+    queryKey: queryKeys.festivals(),
+    readLocal: getLocalFestivals,
+    refresh: async () => {
+      await refreshFestivalCatalog();
+      await ensureActiveFestival();
+    },
   });
 
-  const attendingIds = React.useMemo(
-    () => new Set((userFestivalsQuery.data ?? []).map((uf) => uf.festival_id)),
-    [userFestivalsQuery.data],
+  const following = useCacheFirstQuery({
+    queryKey: queryKeys.userFestivals(userKey),
+    readLocal: getLocalUserFestivals,
+    refresh: async () => {
+      await refreshUserFestivals();
+      await ensureActiveFestival();
+    },
+  });
+
+  const festivals = React.useMemo(() => {
+    const list = catalog.data ?? [];
+    // Demo ("Sample") festivals always sort last; otherwise keep the cache order (by start date).
+    return [...list].sort((left, right) => Number(left.is_demo) - Number(right.is_demo));
+  }, [catalog.data]);
+
+  const followingIds = React.useMemo(
+    () => new Set((following.data ?? []).map((row) => row.festival_id)),
+    [following.data],
   );
 
-  const handleToggle = React.useCallback(async (festivalId: string) => {
-    if (!userId) return;
-    await toggleUserFestival(userId, festivalId);
-    await queryClient.invalidateQueries({ queryKey: ['user-festivals', userId] });
-  }, [userId, queryClient]);
+  const handleToggle = React.useCallback(
+    async (festival: Festival) => {
+      setBusyId(festival.id);
+      try {
+        const nowFollowing = await toggleUserFestival(festival.id);
+        await queryClient.invalidateQueries({ queryKey: queryKeys.userFestivals(userKey) });
+        await ensureActiveFestival();
+        showToast(nowFollowing ? `Following ${festival.name}.` : `Unfollowed ${festival.name}.`);
+      } catch (error) {
+        showToast(toUserMessage(error), 'error');
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [queryClient, userKey],
+  );
 
-  const handleSelect = React.useCallback((festival: FestivalRow) => {
-    setActiveFestival(festival.id);
-    setActiveFestivalAccent(festival.accent_color ?? colors.primary);
-    router.push('/(tabs)/lineup');
-  }, [setActiveFestival, setActiveFestivalAccent]);
+  const handleSelect = React.useCallback(
+    (festival: Festival) => {
+      setActiveFestival(festival);
+      router.navigate('/(tabs)/lineup');
+    },
+    [setActiveFestival],
+  );
 
   const handleRefresh = React.useCallback(async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['festivals'] }),
-      queryClient.invalidateQueries({ queryKey: ['user-festivals', userId] }),
-    ]);
-  }, [queryClient, userId]);
+    await Promise.all([catalog.refetch(), following.refetch()]);
+  }, [catalog, following]);
 
-  const festivals = festivalsQuery.data ?? [];
-  const attendingCount = attendingIds.size;
+  const activeName = festivals.find((festival) => festival.id === activeFestivalId)?.name;
+  const isEmpty = festivals.length === 0;
+
+  let emptyContent: React.ReactNode = null;
+  if (isEmpty) {
+    if (catalog.isLoading || (catalog.isRefreshing && !catalog.hasRefreshed)) {
+      emptyContent = <LoadingState label="Loading festivals…" />;
+    } else if (isOffline) {
+      emptyContent = (
+        <EmptyState
+          title="You're offline"
+          description="Connect to the internet once to download the festival list. After that it works without signal."
+        />
+      );
+    } else if (catalog.refreshError) {
+      emptyContent = <ErrorState error={catalog.refreshError} onRetry={() => void catalog.refetch()} />;
+    } else {
+      emptyContent = (
+        <EmptyState
+          title="No festivals yet"
+          description="Festivals appear here as soon as their schedules are published. Pull down to check again."
+        />
+      );
+    }
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: screenBg }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.wordmark}>Festie</Text>
-        <View style={styles.breadcrumb}>
-          <Text style={[styles.breadcrumbActive, { color: activeFestivalAccent }]}>Explore Festivals</Text>
-          {activeFestivalId && (
-            <>
-              <Text style={styles.breadcrumbSep}>›</Text>
-              <Text style={styles.breadcrumbItem} numberOfLines={1}>
-                {festivals.find(f => f.id === activeFestivalId)?.name ?? ''}
-              </Text>
-            </>
-          )}
-        </View>
-      </View>
+      <ScreenHeader
+        crumbs={['Explore Festivals', activeName]}
+        right={
+          <IconButton
+            icon={
+              <Avatar
+                name={profile?.display_name}
+                avatarType={profile?.avatar_type}
+                avatarValue={profile?.avatar_value}
+                colorKey={profile?.id}
+                size={38}
+              />
+            }
+            accessibilityLabel="Settings and profile"
+            onPress={() => router.push('/settings')}
+          />
+        }
+      />
 
-      {/* Count bar */}
       <View style={styles.countBar}>
         <Text style={styles.countLabel}>All Events</Text>
-        <Text style={[styles.countAttending, { color: activeFestivalAccent }]}>
-          {attendingCount} Attending
-        </Text>
+        <Text style={styles.countFollowing}>{followingIds.size} Following</Text>
       </View>
 
       <ScrollView
@@ -154,30 +240,29 @@ export default function FestivalsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={festivalsQuery.isFetching}
+            refreshing={catalog.isRefreshing && !catalog.isLoading}
             onRefresh={() => void handleRefresh()}
-            tintColor={activeFestivalAccent}
+            tintColor={colors.textPrimary}
           />
         }
       >
-        {festivals.length === 0 && !festivalsQuery.isLoading ? (
-          <View style={styles.empty}>
-            <Ionicons name="flag-outline" size={48} color={colors.textSecondary} style={{ opacity: 0.3, marginBottom: 8 }} />
-            <Text style={styles.emptyTitle}>No festivals yet</Text>
-            <Text style={styles.emptyDesc}>Festival data will appear here once synced.</Text>
-          </View>
-        ) : (
-          festivals.map((festival) => (
-            <FestivalCard
-              key={festival.id}
-              festival={festival}
-              isAttending={attendingIds.has(festival.id)}
-              isActive={festival.id === activeFestivalId}
-              onToggle={() => void handleToggle(festival.id)}
-              onSelect={() => handleSelect(festival)}
-            />
-          ))
-        )}
+        {emptyContent}
+        {festivals.map((festival) => (
+          <FestivalCard
+            key={festival.id}
+            festival={festival}
+            isFollowing={followingIds.has(festival.id)}
+            isActive={festival.id === activeFestivalId}
+            busy={busyId === festival.id}
+            onToggle={() => void handleToggle(festival)}
+            onSelect={() => handleSelect(festival)}
+          />
+        ))}
+        {!isEmpty ? <StaleDataNote error={catalog.refreshError ?? following.refreshError} /> : null}
+        {!isEmpty && catalog.localError ? (
+          <SecondaryButton label="Reload festivals" onPress={() => void catalog.refetch()} />
+        ) : null}
+        <FestivalDisclaimer />
       </ScrollView>
     </View>
   );
@@ -185,44 +270,6 @@ export default function FestivalsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-
-  header: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl + 4,
-    paddingBottom: spacing.xs,
-    gap: 4,
-  },
-  wordmark: {
-    fontFamily: 'Georgia',
-    fontStyle: 'italic',
-    fontSize: 40,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    letterSpacing: -0.5,
-  },
-  breadcrumb: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  breadcrumbActive: {
-    fontSize: 11,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  breadcrumbSep: {
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  breadcrumbItem: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    flex: 1,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
 
   countBar: {
     flexDirection: 'row',
@@ -238,7 +285,8 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     color: colors.textSecondary,
   },
-  countAttending: {
+  countFollowing: {
+    color: colors.textPrimary,
     fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -248,11 +296,11 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: 120,
+    paddingBottom: layout.tabBarClearance,
     gap: spacing.md,
   },
 
-  /* Festival card — matches reference: bg = fest.bg, rounded-[40px], flex items-center justify-between */
+  /* Festival card — bg = festival tint, rounded-[40px] */
   card: {
     borderRadius: radii.card,
     borderWidth: 2,
@@ -276,7 +324,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
   },
-  /* Icon box: w-16 h-16 rounded-3xl */
   iconBox: {
     width: 64,
     height: 64,
@@ -302,11 +349,9 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 9,
     fontWeight: '700',
-    textTransform: 'uppercase',
     letterSpacing: 1.5,
-    opacity: 0.6,
   },
-  /* Toggle — w-12 h-12 rounded-2xl border-4 border-white */
+  /* Follow toggle — 48×48, white border */
   toggleButton: {
     width: 48,
     height: 48,
@@ -321,26 +366,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  toggleAttending: { backgroundColor: colors.success },
-  toggleNotAttending: { backgroundColor: '#FFFFFF' },
-
-  /* Empty */
-  empty: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.borderCard,
-    padding: spacing.xxxl,
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  emptyTitle: {
-    color: colors.textPrimary,
-    fontFamily: 'Georgia',
-    fontStyle: 'italic',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  emptyDesc: { color: colors.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  toggleFollowing: { backgroundColor: colors.success },
+  toggleNotFollowing: { backgroundColor: '#FFFFFF' },
 });

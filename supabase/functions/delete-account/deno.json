@@ -1,0 +1,7 @@
+{
+  "imports": {
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.99.3",
+    "@std/assert": "jsr:@std/assert@1"
+  },
+  "lock": false
+}

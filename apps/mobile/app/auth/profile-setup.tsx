@@ -1,121 +1,96 @@
-import { saveProfile } from '@festival/data-access';
-import { colors, FieldInput, InlineMessage, PrimaryButton } from '@festival/ui';
-import { useQueryClient } from '@tanstack/react-query';
-import { router } from 'expo-router';
+import { Checkbox, checkboxLabelStyle, colors, InlineMessage, PrimaryButton, spacing, TextLink } from '@festival/ui';
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-const EMOJIS = ['🎧', '🪩', '🌞', '🌈', '🛼', '🦋', '🌊', '🔥', '🪐', '🍓', '🎸', '🎹', '🥁', '🎷', '🍒', '⚡', '🌻', '🌙', '🛸', '🍑'];
-
-const MAX_DISPLAY_NAME_LENGTH = 80;
+import { openPrivacyPolicy, openTermsOfUse } from '@/src/providers/external-links';
+import { resetTo } from '@/src/providers/launch-route';
+import { ProfileFields, useProfileForm } from '@/src/providers/profile-form';
+import { performSignOut, signOutErrorMessage } from '@/src/providers/session-actions';
 
 export default function ProfileSetupScreen() {
-  const queryClient = useQueryClient();
-  const [displayName, setDisplayName] = React.useState('');
-  const [selectedEmoji, setSelectedEmoji] = React.useState<string | null>('🎧');
-  const [error, setError] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(false);
-
-  const initials = React.useMemo(() => {
-    return displayName
-      .split(' ')
-      .map((part) => part.trim()[0] ?? '')
-      .join('')
-      .slice(0, 2)
-      .toUpperCase();
-  }, [displayName]);
+  const form = useProfileForm(null);
+  const [agreed, setAgreed] = React.useState(false);
+  const [signingOut, setSigningOut] = React.useState(false);
 
   const handleSave = React.useCallback(async () => {
-    const trimmedName = displayName.trim();
-    if (trimmedName.length > MAX_DISPLAY_NAME_LENGTH) {
-      setError(`Display name must be ${MAX_DISPLAY_NAME_LENGTH} characters or fewer.`);
+    if (!agreed) {
+      form.setError('Please agree to the Terms of Use and Privacy Policy to continue.');
       return;
     }
-    setLoading(true);
-    setError(null);
-    try {
-      await saveProfile({
-        display_name: trimmedName,
-        avatar_type: selectedEmoji ? 'emoji' : 'initials',
-        avatar_value: selectedEmoji ?? (initials || 'FA'),
-      });
-      await queryClient.invalidateQueries({ queryKey: ['profile'] });
-      router.replace('/(tabs)/festivals');
-    } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : 'Unable to save your profile.');
-    } finally {
-      setLoading(false);
+    const saved = await form.save();
+    if (saved) {
+      // The launch route continues to the join screen for a remembered invite, or into the app.
+      resetTo('/');
     }
-  }, [displayName, initials, queryClient, selectedEmoji]);
+  }, [agreed, form]);
+
+  const handleSignOut = React.useCallback(() => {
+    setSigningOut(true);
+    performSignOut('sign_out').catch((error: unknown) => {
+      setSigningOut(false);
+      form.setError(signOutErrorMessage(error));
+    });
+  }, [form]);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
-      <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Your Profile</Text>
-          <Text style={styles.subtitle}>
-            Pick a name and avatar so your crew can spot you.
-          </Text>
-        </View>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.title} accessibilityRole="header">Your Profile</Text>
+            <Text style={styles.subtitle}>Pick a name and avatar so your crew can spot you.</Text>
+          </View>
 
-        {/* Name */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>DISPLAY NAME</Text>
-          <FieldInput
-            onChangeText={setDisplayName}
-            placeholder="Festival alias"
-            value={displayName}
-            style={styles.nameInput}
-          />
-        </View>
+          <ProfileFields form={form} />
 
-        {/* Avatar preview */}
-        <View style={styles.avatarPreview}>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>
-              {selectedEmoji ?? (initials || 'FA')}
+          <View style={styles.terms}>
+            <Checkbox
+              checked={agreed}
+              onChange={(next) => {
+                setAgreed(next);
+                if (next) form.setError(null);
+              }}
+              accessibilityLabel="I agree to the Terms of Use and Privacy Policy"
+              accessibilityActions={[
+                { name: 'openTerms', label: 'Open Terms of Use' },
+                { name: 'openPrivacy', label: 'Open Privacy Policy' },
+              ]}
+              onAccessibilityAction={(action) => {
+                if (action === 'openTerms') openTermsOfUse();
+                if (action === 'openPrivacy') openPrivacyPolicy();
+              }}
+              label={
+                <Text style={checkboxLabelStyle}>
+                  I agree to the{' '}
+                  <Text style={styles.link} onPress={openTermsOfUse} accessibilityRole="link">
+                    Terms of Use
+                  </Text>{' '}
+                  and{' '}
+                  <Text style={styles.link} onPress={openPrivacyPolicy} accessibilityRole="link">
+                    Privacy Policy
+                  </Text>
+                </Text>
+              }
+            />
+            <Text style={styles.termsNote}>
+              No harassment, hate or explicit content. You can report or block anyone, and we review reports within 24 hours.
             </Text>
           </View>
-        </View>
 
-        {/* Emoji Grid */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>CHOOSE AVATAR</Text>
-          <View style={styles.emojiGrid}>
-            {EMOJIS.map((emoji) => {
-              const selected = emoji === selectedEmoji;
-              return (
-                <Pressable
-                  key={emoji}
-                  onPress={() => setSelectedEmoji(emoji)}
-                  style={[styles.emojiCell, selected && styles.emojiCellSelected]}
-                >
-                  <Text style={styles.emoji}>{emoji}</Text>
-                </Pressable>
-              );
-            })}
+          <InlineMessage message={form.error} />
+          <PrimaryButton
+            disabled={!form.nameValid || !agreed}
+            loading={form.saving}
+            label="Let's go"
+            onPress={() => void handleSave()}
+          />
+          <View style={styles.signOutRow}>
+            <TextLink label={signingOut ? 'Signing out…' : 'Sign out'} onPress={signingOut ? () => undefined : handleSignOut} />
           </View>
         </View>
-
-        {/* Initials option */}
-        <Pressable
-          onPress={() => setSelectedEmoji(null)}
-          style={[styles.initialsCard, !selectedEmoji && styles.initialsCardSelected]}
-        >
-          <Text style={styles.initialsLabel}>Use initials instead</Text>
-          <Text style={styles.initialsValue}>{initials || 'FA'}</Text>
-        </Pressable>
-
-        <InlineMessage message={error} />
-        <PrimaryButton
-          disabled={displayName.trim().length < 2}
-          loading={loading}
-          label="Let's go"
-          onPress={handleSave}
-        />
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -125,19 +100,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   contentContainer: {
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.xl,
     paddingTop: 60,
-    paddingBottom: 40,
+    paddingBottom: spacing.xxxl,
   },
   content: {
-    gap: 20,
+    gap: spacing.lg,
   },
   header: {
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   title: {
+    fontFamily: 'Georgia',
     fontSize: 32,
     fontWeight: '700',
     fontStyle: 'italic',
@@ -149,85 +125,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  field: {
-    gap: 8,
-  },
-  fieldLabel: {
-    color: colors.textSecondary,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 2,
-  },
-  nameInput: {
-    paddingVertical: 18,
-    borderRadius: 16,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  avatarPreview: {
-    alignItems: 'center',
-  },
-  avatarCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 28,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
-  },
-  avatarText: {
-    fontSize: 32,
-  },
-  emojiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  emojiCell: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.borderCard,
-    borderRadius: 16,
-    borderWidth: 1,
-    justifyContent: 'center',
-    paddingVertical: 10,
-    width: '18%',
-  },
-  emojiCellSelected: {
-    borderColor: colors.primary,
-    borderWidth: 2,
-    backgroundColor: '#F0F4FF',
-  },
-  emoji: {
-    fontSize: 24,
-  },
-  initialsCard: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.borderCard,
-    borderWidth: 1,
-    borderRadius: 16,
-    gap: 4,
-    padding: 14,
-  },
-  initialsCardSelected: {
-    borderColor: colors.primary,
-    borderWidth: 2,
-    backgroundColor: '#F0F4FF',
-  },
-  initialsLabel: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  initialsValue: {
-    color: colors.textPrimary,
-    fontSize: 24,
-    fontWeight: '700',
-  },
+  terms: { gap: spacing.xs },
+  link: { color: colors.link, fontWeight: '700', textDecorationLine: 'underline' },
+  termsNote: { color: colors.textSecondary, fontSize: 12, lineHeight: 17, paddingLeft: 36 },
+  signOutRow: { alignItems: 'center' },
 });

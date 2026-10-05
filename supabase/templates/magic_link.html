@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<meta name="format-detection" content="telephone=no, date=no, address=no, email=no, url=no">
+<title>Your Festie sign-in code</title>
+</head>
+<body style="margin:0;padding:0;background-color:#FFF5F9;color:#2C3327;-webkit-text-size-adjust:100%;">
+<!-- Sign-in code for an existing account: shows the 8-digit code only. No links or buttons, by design: the code is typed into the app. -->
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">Your Festie code is {{ .Token }}. It expires in 10 minutes.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#FFF5F9;">
+<tr>
+<td align="center" style="padding:40px 16px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;background-color:#FFFFFF;border-radius:40px;border:1px solid #F3E6EC;">
+<tr>
+<td style="padding:40px 32px 36px 32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<p style="margin:0 0 12px 0;font-size:10px;line-height:14px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#5F665A;">Sign in</p>
+<h1 style="margin:0 0 16px 0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-weight:700;font-size:30px;line-height:36px;color:#2C3327;">Your sign-in code</h1>
+<p style="margin:0 0 28px 0;font-size:16px;line-height:24px;color:#2C3327;">Enter this code in the Festie app to sign in.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+<td align="center" style="background-color:#B2CEFE;border-radius:24px;padding:22px 12px;">
+<p style="margin:0 0 6px 0;font-size:10px;line-height:14px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#2C3327;">Your code</p>
+<p style="margin:0;font-family:'SF Mono',Menlo,Consolas,'Courier New',monospace;font-size:32px;line-height:40px;font-weight:700;letter-spacing:6px;color:#2C3327;">{{ .Token }}</p>
+</td>
+</tr>
+</table>
+<p style="margin:28px 0 0 0;font-size:14px;line-height:21px;color:#5F665A;">This code expires in 10 minutes and works once. Festie will never ask you for it outside the app.</p>
+<p style="margin:12px 0 0 0;font-size:14px;line-height:21px;color:#5F665A;">Didn't try to sign in? You can safely ignore this email &mdash; nobody can get into your account without the code.</p>
+</td>
+</tr>
+</table>
+<p style="margin:20px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:10px;line-height:14px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#5F665A;">Festie &middot; plan your festival with your crew</p>
+</td>
+</tr>
+</table>
+</body>
+</html>

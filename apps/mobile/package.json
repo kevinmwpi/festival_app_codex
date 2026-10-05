@@ -17,6 +17,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@expo/vector-icons": "^15.1.1",
     "@festival/data-access": "*",
     "@festival/domain": "*",
     "@festival/map-utils": "*",
@@ -30,11 +31,11 @@
     "@supabase/supabase-js": "^2.99.3",
     "@tanstack/react-query": "^5.94.5",
     "expo": "~55.0.12",
+    "expo-application": "~55.0.13",
     "expo-constants": "~55.0.9",
     "expo-dev-client": "~55.0.23",
     "expo-font": "~55.0.4",
     "expo-image-picker": "~55.0.17",
-    "expo-insights": "~55.0.15",
     "expo-linking": "~55.0.11",
     "expo-location": "~55.1.7",
     "expo-notifications": "~55.0.17",

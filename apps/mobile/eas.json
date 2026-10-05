@@ -7,16 +7,19 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "environment": "development",
       "ios": {
         "simulator": true
       }
     },
     "development-device": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "environment": "development"
     },
     "preview": {
       "distribution": "store",
+      "environment": "preview",
       "ios": {
         "buildConfiguration": "Release",
         "autoIncrement": true
@@ -27,6 +30,7 @@
     },
     "production": {
       "distribution": "store",
+      "environment": "production",
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://lzxewkfxdibohzqbqmiu.supabase.co"

@@ -1,241 +1,642 @@
 import {
   getGroupLocations,
-  getLocalFestivalBundle,
   getLocalMeetups,
-  shareLocation,
-  stopSharingLocation,
+  isAppErrorCode,
+  refreshGroupDetail,
+  type FestivalBundle,
   type FriendLocation,
+  type GroupSummary,
+  type LocalMeetup,
 } from '@festival/data-access';
-import { getMeetupMapPoint, getNextStageSet, normaliseMapPoint } from '@festival/map-utils';
-import { colors, deriveAccentColors, radii, spacing } from '@festival/ui';
+import {
+  getFestivalCamera,
+  getMeetupCoordinate,
+  getNextStageSet,
+  getStageCoordinate,
+  indexStagesById,
+  type LngLat,
+} from '@festival/map-utils';
+import {
+  Chip,
+  colors,
+  deriveAccentColors,
+  EmptyState,
+  IconButton,
+  layout,
+  radii,
+  spacing,
+  useOfflineStatus,
+} from '@festival/ui';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import Mapbox from '@rnmapbox/maps';
+import { onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Location from 'expo-location';
+import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { createMMKV } from 'react-native-mmkv';
+import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { Avatar } from '@/src/components/Avatar';
+import { ActionSheet, type SheetAction } from '@/src/components/BottomSheet';
+import { TimeZoneHint } from '@/src/components/FestivalNotes';
+import { LocationSharingCard } from '@/src/components/LocationSharingCard';
+import { LocationSharingSheet } from '@/src/components/LocationSharingSheet';
+import { ScreenHeader } from '@/src/components/ScreenHeader';
+import { FestivalBundleState, NoFestivalState, StaleDataNote } from '@/src/components/StateViews';
+import { isMapboxConfigured } from '@/src/config/app-info';
+import { invalidateGroupQueries, queryKeys } from '@/src/hooks/query-keys';
+import { useCacheFirstQuery } from '@/src/hooks/use-cache-first-query';
+import { useActiveFestival, useFestivalClock, type FestivalClock } from '@/src/hooks/use-festival';
+import { useGroups } from '@/src/hooks/use-groups';
+import { formatAgo, useNow } from '@/src/hooks/use-now';
+import { OFFLINE_MAP_STYLE, useOfflinePack, type OfflinePackState } from '@/src/hooks/use-offline-pack';
+import { useUserKey } from '@/src/hooks/use-session';
+import { useLocationSharing } from '@/src/location/LocationSharingProvider';
 import { useAppStore } from '@/src/state/app-store';
 
-const Mapbox = require('@rnmapbox/maps') as any;
-const MAP_CENTER: [number, number] = [-122.4194, 37.7749];
-const storage = createMMKV({ id: 'location-prefs' });
+const FRIEND_POLL_MS = 30_000;
+const NO_MEETUPS: LocalMeetup[] = [];
+const NO_FRIENDS: FriendLocation[] = [];
 
-function toLngLat(point: { x: number; y: number }): [number, number] {
-  return [MAP_CENTER[0] + (point.x - 0.5) * 0.02, MAP_CENTER[1] + (0.5 - point.y) * 0.02];
+/* ─── Data ──────────────────────────────────────────────── */
+
+/** Crews for the active festival and the one the map focuses on (store selection, else the first). */
+function useMapGroup(festivalId: string | null) {
+  const groups = useGroups();
+  const selectedGroupId = useAppStore((state) => state.selectedGroupId);
+  const setSelectedGroupId = useAppStore((state) => state.setSelectedGroupId);
+  const festivalGroups = React.useMemo(
+    () => (groups.data ?? []).filter((group) => group.festival_id === festivalId),
+    [festivalId, groups.data],
+  );
+  const group = festivalGroups.find((candidate) => candidate.id === selectedGroupId) ?? festivalGroups[0] ?? null;
+  return { groups: festivalGroups, allGroups: groups.data ?? [], group, select: setSelectedGroupId };
 }
 
-function getInitials(name: string): string {
-  return name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+/** Whether foreground location is already granted (never prompts). Re-checked on focus. */
+function useLocationGranted(): boolean {
+  const [granted, setGranted] = React.useState(false);
+  useFocusEffect(
+    React.useCallback(() => {
+      let active = true;
+      void Location.getForegroundPermissionsAsync()
+        .then((permission) => {
+          if (active) setGranted(permission.granted);
+        })
+        .catch(() => undefined);
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
+  return granted;
 }
+
+/** Friends' positions, polled every 30 s only while this screen is focused and online. */
+function useFriendLocations(groupId: string | null) {
+  const userKey = useUserKey();
+  const queryClient = useQueryClient();
+  const [focused, setFocused] = React.useState(false);
+  useFocusEffect(
+    React.useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
+  const query = useQuery({
+    queryKey: queryKeys.friendLocations(userKey, groupId ?? 'none'),
+    queryFn: async () => {
+      try {
+        return await getGroupLocations(groupId!);
+      } catch (error) {
+        if (isAppErrorCode(error, 'not_group_member')) {
+          // data-access purged the crew locally; refresh the crew lists.
+          await invalidateGroupQueries(queryClient);
+          return [];
+        }
+        throw error;
+      }
+    },
+    enabled: focused && Boolean(groupId),
+    refetchInterval: focused ? FRIEND_POLL_MS : false,
+    refetchIntervalInBackground: false,
+    networkMode: 'online',
+    staleTime: 0,
+    retry: false,
+  });
+  return query;
+}
+
+function useMeetups(groupId: string | null) {
+  const userKey = useUserKey();
+  return useCacheFirstQuery<LocalMeetup[]>({
+    queryKey: queryKeys.meetups(userKey, groupId ?? 'none'),
+    readLocal: () => (groupId ? getLocalMeetups(groupId) : Promise.resolve([])),
+    refresh: groupId ? () => refreshGroupDetail(groupId) : undefined,
+    enabled: Boolean(groupId),
+    refreshStaleTime: 2 * 60_000,
+  });
+}
+
+/* ─── Pins ──────────────────────────────────────────────── */
+
+function StagePin({ name, nextLabel, accent }: { name: string; nextLabel: string | null; accent: string }) {
+  return (
+    <View style={[styles.stagePin, { borderColor: accent }]} accessible accessibilityLabel={`Stage ${name}${nextLabel ? `, next: ${nextLabel}` : ''}`}>
+      <View style={styles.stagePinRow}>
+        <View style={[styles.stageDot, { backgroundColor: accent }]} />
+        <Text style={styles.stagePinText} numberOfLines={1}>
+          {name}
+        </Text>
+      </View>
+      {nextLabel ? (
+        <Text style={styles.stagePinTime} numberOfLines={1}>
+          {nextLabel}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function MeetupPin({ title, time }: { title: string; time: string }) {
+  return (
+    <View style={styles.meetupPin} accessible accessibilityLabel={`Meetup ${title} at ${time}`}>
+      <Ionicons name="location" size={14} color={colors.textPrimary} />
+      <Text style={styles.meetupPinText} numberOfLines={1}>
+        {title}
+      </Text>
+      <Text style={styles.meetupPinTime}>{time}</Text>
+    </View>
+  );
+}
+
+function FriendPin({ friend, ago, accent }: { friend: FriendLocation; ago: string; accent: string }) {
+  return (
+    <View style={styles.friendPin} accessible accessibilityLabel={`${friend.display_name}, last seen ${ago}`}>
+      <View style={[styles.friendRing, { borderColor: accent }]}>
+        <Avatar name={friend.display_name} avatarType={friend.avatar_type} avatarValue={friend.avatar_value} colorKey={friend.user_id} size={34} />
+      </View>
+      <View style={styles.friendLabel}>
+        <Text style={styles.friendLabelText} numberOfLines={1}>
+          {friend.display_name.split(' ')[0]} · {ago}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+/* ─── Controls ──────────────────────────────────────────── */
+
+function offlinePackLabel(state: OfflinePackState, isOffline: boolean): string | null {
+  switch (state.kind) {
+    case 'none':
+      return isOffline ? null : 'Save map offline';
+    case 'downloading':
+      return `Saving map… ${state.percent}%`;
+    case 'complete':
+      return 'Map saved offline';
+    case 'error':
+      return isOffline ? 'Offline map failed' : 'Retry offline map';
+    case 'checking':
+      return 'Checking offline map…';
+    default:
+      return null;
+  }
+}
+
+function ControlPill({
+  label,
+  icon,
+  active,
+  busy,
+  onPress,
+  accessibilityHint,
+}: {
+  label: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  active?: boolean;
+  busy?: boolean;
+  onPress?: () => void;
+  accessibilityHint?: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
+      style={({ pressed }) => [styles.pill, active && styles.pillActive, pressed && { opacity: 0.85 }]}
+    >
+      {busy ? <ActivityIndicator size="small" color={colors.textPrimary} /> : <Ionicons name={icon} size={14} color={colors.textPrimary} />}
+      <Text style={styles.pillLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function GroupChips({ groups, selectedId, onSelect, accent }: { groups: GroupSummary[]; selectedId: string | null; onSelect: (id: string) => void; accent: string }) {
+  if (groups.length < 2) return null;
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.groupChips}>
+      {groups.map((group) => (
+        <Chip key={group.id} label={group.name} active={group.id === selectedId} accentColor={accent} onPress={() => onSelect(group.id)} />
+      ))}
+    </ScrollView>
+  );
+}
+
+/* ─── Fallback (no map) ─────────────────────────────────── */
+
+function FallbackLists({
+  bundle,
+  meetups,
+  friends,
+  clock,
+  now,
+  group,
+  hasGroups,
+  stageLabel,
+}: {
+  bundle: FestivalBundle;
+  meetups: LocalMeetup[];
+  friends: FriendLocation[];
+  clock: FestivalClock;
+  now: number;
+  group: GroupSummary | null;
+  hasGroups: boolean;
+  stageLabel: (stageId: string | null) => string | null;
+}) {
+  const stages = [...bundle.stages].sort((left, right) => left.name.localeCompare(right.name));
+  const artistsById = new Map(bundle.artists.map((artist) => [artist.id, artist.name]));
+  const upcomingMeetups = meetups.filter((meetup) => Date.parse(meetup.starts_at) >= now - 60 * 60_000);
+
+  return (
+    <>
+      <View style={styles.card}>
+        <Text style={styles.sectionLabel} accessibilityRole="header">
+          STAGES · NEXT UP
+        </Text>
+        {stages.length === 0 ? <Text style={styles.muted}>Stages appear once the festival publishes them.</Text> : null}
+        {stages.map((stage) => {
+          const next = getNextStageSet(stage.id, bundle.sets, new Date(now));
+          return (
+            <View key={stage.id} style={styles.listRow}>
+              <View style={[styles.listIcon, { backgroundColor: '#F0F4FF' }]}>
+                <Ionicons name="flag-outline" size={18} color={colors.textPrimary} />
+              </View>
+              <View style={styles.listText}>
+                <Text style={styles.listTitle}>{stage.name}</Text>
+                <Text style={styles.listSub}>
+                  {next
+                    ? `Next: ${artistsById.get(next.artist_id) ?? 'TBA'} · ${clock.date(next.start_time, { weekday: 'short' })} ${clock.time(next.start_time)}`
+                    : 'No more sets'}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionLabel} accessibilityRole="header">
+          {group ? `MEETUPS · ${group.name.toUpperCase()}` : 'MEETUPS'}
+        </Text>
+        {!hasGroups ? (
+          <Text style={styles.muted}>Join or create a crew to plan meetups.</Text>
+        ) : upcomingMeetups.length === 0 ? (
+          <Text style={styles.muted}>No upcoming meetups.</Text>
+        ) : (
+          upcomingMeetups.map((meetup) => (
+            <View key={meetup.id} style={styles.listRow}>
+              <View style={[styles.listIcon, { backgroundColor: colors.successBg }]}>
+                <Ionicons name="location-outline" size={18} color={colors.textPrimary} />
+              </View>
+              <View style={styles.listText}>
+                <Text style={styles.listTitle}>{meetup.title}</Text>
+                <Text style={styles.listSub}>
+                  {[`${clock.date(meetup.starts_at, { weekday: 'short' })} ${clock.time(meetup.starts_at)}`, stageLabel(meetup.stage_id)]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
+
+      {group ? (
+        <View style={styles.card}>
+          <Text style={styles.sectionLabel} accessibilityRole="header">
+            FRIENDS SHARING
+          </Text>
+          {friends.length === 0 ? (
+            <Text style={styles.muted}>No one in {group.name} is sharing their location right now.</Text>
+          ) : (
+            friends.map((friend) => (
+              <View key={friend.user_id} style={styles.listRow}>
+                <Avatar name={friend.display_name} avatarType={friend.avatar_type} avatarValue={friend.avatar_value} colorKey={friend.user_id} />
+                <View style={styles.listText}>
+                  <Text style={styles.listTitle}>{friend.display_name}</Text>
+                  <Text style={styles.listSub}>Last seen {formatAgo(friend.recorded_at, now)}</Text>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+      ) : null}
+    </>
+  );
+}
+
+/* ─── Screen ────────────────────────────────────────────── */
 
 export default function MapScreen() {
-  const festivalId = useAppStore((s) => s.activeFestivalId);
-  const selectedGroupId = useAppStore((s) => s.selectedGroupId);
-  const activeFestivalAccent = useAppStore((s) => s.activeFestivalAccent);
-  const mapDownloaded = useAppStore((s) => s.mapDownloaded);
-  const setMapDownloaded = useAppStore((s) => s.setMapDownloaded);
+  const { festivalId, accent, bundle, festival } = useActiveFestival();
+  const screenBg = deriveAccentColors(accent).bgTint;
+  const solidAccent = deriveAccentColors(accent).solid;
+  const clock = useFestivalClock(festival);
+  const isOffline = useOfflineStatus();
+  const now = useNow(30_000);
+  const sharing = useLocationSharing();
+  const locationGranted = useLocationGranted();
 
-  const screenBg = deriveAccentColors(activeFestivalAccent).bgTint;
+  const { groups, allGroups, group, select } = useMapGroup(festivalId);
+  const meetupsQuery = useMeetups(group?.id ?? null);
+  const friendsQuery = useFriendLocations(group?.id ?? null);
+  const meetups = meetupsQuery.data ?? NO_MEETUPS;
+  const friends = friendsQuery.data ?? NO_FRIENDS;
 
-  const [locationSharing, setLocationSharing] = React.useState(
-    () => storage.getBoolean('sharing-enabled') ?? false,
-  );
-  const locationWatchRef = React.useRef<Location.LocationSubscription | null>(null);
+  const camera = festival ? getFestivalCamera(festival) : null;
+  const showMap = isMapboxConfigured() && camera !== null;
+  const offlinePack = useOfflinePack(festival, showMap);
+  const cameraRef = React.useRef<Mapbox.Camera>(null);
 
-  const festivalQuery = useQuery({
-    queryKey: ['festival-bundle', festivalId],
-    queryFn: () => getLocalFestivalBundle(festivalId),
-  });
+  const [sheetVisible, setSheetVisible] = React.useState(false);
+  const [controlsSheet, setControlsSheet] = React.useState<'sharing' | 'offline' | null>(null);
 
-  const meetupsQuery = useQuery({
-    queryKey: ['map-meetups', selectedGroupId],
-    queryFn: () => (selectedGroupId ? getLocalMeetups(selectedGroupId) : Promise.resolve([])),
-  });
+  const stagesById = React.useMemo(() => indexStagesById(bundle.data?.stages ?? []), [bundle.data]);
+  const artistsById = React.useMemo(() => new Map((bundle.data?.artists ?? []).map((artist) => [artist.id, artist.name])), [bundle.data]);
+  const stageLabel = React.useCallback((stageId: string | null) => (stageId ? (stagesById.get(stageId)?.name ?? null) : null), [stagesById]);
 
-  const friendsQuery = useQuery({
-    queryKey: ['friend-locations', selectedGroupId],
-    queryFn: () => (selectedGroupId ? getGroupLocations(selectedGroupId) : Promise.resolve([])),
-    refetchInterval: locationSharing ? 30_000 : false,
-  });
+  const resolveGroupName = React.useCallback((id: string) => allGroups.find((candidate) => candidate.id === id)?.name ?? null, [allGroups]);
+  const sharingHere = group !== null && sharing.groupId === group.id && sharing.status !== 'off';
+  const otherGroupName = sharing.groupId && group && sharing.groupId !== group.id ? (resolveGroupName(sharing.groupId) ?? 'another crew') : null;
 
-  const accessToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN ?? '';
-  React.useEffect(() => {
-    if (accessToken && Mapbox?.setAccessToken) Mapbox.setAccessToken(accessToken);
-  }, [accessToken]);
+  const header = <ScreenHeader crumbs={['Map', festival?.name]} />;
 
-  const toggleLocationSharing = React.useCallback(async () => {
-    if (locationSharing) {
-      locationWatchRef.current?.remove();
-      locationWatchRef.current = null;
-      if (selectedGroupId) await stopSharingLocation(selectedGroupId).catch(() => {});
-      storage.set('sharing-enabled', false);
-      setLocationSharing(false);
-      return;
-    }
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') return;
-    storage.set('sharing-enabled', true);
-    setLocationSharing(true);
-    if (!selectedGroupId) return;
-    const sub = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.Balanced, distanceInterval: 20, timeInterval: 30_000 },
-      (loc) => {
-        void shareLocation(selectedGroupId, loc.coords.latitude, loc.coords.longitude, loc.coords.accuracy, loc.coords.heading).catch(() => {});
-      },
-    );
-    locationWatchRef.current = sub;
-  }, [locationSharing, selectedGroupId]);
-
-  React.useEffect(() => { return () => { locationWatchRef.current?.remove(); }; }, []);
-
-  const handleDownload = React.useCallback(async () => {
-    if (Mapbox?.offlineManager?.createPack) {
-      await Mapbox.offlineManager.createPack({
-        name: `festival-${festivalId}`,
-        styleURL: Mapbox.StyleURL?.Outdoors ?? Mapbox.StyleURL?.Street,
-        bounds: [[MAP_CENTER[0] - 0.02, MAP_CENTER[1] - 0.02], [MAP_CENTER[0] + 0.02, MAP_CENTER[1] + 0.02]],
-        minZoom: 12, maxZoom: 16,
-      });
-    }
-    setMapDownloaded(true);
-  }, [festivalId, setMapDownloaded]);
-
-  const festivalBundle = festivalQuery.data;
-
-  /* ─── No Mapbox fallback — reference: bg-[#E8F0FE] map placeholder ─── */
-  if (!accessToken || !Mapbox?.MapView) {
+  if (!festivalId) {
     return (
       <View style={[styles.container, { backgroundColor: screenBg }]}>
-        <View style={styles.header}>
-          <Text style={styles.wordmark}>Festie</Text>
-          <Text style={[styles.breadcrumb, { color: activeFestivalAccent }]}>Map</Text>
+        {header}
+        <View style={styles.statePad}>
+          <NoFestivalState onPick={() => router.navigate('/(tabs)/festivals')} />
         </View>
-
-        {/* Reference-style decorative map placeholder */}
-        <View style={styles.mapPlaceholder}>
-          {/* Dot grid overlay */}
-          <View style={[styles.dotGrid, { backgroundColor: colors.primary, opacity: 0.08 }]} />
-          {/* Blur blobs */}
-          <View style={[styles.blob1, { backgroundColor: activeFestivalAccent }]} />
-          <View style={[styles.blob2, { backgroundColor: colors.warning }]} />
-
-          {/* Centered badge */}
-          <View style={styles.mapBadge}>
-            <Text style={[styles.mapBadgeLabel, { color: colors.primary }]}>Mapbox not configured</Text>
-            <Text style={styles.mapBadgeSub}>Add EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN</Text>
-          </View>
-
-          {/* Stage list as map markers */}
-          {(festivalBundle?.stages ?? []).map((stage) => (
-            <View key={stage.id} style={[styles.listMarker, { borderColor: activeFestivalAccent }]}>
-              <Ionicons name="flag" size={12} color={activeFestivalAccent} />
-              <Text style={styles.listMarkerText}>{stage.name}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Meetup point list — matches reference bottom card style */}
-        {(festivalBundle?.stages ?? []).slice(0, 3).map((stage) => (
-          <View key={stage.id} style={styles.listRow}>
-            <View style={[styles.listIcon, { backgroundColor: '#F0F4FF' }]}>
-              <Ionicons name="flag-outline" size={18} color={colors.primary} />
-            </View>
-            <Text style={styles.listText}>{stage.name}</Text>
-            <View style={styles.listChevron}>
-              <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-            </View>
-          </View>
-        ))}
       </View>
     );
   }
 
-  const stages = (festivalBundle?.stages ?? []).map((stage) => {
-    const point = normaliseMapPoint(stage.map_x, stage.map_y);
-    if (!point) return null;
-    return { ...stage, coordinates: toLngLat(point), nextSet: getNextStageSet(stage.id, festivalBundle?.sets ?? [], new Date()) };
-  }).filter(Boolean) as any[];
+  if (!bundle.data || !festival) {
+    return (
+      <View style={[styles.container, { backgroundColor: screenBg }]}>
+        {header}
+        <View style={styles.statePad}>
+          <FestivalBundleState
+            hasBundle={false}
+            isLoading={bundle.isLoading}
+            isRefreshing={bundle.isRefreshing}
+            hasRefreshed={bundle.hasRefreshed}
+            refreshError={bundle.refreshError}
+            isOffline={isOffline}
+            onRetry={() => void bundle.refetch()}
+          />
+        </View>
+      </View>
+    );
+  }
 
-  const meetups = (meetupsQuery.data ?? []).map((meetup) => {
-    const point = getMeetupMapPoint(meetup, festivalBundle?.stages ?? []);
-    if (!point) return null;
-    return { ...meetup, coordinates: toLngLat(point) };
-  }).filter(Boolean) as any[];
+  /* No token or no coordinates: list view, no fake map. */
+  if (!showMap || !camera) {
+    return (
+      <View style={[styles.container, { backgroundColor: screenBg }]}>
+        {header}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={meetupsQuery.isRefreshing}
+              onRefresh={() => void Promise.all([bundle.refetch(), meetupsQuery.refetch(), friendsQuery.refetch()])}
+              tintColor={colors.textPrimary}
+            />
+          }
+        >
+          <EmptyState
+            title="Map view unavailable"
+            description={
+              camera === null
+                ? "This festival hasn't published map coordinates yet. Here's what's on and where your crew is."
+                : "The map can't be shown right now. Here's what's on and where your crew is."
+            }
+          />
+          <GroupChips groups={groups} selectedId={group?.id ?? null} onSelect={select} accent={accent} />
+          <TimeZoneHint hint={clock.hint} />
+          <FallbackLists
+            bundle={bundle.data}
+            meetups={meetups}
+            friends={friends}
+            clock={clock}
+            now={now}
+            group={group}
+            hasGroups={groups.length > 0}
+            stageLabel={stageLabel}
+          />
+          {group ? <LocationSharingCard groupId={group.id} groupName={group.name} resolveGroupName={resolveGroupName} /> : null}
+          <StaleDataNote error={meetupsQuery.refreshError ?? friendsQuery.error} />
+        </ScrollView>
+      </View>
+    );
+  }
 
-  const friends = (friendsQuery.data ?? []) as FriendLocation[];
+  /* Live map */
+
+  const stagePins = bundle.data.stages
+    .map((stage) => {
+      const coordinate = getStageCoordinate(stage);
+      if (!coordinate) return null;
+      const next = getNextStageSet(stage.id, bundle.data!.sets, new Date(now));
+      const nextLabel = next ? `${artistsById.get(next.artist_id) ?? 'Next'} · ${clock.time(next.start_time)}` : null;
+      return { id: stage.id, name: stage.name, coordinate, nextLabel };
+    })
+    .filter((pin): pin is { id: string; name: string; coordinate: LngLat; nextLabel: string | null } => pin !== null);
+
+  const meetupPins = meetups
+    .filter((meetup) => Date.parse(meetup.starts_at) >= now - 60 * 60_000)
+    .map((meetup) => {
+      const coordinate = getMeetupCoordinate(meetup, stagesById);
+      return coordinate ? { meetup, coordinate } : null;
+    })
+    .filter((pin): pin is { meetup: LocalMeetup; coordinate: LngLat } => pin !== null);
+
+  const recenter = () => {
+    if (camera.bounds) {
+      cameraRef.current?.fitBounds(camera.bounds.ne, camera.bounds.sw, 40, 600);
+    } else {
+      cameraRef.current?.setCamera({ centerCoordinate: camera.center, zoomLevel: camera.zoom, animationDuration: 600 });
+    }
+  };
+
+  let sharingLabel = 'Share location';
+  if (sharingHere) {
+    sharingLabel = sharing.status === 'permission_denied' ? 'Location access off' : sharing.status === 'paused' ? 'Sharing paused' : 'Sharing location';
+  } else if (otherGroupName) {
+    sharingLabel = `Sharing with ${otherGroupName}`;
+  }
+
+  const onSharingPress = () => {
+    if (!group) return;
+    if (sharingHere) {
+      setControlsSheet('sharing');
+    } else {
+      setSheetVisible(true);
+    }
+  };
+
+  const packLabel = offlinePackLabel(offlinePack.state, isOffline);
+  const onPackPress = () => {
+    const kind = offlinePack.state.kind;
+    if (kind === 'none' || kind === 'error') {
+      if (!onlineManager.isOnline()) return;
+      void offlinePack.download();
+    } else if (kind === 'complete') {
+      setControlsSheet('offline');
+    }
+  };
+
+  const controlActions: SheetAction[] =
+    controlsSheet === 'sharing'
+      ? [
+          ...(sharing.status === 'permission_denied'
+            ? [{ label: 'Open Settings', onPress: () => void Linking.openSettings() }]
+            : []),
+          { label: 'Stop sharing my location', destructive: true, onPress: () => void sharing.stop() },
+        ]
+      : controlsSheet === 'offline'
+        ? [{ label: 'Remove offline map', destructive: true, onPress: () => void offlinePack.remove() }]
+        : [];
 
   return (
     <View style={styles.container}>
-      <Mapbox.MapView style={styles.map} styleURL={Mapbox.StyleURL?.Outdoors ?? Mapbox.StyleURL?.Street}>
-        <Mapbox.Camera zoomLevel={13.5} centerCoordinate={MAP_CENTER} animationMode="flyTo" />
-        <Mapbox.UserLocation visible />
+      <Mapbox.MapView
+        style={styles.map}
+        styleURL={OFFLINE_MAP_STYLE}
+        scaleBarEnabled={false}
+        logoPosition={{ bottom: layout.tabBarClearance + 4, left: 12 }}
+        attributionPosition={{ bottom: layout.tabBarClearance + 4, right: 12 }}
+      >
+        <Mapbox.Camera
+          ref={cameraRef}
+          defaultSettings={
+            camera.bounds
+              ? { bounds: { ne: camera.bounds.ne, sw: camera.bounds.sw, paddingTop: 140, paddingBottom: 160, paddingLeft: 24, paddingRight: 24 } }
+              : { centerCoordinate: camera.center, zoomLevel: camera.zoom }
+          }
+        />
+        {locationGranted ? <Mapbox.UserLocation visible showsUserHeadingIndicator={false} /> : null}
 
-        {stages.map((stage: any) => (
-          <Mapbox.PointAnnotation id={`stage-${stage.id}`} key={stage.id} coordinate={stage.coordinates}>
-            {/* Reference: bg-white p-2 rounded-xl shadow-lg border-2 border-[#B2CEFE] */}
-            <View style={[styles.stagePin, { borderColor: activeFestivalAccent }]}>
-              <Ionicons name="flag" size={14} color={activeFestivalAccent} />
-              <Text style={[styles.stagePinText, { color: colors.textPrimary }]}>{stage.name}</Text>
-              {stage.nextSet && (
-                <Text style={styles.stagePinTime}>
-                  {new Date(stage.nextSet.start_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                </Text>
-              )}
-            </View>
-          </Mapbox.PointAnnotation>
+        {stagePins.map((pin) => (
+          <Mapbox.MarkerView key={`stage-${pin.id}`} coordinate={pin.coordinate} anchor={{ x: 0.5, y: 1 }} allowOverlap>
+            <StagePin name={pin.name} nextLabel={pin.nextLabel} accent={solidAccent} />
+          </Mapbox.MarkerView>
         ))}
 
-        {meetups.map((meetup: any) => (
-          <Mapbox.PointAnnotation id={`meetup-${meetup.id}`} key={meetup.id} coordinate={meetup.coordinates}>
-            <View style={styles.meetupPin}>
-              <Ionicons name="location" size={14} color="#FFFFFF" />
-              <Text style={styles.meetupPinText}>{meetup.title}</Text>
-            </View>
-          </Mapbox.PointAnnotation>
+        {meetupPins.map((pin) => (
+          <Mapbox.MarkerView key={`meetup-${pin.meetup.id}`} coordinate={pin.coordinate} anchor={{ x: 0.5, y: 1 }} allowOverlap>
+            <MeetupPin title={pin.meetup.title} time={clock.time(pin.meetup.starts_at)} />
+          </Mapbox.MarkerView>
         ))}
 
         {friends.map((friend) => (
-          <Mapbox.PointAnnotation id={`friend-${friend.id}`} key={friend.id} coordinate={[friend.lng, friend.lat]}>
-            <View style={[styles.friendPin, { backgroundColor: activeFestivalAccent }]}>
-              <Text style={styles.friendPinText}>
-                {friend.avatar_type === 'emoji' ? friend.avatar_value : getInitials(friend.display_name)}
-              </Text>
-            </View>
-            <Mapbox.Callout title={friend.display_name} />
-          </Mapbox.PointAnnotation>
+          <Mapbox.MarkerView key={`friend-${friend.user_id}`} coordinate={[friend.lng, friend.lat]} anchor={{ x: 0.5, y: 0.5 }} allowOverlap>
+            <FriendPin friend={friend} ago={formatAgo(friend.recorded_at, now)} accent={solidAccent} />
+          </Mapbox.MarkerView>
         ))}
       </Mapbox.MapView>
 
       {/* Top overlay */}
-      <View style={styles.topOverlay}>
-        <View style={styles.controlRow}>
-          <Pressable
-            onPress={() => void toggleLocationSharing()}
-            style={({ pressed }) => [styles.pill, locationSharing && styles.pillActive, pressed && { opacity: 0.85 }]}
-          >
-            <View style={[styles.pillDot, locationSharing && styles.pillDotActive]} />
-            <Text style={[styles.pillLabel, locationSharing && styles.pillLabelActive]}>
-              {locationSharing ? 'Sharing' : 'Share location'}
-            </Text>
-          </Pressable>
-          {!mapDownloaded && (
-            <Pressable onPress={() => void handleDownload()} style={({ pressed }) => [styles.pill, pressed && { opacity: 0.85 }]}>
-              <Ionicons name="cloud-download-outline" size={13} color={colors.textPrimary} />
-              <Text style={styles.pillLabel}>Offline</Text>
-            </Pressable>
-          )}
+      <View style={styles.topOverlay} pointerEvents="box-none">
+        <View style={styles.titleCard}>
+          <Text style={styles.titleCardName} numberOfLines={1} accessibilityRole="header">
+            {festival.name}
+          </Text>
+          <Text style={styles.titleCardSub} numberOfLines={1}>
+            {group ? group.name : groups.length === 0 ? 'Join a crew to see friends here' : ''}
+          </Text>
+        </View>
+        <GroupChips groups={groups} selectedId={group?.id ?? null} onSelect={select} accent={accent} />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.controlRow}>
+          {group ? (
+            <ControlPill
+              label={sharingLabel}
+              icon={sharingHere ? 'radio' : 'navigate-outline'}
+              active={sharingHere && sharing.status === 'sharing'}
+              onPress={onSharingPress}
+              accessibilityHint={sharingHere ? 'Shows options to stop sharing' : `Starts sharing your location with ${group.name}`}
+            />
+          ) : null}
+          {packLabel ? (
+            <ControlPill
+              label={packLabel}
+              icon={offlinePack.state.kind === 'complete' ? 'cloud-done-outline' : 'cloud-download-outline'}
+              busy={offlinePack.state.kind === 'downloading' || offlinePack.state.kind === 'checking'}
+              onPress={offlinePack.state.kind === 'downloading' || offlinePack.state.kind === 'checking' ? undefined : onPackPress}
+            />
+          ) : null}
+        </ScrollView>
+      </View>
+
+      <View style={styles.recenter}>
+        <IconButton icon={<Ionicons name="locate-outline" size={20} color={colors.textPrimary} />} accessibilityLabel="Show the whole festival" onPress={recenter} />
+      </View>
+
+      {/* Bottom summary */}
+      <View style={styles.legend} accessibilityLiveRegion="polite">
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: solidAccent }]} />
+          <Text style={styles.legendText}>{stagePins.length} stages</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: colors.success }]} />
+          <Text style={styles.legendText}>{meetupPins.length} meetups</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
+          <Text style={styles.legendText}>
+            {group ? (friendsQuery.isError && friends.length === 0 ? 'Friends offline' : `${friends.length} friends`) : 'No crew'}
+          </Text>
         </View>
       </View>
 
-      {/* Bottom legend */}
-      {(stages.length > 0 || meetups.length > 0 || friends.length > 0) && (
-        <View style={styles.legend}>
-          {stages.length > 0 && <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: activeFestivalAccent }]} /><Text style={styles.legendText}>{stages.length} stages</Text></View>}
-          {meetups.length > 0 && <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: colors.success }]} /><Text style={styles.legendText}>{meetups.length} meetups</Text></View>}
-          {friends.length > 0 && <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: activeFestivalAccent }]} /><Text style={styles.legendText}>{friends.length} friends</Text></View>}
-        </View>
-      )}
+      {group ? (
+        <LocationSharingSheet
+          visible={sheetVisible}
+          groupId={group.id}
+          groupName={group.name}
+          otherGroupName={otherGroupName}
+          onClose={() => setSheetVisible(false)}
+        />
+      ) : null}
+      <ActionSheet
+        visible={controlsSheet !== null}
+        title={controlsSheet === 'offline' ? 'Offline map' : 'Location sharing'}
+        message={
+          controlsSheet === 'offline'
+            ? 'The festival area is saved on this device, so the map works without signal.'
+            : group
+              ? `Your crew ${group.name} can see your location while Festie is open.`
+              : undefined
+        }
+        actions={controlActions}
+        onClose={() => setControlsSheet(null)}
+      />
     </View>
   );
 }
@@ -245,129 +646,145 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1 },
+  statePad: { padding: spacing.lg },
+  scroll: { flex: 1 },
+  scrollContent: { gap: spacing.md, paddingBottom: layout.tabBarClearance, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
 
-  /* Fallback */
-  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl + 4, paddingBottom: spacing.sm, gap: 4 },
-  wordmark: { fontFamily: 'Georgia', fontStyle: 'italic', fontSize: 40, fontWeight: '700', color: colors.textPrimary, letterSpacing: -0.5 },
-  breadcrumb: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1 },
-
-  /* Decorative map placeholder — reference: bg-[#E8F0FE] rounded-[40px] aspect-square */
-  mapPlaceholder: {
-    marginHorizontal: spacing.lg,
+  /* Fallback lists */
+  card: {
+    backgroundColor: colors.surface,
+    borderColor: colors.borderCard,
     borderRadius: radii.card,
-    aspectRatio: 1,
-    backgroundColor: '#E8F0FE',
-    overflow: 'hidden',
-    borderWidth: 4,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderWidth: 1,
     gap: spacing.sm,
-  },
-  dotGrid: { position: 'absolute', inset: 0 as any },
-  blob1: { position: 'absolute', top: 40, left: 40, width: 128, height: 128, borderRadius: 64, opacity: 0.4 },
-  blob2: { position: 'absolute', bottom: 80, right: 40, width: 160, height: 160, borderRadius: 80, opacity: 0.4 },
-  mapBadge: {
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    borderRadius: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    alignItems: 'center',
+    padding: spacing.xl,
     shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  sectionLabel: { color: colors.textSecondary, fontSize: 10, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' },
+  muted: { color: colors.textSecondary, fontSize: 14, lineHeight: 20 },
+  listRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.md, minHeight: 56 },
+  listIcon: { alignItems: 'center', borderRadius: 16, height: 44, justifyContent: 'center', width: 44 },
+  listText: { flex: 1, gap: 2 },
+  listTitle: { color: colors.textPrimary, fontSize: 15, fontWeight: '700' },
+  listSub: { color: colors.textSecondary, fontSize: 13 },
+  groupChips: { flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.xs },
+
+  /* Live map overlay */
+  topOverlay: { gap: spacing.sm, left: 0, paddingHorizontal: spacing.lg, paddingTop: spacing.md, position: 'absolute', right: 0, top: 0 },
+  titleCard: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: radii.xl,
+    maxWidth: '100%',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
-  mapBadgeLabel: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 2 },
-  mapBadgeSub: { fontSize: 8, opacity: 0.4, fontWeight: '700', marginTop: 2 },
-  listMarker: {
-    flexDirection: 'row',
+  titleCardName: { color: colors.textPrimary, fontFamily: 'Georgia', fontSize: 20, fontStyle: 'italic', fontWeight: '700' },
+  titleCardSub: { color: colors.textSecondary, fontSize: 10, fontWeight: '800', letterSpacing: 1.5, textTransform: 'uppercase' },
+  controlRow: { flexDirection: 'row', gap: spacing.sm },
+  pill: {
     alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: radii.pill,
+    flexDirection: 'row',
     gap: 6,
+    minHeight: layout.minTouchTarget,
+    paddingHorizontal: spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  pillActive: { backgroundColor: colors.success },
+  pillLabel: { color: colors.textPrimary, fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
+  recenter: { bottom: layout.tabBarClearance + 64, position: 'absolute', right: spacing.lg },
+
+  /* Pins */
+  stagePin: {
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 2,
+    gap: 2,
+    maxWidth: 180,
+    minWidth: 80,
     paddingHorizontal: 10,
     paddingVertical: 6,
-  },
-  listMarkerText: { fontSize: 10, fontWeight: '800', color: colors.textPrimary },
-
-  /* Reference list rows */
-  listRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.surface,
-    marginHorizontal: spacing.lg,
-    borderRadius: 32,
-    padding: spacing.md,
     shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    marginTop: spacing.sm,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  listIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  listText: { flex: 1, color: colors.textPrimary, fontSize: 14, fontWeight: '600' },
-  listChevron: { width: 40, height: 40, borderRadius: 14, backgroundColor: '#F0F4FF', alignItems: 'center', justifyContent: 'center' },
-
-  /* Live map overlay */
-  topOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
-    paddingTop: spacing.xxxl + 8, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm,
-  },
-  controlRow: { flexDirection: 'row', gap: spacing.sm },
-  pill: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: radii.pill,
-    paddingHorizontal: spacing.md, paddingVertical: 8,
-    shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4,
-  },
-  pillActive: { backgroundColor: colors.primary },
-  pillDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.2)' },
-  pillDotActive: { backgroundColor: colors.success },
-  pillLabel: { color: colors.textPrimary, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
-  pillLabelActive: { color: colors.textPrimary },
-
-  /* Map pins */
-  stagePin: {
-    alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 2,
-    minWidth: 80, paddingHorizontal: 10, paddingVertical: 6,
-    shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 4, gap: 2,
-  },
-  stagePinText: { fontSize: 10, fontWeight: '800', textAlign: 'center' },
-  stagePinTime: { color: colors.textSecondary, fontSize: 9, fontWeight: '600' },
+  stagePinRow: { alignItems: 'center', flexDirection: 'row', gap: 6 },
+  stageDot: { borderRadius: 4, height: 8, width: 8 },
+  stagePinText: { color: colors.textPrimary, fontSize: 11, fontWeight: '800' },
+  stagePinTime: { color: colors.textSecondary, fontSize: 10, fontWeight: '600' },
   meetupPin: {
-    alignItems: 'center', backgroundColor: colors.success, borderColor: '#FFFFFF', borderRadius: 12, borderWidth: 2,
-    minWidth: 80, paddingHorizontal: 10, paddingVertical: 6,
-    shadowColor: colors.success, shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 4, gap: 1,
+    alignItems: 'center',
+    backgroundColor: colors.success,
+    borderColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 2,
+    gap: 1,
+    maxWidth: 180,
+    minWidth: 80,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  meetupPinText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800', textAlign: 'center' },
-  friendPin: {
-    width: 40, height: 40, borderRadius: 20, borderWidth: 3, borderColor: '#FFFFFF',
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 5,
+  meetupPinText: { color: colors.textPrimary, fontSize: 11, fontWeight: '800', textAlign: 'center' },
+  meetupPinTime: { color: colors.textPrimary, fontSize: 10, fontWeight: '600' },
+  friendPin: { alignItems: 'center', gap: 2 },
+  friendRing: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    borderWidth: 3,
+    padding: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 5,
   },
-  friendPinText: { fontSize: 14, fontWeight: '800', color: colors.textPrimary },
+  friendLabel: { backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: radii.pill, paddingHorizontal: 8, paddingVertical: 2 },
+  friendLabelText: { color: colors.textPrimary, fontSize: 10, fontWeight: '700' },
 
   /* Legend */
   legend: {
-    position: 'absolute', bottom: spacing.xxxl + 68, left: spacing.lg, right: spacing.lg,
-    flexDirection: 'row', justifyContent: 'center', gap: spacing.md,
-    backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radii.pill,
-    paddingHorizontal: spacing.lg, paddingVertical: 9,
-    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: radii.pill,
+    bottom: layout.tabBarClearance + 8,
+    flexDirection: 'row',
+    gap: spacing.md,
+    justifyContent: 'center',
+    left: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
+    position: 'absolute',
+    right: spacing.lg + 56,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
   },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { color: colors.textPrimary, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  legendItem: { alignItems: 'center', flexDirection: 'row', gap: 5 },
+  legendDot: { borderRadius: 4, height: 8, width: 8 },
+  legendText: { color: colors.textPrimary, fontSize: 10, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
 });
