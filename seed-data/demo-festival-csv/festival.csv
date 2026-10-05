@@ -1,0 +1,2 @@
+name,start_date,end_date,timezone,venue_name,status,is_demo,accent_color,latitude,longitude,default_zoom,bounds_sw_lat,bounds_sw_lng,bounds_ne_lat,bounds_ne_lng,source_url
+Festie Demo Fest,2027-06-18,2027-06-20,America/New_York,"Central Park, New York (sample data)",published,true,#FFD6A5,40.7825,-73.9656,14.5,40.7644,-73.9819,40.8006,-73.9493,

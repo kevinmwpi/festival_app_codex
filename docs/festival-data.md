@@ -1,0 +1,273 @@
+# Festival data, demo content and moderation
+
+How festival schedules get into Festie, how the App Review demo is prepared, and how
+reported content is handled. Everything here goes through `apps/admin-tools`, a small
+TypeScript CLI that talks to Supabase with the **service-role** key. Contract:
+[`v1-architecture.md`](./v1-architecture.md) §2 and §6.
+
+```sh
+export SUPABASE_URL=https://<project-ref>.supabase.co
+export SUPABASE_SERVICE_ROLE_KEY=<service role / secret key>   # or SUPABASE_SECRET_KEY
+npm run admin -- help
+```
+
+Never put the service-role key in the mobile app, a `EXPO_PUBLIC_*` variable or a commit.
+Commands that write accept `--dry-run`; run it first. `festival:validate`, `festival:import-csv`,
+`festival:shift-dates` and the `--dry-run` of `festival:seed`/`demo:seed` work without credentials.
+
+| Command | What it does |
+|---|---|
+| `festival:validate <file>` | Strict offline validation of a festival file |
+| `festival:seed <file> [--dry-run]` | Validate, diff and write a festival; bumps `version` |
+| `festival:import-csv <dir> [--out <file>]` | Four CSV files → festival JSON (validated) |
+| `festival:shift-dates <file> --start <YYYY-MM-DD> [--out <file>] [--dry-run]` | Move a **demo** festival to new dates |
+| `demo:seed [--file <file>] [--dry-run]` | Demo festival + fake crew for App Review |
+| `reports:list [--status …] [--limit n] [--json]` | Moderation queue (default: open, oldest first) |
+| `reports:remove-content <report_id> [--dry-run]` | Remove reported content, mark reports actioned |
+| `users:ban <user_id> [--dry-run]` | Ban an account and remove it from every group |
+| `moderation:list-terms` / `add-terms` / `remove-terms` | Manage the disallowed-words list |
+
+Paths are resolved from the directory you run `npm run admin` in, then from the repo root.
+
+---
+
+## 1. Festival file format
+
+One JSON file per festival (see [`seed-data/demo-festival.json`](../seed-data/demo-festival.json)):
+
+```json
+{
+  "festival": { "id": "…", "name": "…", "start_date": "2027-08-06", "end_date": "2027-08-08",
+                "timezone": "America/Chicago", "status": "draft", "source_url": "https://…" },
+  "stages":  [{ "id": "…", "name": "Main Stage", "zone": "North", "latitude": 41.87, "longitude": -87.62 }],
+  "artists": [{ "id": "…", "name": "…", "genre": "Indie Rock" }],
+  "sets":    [{ "id": "…", "artist_id": "…", "stage_id": "…",
+                "start_time": "2027-08-06T19:30:00-05:00", "end_time": "2027-08-06T20:30:00-05:00" }]
+}
+```
+
+Validation is strict — unknown fields are errors, so typos never silently drop data.
+
+**festival**
+
+| Field | Rules |
+|---|---|
+| `id` | UUID (stable forever — users' groups and picks hang off it) |
+| `name` | 1–120 characters, the festival's public name |
+| `start_date`, `end_date` | Calendar dates `YYYY-MM-DD` in the festival's local calendar; end ≥ start |
+| `timezone` | IANA zone (`America/Chicago`, `Europe/London`), never an abbreviation |
+| `venue_name` | Optional, ≤ 120 |
+| `status` | `draft` (default) or `published`; only published festivals are visible to the app |
+| `is_demo` | `true` only for the sample festival (shown with a "Sample" badge, sorted last) |
+| `source_url` | **Required** unless `is_demo`: `https://` link to the official public schedule used |
+| `accent_color` | Optional `#RRGGBB`, used as a fill colour in the app (pick a light/pastel tone) |
+| `latitude`, `longitude` | Optional map centre (both or neither) |
+| `default_zoom` | Optional, 0–22 (app default 15) |
+| `bounds_sw_lat`, `bounds_sw_lng`, `bounds_ne_lat`, `bounds_ne_lng` | Optional bounding box (all four or none); must contain the centre |
+| `version` | Optional floor; `festival:seed` always writes `max(stored + 1, version)` |
+| `image_url`, `map_asset_url` | Must be absent/null (no festival artwork — see §3) |
+
+**stages**: `id` (UUID), `name` (≤ 80, unique per festival), optional `zone` (≤ 40), optional
+`latitude`/`longitude` (inside the festival bounds when bounds are set). Stages without
+coordinates still work but do not get a map pin. `festival_id` may be omitted.
+
+**artists**: `id` (UUID), `name` (≤ 120, unique in the file), optional `genre` (≤ 60). Artists are a
+global table shared by all festivals; use the same id for the same act across festivals
+(the CSV importer does this automatically). No `image_url`.
+
+**sets**: `id` (UUID), `artist_id` and `stage_id` referencing entries in the same file, `start_time`
+and `end_time` as ISO 8601 **with an explicit offset** (`-05:00` or `Z`), `end_time` after
+`start_time`, at most 24 h long, starting on a local date between `start_date − 1 day` and
+`end_date + 1 day`. Optional `set_type` (default `performance`). Overlapping sets on one stage
+produce a warning.
+
+A late-night set at 00:30 belongs to the previous festival day in the app (days start at 06:00
+local time), so write the real calendar timestamp: `2027-08-08T00:30:00-05:00` for "Saturday night,
+12:30 AM".
+
+## 2. CSV import
+
+For entering a schedule by hand, keep four CSV files in one directory and convert them:
+
+```sh
+npm run admin -- festival:import-csv path/to/riverside-2027 --out seed-data/riverside-2027.json
+```
+
+[`seed-data/demo-festival-csv/`](../seed-data/demo-festival-csv) is a complete example (it is the source
+of `demo-festival.json`; a unit test keeps the two identical).
+
+| File | Required columns | Optional columns |
+|---|---|---|
+| `festival.csv` (exactly one row) | `name, start_date, end_date, timezone` | `id, venue_name, source_url, status, is_demo, accent_color, latitude, longitude, default_zoom, bounds_sw_lat, bounds_sw_lng, bounds_ne_lat, bounds_ne_lng` |
+| `stages.csv` | `name` | `id, zone, latitude, longitude` |
+| `artists.csv` | `name` | `id, genre` |
+| `sets.csv` | `artist, stage, start, end` | `id, set_type` |
+
+- Standard CSV: quote fields containing commas (`"Juniper & the Low Moons, Live"`), double inner quotes.
+  Header names are case-insensitive; unknown columns are errors.
+- `sets.csv` refers to artists and stages **by name** (case-insensitive) or by id.
+- Times are festival local time `YYYY-MM-DD HH:MM` (converted with the festival time zone, DST-aware;
+  a time skipped by a daylight-saving change is an error) or ISO 8601 with an offset.
+- Ids you leave out are derived deterministically (UUID v5), so re-importing an updated schedule keeps
+  them stable and users keep their picks: festival ← name + start date; stage ← festival + stage name;
+  artist ← artist name (shared across festivals); set ← festival + artist + festival day (+ an
+  ordinal if the act plays twice that day). Moving a set to another time or stage keeps its id;
+  renaming an artist or stage changes it. If you must rename, put the old id in the `id` column.
+- Errors are reported as `file:line column: message`; the output is then validated exactly like a
+  hand-written JSON file.
+
+## 3. Sourcing rules (read before entering a real festival)
+
+Festie is an independent app, not affiliated with or endorsed by any festival, organizer or artist,
+and the app says so on every festival screen. Data must keep it that way:
+
+1. **Facts only.** Enter what the organizer has publicly announced: festival name, dates, venue,
+   stage names, artist names and set times. Copy no descriptions, bios, editorial text or ticket info.
+2. **Official public sources.** Use the festival's own published schedule (website or official app
+   listing made public). Do not use leaked, paywalled or "rumoured" lineups or other apps' data.
+   Record the page you used in `source_url` — it is required to publish and is how the data is audited
+   and corrected later.
+3. **Nominative names only.** Use names as plain text to identify the festival, stages and artists.
+   No logos, wordmarks, posters, artwork, official maps, photos or brand colours copied from the
+   festival — `image_url` and `map_asset_url` are rejected by the validator. Pick your own neutral
+   `accent_color`.
+4. **Coordinates** come from public map data (e.g. the venue's public address/park outline on
+   OpenStreetMap), not from the festival's site map artwork.
+5. **Keep it current.** Schedules change; re-check the source before the festival and update
+   (§4). If an organizer asks for removal or correction, unpublish first (`"status": "draft"`) and then fix.
+
+## 4. Publishing workflow
+
+1. Enter the festival as CSV (or JSON) with `"status": "draft"`; validate:
+   `npm run admin -- festival:validate seed-data/<festival>.json`
+2. Seed the draft: `npm run admin -- festival:seed seed-data/<festival>.json --dry-run`, review the
+   plan, then run it without `--dry-run`. Drafts are invisible to the app (RLS shows only
+   `status = 'published'` to anon and signed-in users).
+3. Review the data in the Supabase table editor against `source_url` (spot-check times in the
+   festival time zone, stage names, late-night sets).
+4. Publish: set `"status": "published"` in the file and seed again. The validator refuses to publish a
+   real festival without `source_url` or without sets, and the database enforces
+   `status = 'draft' or is_demo or source_url is not null`.
+5. Updates: edit the file and seed again. `festival:seed` upserts the festival, artists, stages and
+   sets, **deletes sets and stages of that festival that are no longer in the file** (users' picks of
+   deleted sets are deleted with them; meetups pinned to a deleted stage lose the pin), and writes the
+   bumped `version` and `status` last so clients refetch a complete bundle. Keep ids stable (§2).
+6. Unpublish: set `"status": "draft"` and seed. Groups and picks stay in the database.
+
+Migration 007 sets every legacy non-demo festival without a `source_url` to draft; real festivals
+appear only after being entered through this workflow.
+
+## 5. Demo festival and App Review
+
+`seed-data/demo-festival.json` is the fictional **Festie Demo Fest** (`is_demo: true`, published,
+June 2027) with fictional artists, placed in Central Park, New York (a large public open space) with
+every stage inside the park. The app labels it "Sample".
+
+Prepare the review build:
+
+```sh
+# Optional: move the demo so "now playing / up next" is live during review
+npm run admin -- festival:shift-dates seed-data/demo-festival.json --start 2026-10-09 --out /tmp/demo.json
+npm run admin -- demo:seed --file /tmp/demo.json --dry-run
+npm run admin -- demo:seed --file /tmp/demo.json
+```
+
+`festival:shift-dates` keeps every set at the same local clock time (DST-safe) and refuses non-demo
+festivals. Do not commit shifted dates unless you mean to.
+
+`demo:seed` is idempotent and creates:
+
+- the demo festival (via the same path as `festival:seed`);
+- three fake members (`festie-demo-maya|jordan|sam@example.com`, confirmed auth users that can never
+  receive mail, marked with `app_metadata.festie_demo = true`) with profiles; Maya is the admin;
+- the group **"Festie Demo Crew"** (fixed id derived from the festival id, created by Maya) with their
+  memberships and set picks. Its invite code is random, generated on the first seed and kept on
+  re-seeds; it is never printed or derived from repository data (a group still carrying the guessable
+  code earlier versions derived gets a fresh random code). Nobody but the reviewer is meant to join;
+- a meetup by Jordan with a totem photo (`seed-data/demo-totem.jpg`, uploaded to the private
+  `totems` bucket at `<group>/<meetup>/<uuid>.jpg`);
+- live location rows near the stages.
+
+Re-seeding also removes photos in the demo group's storage folder that no meetup references.
+
+The reviewer signs in through the `demo-login` edge function (`DEMO_LOGIN_EMAIL` /
+`DEMO_LOGIN_CODE`, see the release runbook). On every successful demo login,
+`public.prepare_demo_account` (service role) recreates the reviewer's profile if needed, re-joins
+them to "Festie Demo Crew", makes them follow the demo festival and places the fake members on the
+map again with a fresh timestamp (location rows expire after 15 minutes). The reviewer can delete
+the demo account in Settings and log in again with the same code.
+
+The demo crew is recognised by its creator, never by name alone: it is the "Festie Demo Crew" on a
+published `is_demo` festival created by a profile whose auth user has `app_metadata.festie_demo =
+true`. Only the service role can write `app_metadata` (users can edit their own `user_metadata`, which
+is ignored), so a same-named group made by a real user is never chosen. On every demo login the crew
+is reset to the fake members plus the reviewer: anyone else is removed together with the meetups they
+posted there, blocks between the reviewer and the fake members are cleared (App Review tests Block on
+the shared login; a leftover block would hide that member's location, meetups and picks from the next
+reviewer), and live locations are only ever written for the fake members. After upgrading from a
+build that seeded the demo before this marker existed, run `demo:seed` again (it adds the marker to
+the existing fake users and replaces the guessable invite code).
+
+## 6. Moderation
+
+Users report profiles, groups, meetups and photos in the app (reasons: spam, harassment, hate,
+sexual, violence, impersonation, other) and are told "we'll review this within 24 hours". Reports
+are only writable through the `report_content` RPC (rate limited to 20 per user per day) and store
+a snapshot of the reported text at report time. Users can also block each other (blocked users'
+meetups, picks and locations disappear for both) and group admins can remove members.
+
+**Daily review**
+
+```sh
+npm run admin -- reports:list                      # open reports, oldest first
+npm run admin -- reports:list --status all --limit 200 --json
+```
+
+Each entry shows the target, the snapshot, details and the reporter. Then act:
+
+- `npm run admin -- reports:remove-content <report_id> --dry-run` then without `--dry-run`:
+  - `meetup` → deletes the meetup and its totem photo;
+  - `photo` → deletes the photo from storage and clears `meetups.totem_path`;
+  - `group` → renames the group to "My crew";
+  - `user` → resets the display name to "Festie user" and the avatar to initials;
+  - then every open/reviewed report about the same target is marked `actioned`.
+  Storage is removed before rows, so a failed run can be retried safely.
+- `npm run admin -- users:ban <user_id> [--dry-run]` (profile id or auth user id) for repeat or
+  severe abuse: bans the auth user for 100 years (`ban_duration: 876000h`, sign-in and token refresh
+  fail; an existing access token expires within an hour), removes all their group memberships and
+  location rows with the same admin hand-off rules as leaving a group, deletes photos orphaned by
+  groups that became empty, and marks reports about them `actioned`. Their profile stays for the
+  record.
+- No action needed: set the report's `status` to `dismissed` (or `reviewed`) in the table editor.
+
+**Disallowed words.** Display names, group names and meetup titles/notes are checked on insert and
+on change against `public.moderation_terms` (whole-word, case-insensitive; the user sees "content not
+allowed"). Matching is anchored on non-alphanumeric boundaries, so "Grape Escape" passes while
+"rape" is blocked, and every inflection must be listed separately ("fuck", "fucking", …).
+Migration `009_seed_moderation_terms.sql` seeds a starter list of common English profanity, slurs
+and hate slogans, deliberately leaving out words that are also everyday words or names ("dick",
+"cock", "pussy", "cum", "dyke", "coon", "homo").
+
+```sh
+npm run admin -- moderation:list-terms
+npm run admin -- moderation:add-terms "white power" slurword slurwords --dry-run
+npm run admin -- moderation:add-terms "white power" slurword slurwords
+npm run admin -- moderation:remove-terms someword
+```
+
+Terms are stored lower-case, 2–60 characters of letters, digits, spaces, apostrophes and hyphens,
+starting and ending with a letter or digit. Adding a term affects new writes and edits immediately;
+existing names are not rescanned (find them in the table editor and use `reports:remove-content` or
+edit directly). Database cascades (account deletion, group deletion) never re-run the check. To make
+an addition part of every fresh environment, also append it to a new migration
+(`insert into public.moderation_terms (term) values (...) on conflict do nothing;`) — never edit an
+applied migration.
+
+## 7. Troubleshooting
+
+- `Missing SUPABASE_URL …` — export both variables; the anon key is never accepted.
+- `PGRST205` / missing columns — the target project is missing migrations 006–009; apply them first.
+- The reviewer lands in no crew after a demo login — `demo:seed` has not run against this project
+  (or ran before the `festie_demo` app_metadata marker existed); run it again.
+- `festivals_published_requires_source` — a real festival was published without `source_url`.
+- Local schema tests: `npm run db:test` (throwaway Postgres 16; see `scripts/db-test.sh`).

@@ -2,11 +2,14 @@
   "name": "@festival/admin-tools",
   "private": true,
   "version": "0.1.0",
+  "main": "dist/cli.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/seed-festival.js",
-    "test": "node -e \"console.log('No admin-tools tests configured')\"",
-    "lint": "tsc -p tsconfig.json --noEmit"
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/cli.js",
+    "cli": "tsx src/cli.ts",
+    "test": "vitest run",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.3"

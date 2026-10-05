@@ -6,6 +6,9 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+// Hand-maintained to match supabase/migrations through 009 (docs/v1-architecture.md §2.9).
+// `users.Row` lists only the columns `authenticated` may select; `users` has no client writes.
+// Regenerate with `supabase gen types typescript` and re-apply those two rules when the schema changes.
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
@@ -32,6 +35,27 @@ export type Database = {
           id?: string
           image_url?: string | null
           name?: string
+        }
+        Relationships: []
+      }
+      auth_attempts: {
+        Row: {
+          action: string
+          attempted_at: string
+          email: string
+          id: string
+        }
+        Insert: {
+          action: string
+          attempted_at?: string
+          email: string
+          id?: string
+        }
+        Update: {
+          action?: string
+          attempted_at?: string
+          email?: string
+          id?: string
         }
         Relationships: []
       }
@@ -86,37 +110,70 @@ export type Database = {
       festivals: {
         Row: {
           accent_color: string | null
+          bounds_ne_lat: number | null
+          bounds_ne_lng: number | null
+          bounds_sw_lat: number | null
+          bounds_sw_lng: number | null
+          default_zoom: number | null
           end_date: string
           id: string
           image_url: string | null
+          is_demo: boolean
+          latitude: number | null
+          longitude: number | null
           map_asset_url: string | null
           name: string
+          source_url: string | null
           start_date: string
+          status: string
           timezone: string
+          updated_at: string | null
           venue_name: string | null
           version: number
         }
         Insert: {
           accent_color?: string | null
+          bounds_ne_lat?: number | null
+          bounds_ne_lng?: number | null
+          bounds_sw_lat?: number | null
+          bounds_sw_lng?: number | null
+          default_zoom?: number | null
           end_date: string
           id?: string
           image_url?: string | null
+          is_demo?: boolean
+          latitude?: number | null
+          longitude?: number | null
           map_asset_url?: string | null
           name: string
+          source_url?: string | null
           start_date: string
+          status?: string
           timezone: string
+          updated_at?: string | null
           venue_name?: string | null
           version?: number
         }
         Update: {
           accent_color?: string | null
+          bounds_ne_lat?: number | null
+          bounds_ne_lng?: number | null
+          bounds_sw_lat?: number | null
+          bounds_sw_lng?: number | null
+          default_zoom?: number | null
           end_date?: string
           id?: string
           image_url?: string | null
+          is_demo?: boolean
+          latitude?: number | null
+          longitude?: number | null
           map_asset_url?: string | null
           name?: string
+          source_url?: string | null
           start_date?: string
+          status?: string
           timezone?: string
+          updated_at?: string | null
           venue_name?: string | null
           version?: number
         }
@@ -200,26 +257,29 @@ export type Database = {
       groups: {
         Row: {
           created_at: string
-          created_by_user_id: string
+          created_by_user_id: string | null
           festival_id: string
           id: string
           invite_code: string
+          invite_code_rotated_at: string | null
           name: string
         }
         Insert: {
           created_at?: string
-          created_by_user_id: string
+          created_by_user_id?: string | null
           festival_id: string
           id?: string
           invite_code: string
+          invite_code_rotated_at?: string | null
           name: string
         }
         Update: {
           created_at?: string
-          created_by_user_id?: string
+          created_by_user_id?: string | null
           festival_id?: string
           id?: string
           invite_code?: string
+          invite_code_rotated_at?: string | null
           name?: string
         }
         Relationships: [
@@ -289,40 +349,55 @@ export type Database = {
       }
       meetups: {
         Row: {
+          created_at: string
           created_by_user_id: string
           custom_map_x: number | null
           custom_map_y: number | null
           group_id: string
           id: string
+          latitude: number | null
+          longitude: number | null
           notes: string | null
           stage_id: string | null
           starts_at: string
           title: string
           totem_image_url: string | null
+          totem_path: string | null
+          updated_at: string
         }
         Insert: {
+          created_at?: string
           created_by_user_id: string
           custom_map_x?: number | null
           custom_map_y?: number | null
           group_id: string
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           notes?: string | null
           stage_id?: string | null
           starts_at: string
           title: string
           totem_image_url?: string | null
+          totem_path?: string | null
+          updated_at?: string
         }
         Update: {
+          created_at?: string
           created_by_user_id?: string
           custom_map_x?: number | null
           custom_map_y?: number | null
           group_id?: string
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           notes?: string | null
           stage_id?: string | null
           starts_at?: string
           title?: string
           totem_image_url?: string | null
+          totem_path?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
@@ -344,6 +419,90 @@ export type Database = {
             columns: ["stage_id"]
             isOneToOne: false
             referencedRelation: "stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      moderation_terms: {
+        Row: {
+          term: string
+        }
+        Insert: {
+          term: string
+        }
+        Update: {
+          term?: string
+        }
+        Relationships: []
+      }
+      rate_limit_events: {
+        Row: {
+          action: string
+          created_at: string
+          key: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          key: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          key?: string
+        }
+        Relationships: []
+      }
+      reports: {
+        Row: {
+          created_at: string
+          details: string | null
+          group_id: string | null
+          id: string
+          reason: string
+          reporter_id: string | null
+          status: string
+          target_id: string
+          target_snapshot: string | null
+          target_type: string
+        }
+        Insert: {
+          created_at?: string
+          details?: string | null
+          group_id?: string | null
+          id?: string
+          reason: string
+          reporter_id?: string | null
+          status?: string
+          target_id: string
+          target_snapshot?: string | null
+          target_type: string
+        }
+        Update: {
+          created_at?: string
+          details?: string | null
+          group_id?: string | null
+          id?: string
+          reason?: string
+          reporter_id?: string | null
+          status?: string
+          target_id?: string
+          target_snapshot?: string | null
+          target_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_reporter_id_fkey"
+            columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -404,6 +563,8 @@ export type Database = {
         Row: {
           festival_id: string
           id: string
+          latitude: number | null
+          longitude: number | null
           map_x: number | null
           map_y: number | null
           name: string
@@ -412,6 +573,8 @@ export type Database = {
         Insert: {
           festival_id: string
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           map_x?: number | null
           map_y?: number | null
           name: string
@@ -420,6 +583,8 @@ export type Database = {
         Update: {
           festival_id?: string
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           map_x?: number | null
           map_y?: number | null
           name?: string
@@ -431,6 +596,39 @@ export type Database = {
             columns: ["festival_id"]
             isOneToOne: false
             referencedRelation: "festivals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_blocks: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_blocks_blocked_id_fkey"
+            columns: ["blocked_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_blocks_blocker_id_fkey"
+            columns: ["blocker_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -526,24 +724,15 @@ export type Database = {
           avatar_value: string
           created_at: string
           display_name: string
-          email: string
           id: string
         }
         Insert: {
-          avatar_type?: string
-          avatar_value?: string
-          created_at?: string
-          display_name: string
-          email: string
-          id?: string
+          // Not client-writable: profiles change only through upsert_my_profile.
+          [_ in never]: never
         }
         Update: {
-          avatar_type?: string
-          avatar_value?: string
-          created_at?: string
-          display_name?: string
-          email?: string
-          id?: string
+          // Not client-writable: profiles change only through upsert_my_profile.
+          [_ in never]: never
         }
         Relationships: []
       }
@@ -552,7 +741,106 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      current_app_user_id: { Args: never; Returns: string }
+      block_user: { Args: { p_user_id: string }; Returns: undefined }
+      check_rate_limit: {
+        Args: {
+          p_action: string
+          p_key: string
+          p_max: number
+          p_window: unknown
+        }
+        Returns: boolean
+      }
+      create_group: {
+        Args: { p_festival_id: string; p_name: string }
+        Returns: {
+          festival_id: string
+          group_id: string
+          invite_code: string
+          name: string
+        }[]
+      }
+      get_group_locations: {
+        Args: { p_group_id: string }
+        Returns: {
+          accuracy: number | null
+          avatar_type: string
+          avatar_value: string
+          display_name: string
+          heading: number | null
+          lat: number
+          lng: number
+          recorded_at: string
+          user_id: string
+        }[]
+      }
+      get_my_profile: {
+        Args: never
+        Returns: {
+            avatar_type: string
+            avatar_value: string
+            display_name: string
+            id: string
+          }[]
+      }
+      join_group: {
+        Args: { p_invite_code: string }
+        Returns: {
+          festival_id: string
+          group_id: string
+          group_name: string
+          member_count: number
+        }[]
+      }
+      leave_group: { Args: { p_group_id: string }; Returns: undefined }
+      prepare_account_deletion: {
+        Args: { p_auth_user_id: string }
+        Returns: {
+          storage_path: string
+        }[]
+      }
+      prepare_demo_account: { Args: { p_auth_user_id: string }; Returns: undefined }
+      purge_rate_limit_events: { Args: never; Returns: number }
+      purge_stale_locations: { Args: never; Returns: number }
+      remove_group_member: {
+        Args: { p_group_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      report_content: {
+        Args: {
+          p_details?: string | null
+          p_reason: string
+          p_target_id: string
+          p_target_type: string
+        }
+        Returns: string
+      }
+      rotate_invite_code: { Args: { p_group_id: string }; Returns: string }
+      share_location: {
+        Args: {
+          p_accuracy: number | null
+          p_group_id: string
+          p_heading: number | null
+          p_lat: number
+          p_lng: number
+        }
+        Returns: undefined
+      }
+      stop_sharing_location: { Args: { p_group_id: string }; Returns: undefined }
+      unblock_user: { Args: { p_user_id: string }; Returns: undefined }
+      upsert_my_profile: {
+        Args: {
+          p_avatar_type: string
+          p_avatar_value: string
+          p_display_name: string
+        }
+        Returns: {
+            avatar_type: string
+            avatar_value: string
+            display_name: string
+            id: string
+          }[]
+      }
     }
     Enums: {
       [_ in never]: never

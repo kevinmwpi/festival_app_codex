@@ -1,198 +1,219 @@
-import type { SyncTransport } from '@festival/sync-engine';
-import { createClient } from '@supabase/supabase-js';
-import { createMMKV } from 'react-native-mmkv';
+import { createClient, type AuthChangeEvent, type Session, type SupabaseClient } from '@supabase/supabase-js';
 
+import { fetchWithTimeout, getSupabaseConfig, REQUEST_TIMEOUT_MS, supabaseConfigError, type SupabaseConfig } from './config';
 import type { Database } from './database.types';
-import type { UserRow } from './models';
+import { toDataAccessError } from './errors';
+import { requireStoredSession } from './session';
+import { AUTH_SESSION_KEY, getAuthStorage } from './storage';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://example.supabase.co';
-const supabaseAnonKey =
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
-  process.env.EXPO_PUBLIC_SUPABASE_KEY ??
-  'development-anon-key';
+export type FestivalSupabaseClient = SupabaseClient<Database>;
+type PublicFunctions = Database['public']['Functions'];
+export type RpcName = keyof PublicFunctions;
+type AuthHandler = (event: AuthChangeEvent, session: Session | null) => void;
+type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
-const storage = createMMKV({ id: 'festival-auth' });
+interface AuthSubscription {
+  handler: AuthHandler;
+  /** Unsubscribes from the client it is currently attached to. */
+  detach: (() => void) | null;
+  /** `INITIAL_SESSION` is delivered once per subscription, not again for every replacement client. */
+  receivedInitialSession: boolean;
+}
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    detectSessionInUrl: false,
-    persistSession: true,
-    storageKey: 'supabase_session',
-    storage: {
-      getItem(key) {
-        return storage.getString(key) ?? null;
-      },
-      removeItem(key) {
-        storage.remove(key);
-      },
-      setItem(key, value) {
-        storage.set(key, value);
+let client: FestivalSupabaseClient | null = null;
+let clientOverride: FestivalSupabaseClient | null = null;
+let configOverride: (SupabaseConfig & { fetch?: FetchLike }) | null = null;
+/**
+ * Incremented whenever the client is retired. Each client's storage adapter remembers the generation
+ * it was created in and goes inert once it is no longer current.
+ */
+let clientGeneration = 0;
+/** Last value passed to `setAuthAutoRefresh` (null: never called), replayed onto replacement clients. */
+let autoRefreshActive: boolean | null = null;
+const authSubscriptions = new Set<AuthSubscription>();
+
+function createSupabaseClient(generation: number): FestivalSupabaseClient {
+  const config = configOverride ?? getSupabaseConfig();
+  const isCurrent = () => generation === clientGeneration;
+  return createClient<Database>(config.url, config.anonKey, {
+    auth: {
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
+      persistSession: true,
+      storageKey: AUTH_SESSION_KEY,
+      // A retired client (see `retireSupabaseClient`) can neither read nor change the persisted session.
+      storage: {
+        getItem(key) {
+          return isCurrent() ? (getAuthStorage().getString(key) ?? null) : null;
+        },
+        removeItem(key) {
+          if (isCurrent()) {
+            getAuthStorage().remove(key);
+          }
+        },
+        setItem(key, value) {
+          if (isCurrent()) {
+            getAuthStorage().set(key, value);
+          }
+        },
       },
     },
-  },
-  global: {
-    headers: {
-      'x-client-info': 'festival-app',
+    global: {
+      fetch: fetchWithTimeout(REQUEST_TIMEOUT_MS, configOverride?.fetch ? { fetchImpl: configOverride.fetch } : {}),
+      headers: {
+        'x-client-info': 'festie-mobile',
+      },
     },
-  },
-});
+  });
+}
 
-const client = supabase as any;
-
-async function extractFunctionError(error: any): Promise<Error> {
-  const response = error?.context;
-  if (response && typeof response.json === 'function') {
-    try {
-      const body = await response.json();
-      const message = typeof body?.error === 'string' ? body.error : null;
-      if (message) {
-        return new Error(message);
+function attachAuthSubscription(subscription: AuthSubscription, target: FestivalSupabaseClient): void {
+  subscription.detach?.();
+  const { data } = target.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION') {
+      if (subscription.receivedInitialSession) {
+        return;
       }
-    } catch {
-      // Fall back to the original error message if the response body is unreadable.
+      subscription.receivedInitialSession = true;
+    }
+    subscription.handler(event, session);
+  });
+  subscription.detach = () => data.subscription.unsubscribe();
+}
+
+/**
+ * The Supabase client. Throws `ConfigError` when `supabaseConfigError` is set (no client is ever
+ * created without config).
+ */
+export function getSupabase(): FestivalSupabaseClient {
+  if (clientOverride) {
+    return clientOverride;
+  }
+
+  if (!client) {
+    const created = createSupabaseClient(clientGeneration);
+    client = created;
+    for (const subscription of authSubscriptions) {
+      attachAuthSubscription(subscription, created);
+    }
+    if (autoRefreshActive === false) {
+      void created.auth.stopAutoRefresh().catch(() => undefined);
     }
   }
 
-  return error instanceof Error ? error : new Error('Unexpected function error.');
+  return client;
 }
 
-export async function getUser() {
-  const { data, error } = await supabase.auth.getUser();
+/**
+ * Detaches the current client so the next `getSupabase()` builds a fresh one. The retired client may
+ * still have calls in flight (e.g. a sign-out stuck on a slow network): from now on its storage adapter
+ * ignores reads and writes, its auth events no longer reach `subscribeToAuthChanges` handlers and its
+ * refresh ticker is stopped, so nothing it does later can touch a newer session. Auth subscriptions
+ * move to the replacement client. Returns `false` when there was nothing to retire.
+ */
+export function retireSupabaseClient(): boolean {
+  if (clientOverride || !client) {
+    return false;
+  }
+
+  const retired = client;
+  client = null;
+  clientGeneration += 1;
+  for (const subscription of authSubscriptions) {
+    subscription.detach?.();
+    subscription.detach = null;
+  }
+  void retired.auth.stopAutoRefresh().catch(() => undefined);
+  return true;
+}
+
+export function isSupabaseConfigured(): boolean {
+  return clientOverride !== null || configOverride !== null || supabaseConfigError === null;
+}
+
+/** Replaces the client with a fake (tests only). `null` restores the real client. */
+export function setSupabaseClientForTests(override: unknown): void {
+  clientOverride = (override as FestivalSupabaseClient | null) ?? null;
+}
+
+/**
+ * Builds real supabase-js clients from this config instead of the `EXPO_PUBLIC_*` env (tests only);
+ * `fetch` replaces the network. `null` restores the env config. Retires any existing client.
+ */
+export function setSupabaseConfigForTests(override: (SupabaseConfig & { fetch?: FetchLike }) | null): void {
+  retireSupabaseClient();
+  configOverride = override;
+}
+
+/** Retires the client and drops every auth subscription and test override (tests only). */
+export function resetSupabaseForTests(): void {
+  retireSupabaseClient();
+  authSubscriptions.clear();
+  clientOverride = null;
+  configOverride = null;
+  autoRefreshActive = null;
+}
+
+/**
+ * Calls a `public` RPC as the signed-in user. Throws `TransientAuthError` without sending when no
+ * session is stored, and a `DataAccessError` (with `code`/`status`) when the RPC fails.
+ */
+export async function callRpc<Name extends RpcName>(
+  name: Name,
+  args?: PublicFunctions[Name]['Args'] extends never ? undefined : PublicFunctions[Name]['Args'],
+): Promise<PublicFunctions[Name]['Returns']> {
+  requireStoredSession();
+  const { data, error, status } = await getSupabase().rpc(name as never, args as never);
   if (error) {
-    throw error;
+    throw toDataAccessError(error, status);
   }
 
-  return data.user ?? null;
+  return data as PublicFunctions[Name]['Returns'];
 }
 
-export async function signInWithOTP(email: string): Promise<void> {
-  const { error } = await client.functions.invoke('request-otp', {
-    body: {
-      email,
-    },
-  });
-
-  if (error) {
-    throw await extractFunctionError(error);
+/** Throws a `DataAccessError` for a failed supabase-js result, otherwise returns `data`. */
+export function unwrapResult<T>(result: { data: T | null; error: unknown; status?: number }): T {
+  if (result.error) {
+    throw toDataAccessError(result.error as Error, result.status ?? null);
   }
+
+  return result.data as T;
 }
 
-export async function verifyOTP(email: string, token: string) {
-  const { data, error } = await client.functions.invoke('verify-otp', {
-    body: {
-      email,
-      token,
-    },
-  });
-
-  if (error) {
-    throw await extractFunctionError(error);
+/**
+ * Subscribes to Supabase auth events. Returns an unsubscribe function (a no-op without config).
+ * The subscription survives client replacement (`retireSupabaseClient`): it follows the current client,
+ * receives `INITIAL_SESSION` once, and never receives events from a retired client.
+ */
+export function subscribeToAuthChanges(handler: AuthHandler): () => void {
+  if (!isSupabaseConfigured()) {
+    return () => undefined;
   }
 
-  const accessToken = data?.access_token;
-  const refreshToken = data?.refresh_token;
-  if (typeof accessToken !== 'string' || typeof refreshToken !== 'string') {
-    throw new Error('OTP verification did not return a valid session.');
+  const subscription: AuthSubscription = { handler, detach: null, receivedInitialSession: false };
+  authSubscriptions.add(subscription);
+  const current = getSupabase();
+  if (!subscription.detach) {
+    attachAuthSubscription(subscription, current);
   }
 
-  const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-    access_token: accessToken,
-    refresh_token: refreshToken,
-  });
-  if (sessionError) {
-    throw sessionError;
-  }
-
-  return sessionData.session;
-}
-
-export async function signOut(): Promise<void> {
-  const { error } = await supabase.auth.signOut();
-  if (error) {
-    throw error;
-  }
-}
-
-export function subscribeToAuthChanges(handler: Parameters<typeof supabase.auth.onAuthStateChange>[0]): () => void {
-  const { data } = supabase.auth.onAuthStateChange(handler);
-  return () => data.subscription.unsubscribe();
-}
-
-export async function getCurrentProfile(): Promise<UserRow | null> {
-  const user = await getUser();
-  if (!user?.email) {
-    return null;
-  }
-
-  const { data, error } = await client.from('users').select('*').eq('email', user.email).maybeSingle();
-  if (error) {
-    throw error;
-  }
-
-  return (data as UserRow | null) ?? null;
-}
-
-export async function saveProfile(input: {
-  display_name: string;
-  avatar_type: string;
-  avatar_value: string;
-}): Promise<UserRow> {
-  const user = await getUser();
-  if (!user?.email) {
-    throw new Error('No authenticated user is available.');
-  }
-
-  const { data, error } = await client
-    .from('users')
-    .upsert(
-      {
-        email: user.email,
-        display_name: input.display_name,
-        avatar_type: input.avatar_type,
-        avatar_value: input.avatar_value,
-      },
-      {
-        onConflict: 'email',
-      },
-    )
-    .select('*')
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  return data as UserRow;
-}
-
-export async function requireCurrentProfile(): Promise<UserRow> {
-  const profile = await getCurrentProfile();
-  if (!profile) {
-    throw new Error('The signed-in user does not have a profile yet.');
-  }
-
-  return profile;
-}
-
-export function createSupabaseSyncTransport(): SyncTransport {
-  return {
-    async upsert(table, payload) {
-      const { error } = await supabase.from(table as never).upsert(payload as never);
-      if (error) {
-        throw error;
-      }
-    },
-    async delete(table, payload) {
-      const id = payload.id;
-      if (typeof id !== 'string') {
-        throw new Error(`Delete operation for ${table} requires an id.`);
-      }
-
-      const { error } = await supabase.from(table as never).delete().eq('id', id);
-      if (error) {
-        throw error;
-      }
-    },
+  return () => {
+    authSubscriptions.delete(subscription);
+    subscription.detach?.();
+    subscription.detach = null;
   };
+}
+
+/**
+ * React Native has no visibility events: call with `true` when the app becomes active and `false`
+ * when it goes to the background so tokens refresh only while the app is in use.
+ */
+export function setAuthAutoRefresh(active: boolean): void {
+  if (!isSupabaseConfigured()) {
+    return;
+  }
+
+  autoRefreshActive = active;
+  const auth = getSupabase().auth;
+  void (active ? auth.startAutoRefresh() : auth.stopAutoRefresh()).catch(() => undefined);
 }

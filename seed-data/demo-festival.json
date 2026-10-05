@@ -1,0 +1,473 @@
+{
+  "festival": {
+    "id": "23201458-2b66-526f-943e-27ba5f93b817",
+    "name": "Festie Demo Fest",
+    "start_date": "2027-06-18",
+    "end_date": "2027-06-20",
+    "timezone": "America/New_York",
+    "venue_name": "Central Park, New York (sample data)",
+    "status": "published",
+    "is_demo": true,
+    "source_url": null,
+    "accent_color": "#FFD6A5",
+    "latitude": 40.7825,
+    "longitude": -73.9656,
+    "default_zoom": 14.5,
+    "bounds_sw_lat": 40.7644,
+    "bounds_sw_lng": -73.9819,
+    "bounds_ne_lat": 40.8006,
+    "bounds_ne_lng": -73.9493
+  },
+  "stages": [
+    {
+      "id": "9d9af215-48e0-5961-bc85-b7f038055419",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "name": "Great Lawn Stage",
+      "zone": "Mid-Park",
+      "latitude": 40.7813,
+      "longitude": -73.9667
+    },
+    {
+      "id": "090b178e-4ead-51fd-b9fa-452ef56b1fcd",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "name": "Sheep Meadow Stage",
+      "zone": "South Meadow",
+      "latitude": 40.7718,
+      "longitude": -73.9747
+    },
+    {
+      "id": "381b8cb0-ef18-52d5-85fb-5b05d12ff0de",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "name": "North Meadow Stage",
+      "zone": "North Meadow",
+      "latitude": 40.7961,
+      "longitude": -73.9566
+    },
+    {
+      "id": "128d84c9-99f8-5858-88f7-1ea6b30e281e",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "name": "East Meadow Tent",
+      "zone": "East Meadow",
+      "latitude": 40.7905,
+      "longitude": -73.9545
+    }
+  ],
+  "artists": [
+    {
+      "id": "4cbcf383-681d-5623-b013-c2d5da3b4351",
+      "name": "Marigold Riot",
+      "genre": "Indie Rock"
+    },
+    {
+      "id": "af7014a5-fe38-58ce-a688-b77473f20a61",
+      "name": "Lumen Drift",
+      "genre": "Ambient Electronic"
+    },
+    {
+      "id": "dfd230ad-2e1e-586d-9aaf-c0e3e9c5daed",
+      "name": "Kestrel Bay",
+      "genre": "Folk"
+    },
+    {
+      "id": "5d503367-ba85-5923-ae0e-c4458ef76a68",
+      "name": "Neon Orchard",
+      "genre": "Synth Pop"
+    },
+    {
+      "id": "60dcd563-f055-5b14-97a3-9021e8859c17",
+      "name": "The Quiet Satellites",
+      "genre": "Dream Pop"
+    },
+    {
+      "id": "a56b40f0-eecf-58ee-aefb-c166111021ec",
+      "name": "Velvet Static Choir",
+      "genre": "Shoegaze"
+    },
+    {
+      "id": "e69fa664-e375-5069-ba72-356ac085c720",
+      "name": "Juniper & the Low Moons",
+      "genre": "Americana"
+    },
+    {
+      "id": "763525b5-cce9-5d66-b8c1-a2a184e899f2",
+      "name": "Harbor Ghosts",
+      "genre": "Post-Punk"
+    },
+    {
+      "id": "570a12ab-4605-5fe9-87d4-8917ba19b1a1",
+      "name": "Saffron Tide",
+      "genre": "Neo Soul"
+    },
+    {
+      "id": "2f54f30c-6b5a-586d-9dd1-49843173db20",
+      "name": "Copper Kite",
+      "genre": "Funk"
+    },
+    {
+      "id": "3e9a510d-f569-598f-be6d-3ae8954915b9",
+      "name": "Paper Comets",
+      "genre": "Indie Pop"
+    },
+    {
+      "id": "0761aec7-ced3-500a-a34a-493d50194df6",
+      "name": "Midnight Arcade",
+      "genre": "House"
+    },
+    {
+      "id": "6006fa3e-5cfb-585b-a61a-8d48767bebbd",
+      "name": "Wild Clover Union",
+      "genre": "Bluegrass"
+    },
+    {
+      "id": "2a06f81b-fd38-53c6-8a9c-6e8071a748b8",
+      "name": "Static Bloom",
+      "genre": "Techno"
+    },
+    {
+      "id": "76b97078-5869-5d73-9566-6b037629a753",
+      "name": "Honey Radar",
+      "genre": "Garage Rock"
+    },
+    {
+      "id": "af033b8f-f83c-5421-abec-ad0c7e36ad09",
+      "name": "Atlas & Ember",
+      "genre": "Singer-Songwriter"
+    },
+    {
+      "id": "2c2aa85a-053c-5dd5-a897-d4ebfacbd058",
+      "name": "Glasshouse Parade",
+      "genre": "Disco"
+    },
+    {
+      "id": "4ef1145d-879d-5d13-9843-e8290b80fc6a",
+      "name": "Northbound Echo",
+      "genre": "Hip-Hop"
+    }
+  ],
+  "sets": [
+    {
+      "id": "06e648ba-2423-5522-92d5-239a7a85fb67",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "4cbcf383-681d-5623-b013-c2d5da3b4351",
+      "stage_id": "381b8cb0-ef18-52d5-85fb-5b05d12ff0de",
+      "start_time": "2027-06-18T13:30:00-04:00",
+      "end_time": "2027-06-18T14:15:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "308ed1a5-8871-569f-86a3-85f7f7fad462",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "5d503367-ba85-5923-ae0e-c4458ef76a68",
+      "stage_id": "090b178e-4ead-51fd-b9fa-452ef56b1fcd",
+      "start_time": "2027-06-18T14:00:00-04:00",
+      "end_time": "2027-06-18T14:45:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "ac90d3b1-c2e1-5506-8405-b9b403fe921f",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "2f54f30c-6b5a-586d-9dd1-49843173db20",
+      "stage_id": "9d9af215-48e0-5961-bc85-b7f038055419",
+      "start_time": "2027-06-18T15:00:00-04:00",
+      "end_time": "2027-06-18T16:00:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "692610a4-1c28-50ce-aff0-5787124c6a28",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "e69fa664-e375-5069-ba72-356ac085c720",
+      "stage_id": "128d84c9-99f8-5858-88f7-1ea6b30e281e",
+      "start_time": "2027-06-18T15:30:00-04:00",
+      "end_time": "2027-06-18T16:15:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "38c4e285-005b-5b77-8775-d97bc898f389",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "3e9a510d-f569-598f-be6d-3ae8954915b9",
+      "stage_id": "090b178e-4ead-51fd-b9fa-452ef56b1fcd",
+      "start_time": "2027-06-18T16:30:00-04:00",
+      "end_time": "2027-06-18T17:30:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "d60ab6b2-dd7d-5939-b1eb-3f1fad6260b2",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "763525b5-cce9-5d66-b8c1-a2a184e899f2",
+      "stage_id": "381b8cb0-ef18-52d5-85fb-5b05d12ff0de",
+      "start_time": "2027-06-18T17:00:00-04:00",
+      "end_time": "2027-06-18T18:00:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "a232ae49-05ae-5e68-be25-20d1f87e8f81",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "2c2aa85a-053c-5dd5-a897-d4ebfacbd058",
+      "stage_id": "9d9af215-48e0-5961-bc85-b7f038055419",
+      "start_time": "2027-06-18T18:00:00-04:00",
+      "end_time": "2027-06-18T19:15:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "61ca728f-8fdd-5ba4-86c9-6a3337afcc4b",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "4ef1145d-879d-5d13-9843-e8290b80fc6a",
+      "stage_id": "090b178e-4ead-51fd-b9fa-452ef56b1fcd",
+      "start_time": "2027-06-18T19:30:00-04:00",
+      "end_time": "2027-06-18T20:30:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "ee2d7992-f52e-5838-8af9-0c256547e137",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "76b97078-5869-5d73-9566-6b037629a753",
+      "stage_id": "381b8cb0-ef18-52d5-85fb-5b05d12ff0de",
+      "start_time": "2027-06-18T20:00:00-04:00",
+      "end_time": "2027-06-18T21:00:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "9d1cb896-5ffc-582c-bc63-064ca5971bd7",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "a56b40f0-eecf-58ee-aefb-c166111021ec",
+      "stage_id": "9d9af215-48e0-5961-bc85-b7f038055419",
+      "start_time": "2027-06-18T21:00:00-04:00",
+      "end_time": "2027-06-18T22:30:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "11d08741-b0b3-5a1c-bab1-d3457be97376",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "2a06f81b-fd38-53c6-8a9c-6e8071a748b8",
+      "stage_id": "128d84c9-99f8-5858-88f7-1ea6b30e281e",
+      "start_time": "2027-06-18T22:00:00-04:00",
+      "end_time": "2027-06-18T23:00:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "90b1d66d-c837-50b5-ad00-3d603aa20240",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "dfd230ad-2e1e-586d-9aaf-c0e3e9c5daed",
+      "stage_id": "128d84c9-99f8-5858-88f7-1ea6b30e281e",
+      "start_time": "2027-06-18T23:30:00-04:00",
+      "end_time": "2027-06-19T00:30:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "4482237e-ea97-583e-a4a0-5ff2b3e763b6",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "4ef1145d-879d-5d13-9843-e8290b80fc6a",
+      "stage_id": "381b8cb0-ef18-52d5-85fb-5b05d12ff0de",
+      "start_time": "2027-06-19T13:30:00-04:00",
+      "end_time": "2027-06-19T14:15:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "64f92d86-0fc4-57c6-a28c-b7e8ad04e055",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "dfd230ad-2e1e-586d-9aaf-c0e3e9c5daed",
+      "stage_id": "090b178e-4ead-51fd-b9fa-452ef56b1fcd",
+      "start_time": "2027-06-19T14:00:00-04:00",
+      "end_time": "2027-06-19T14:45:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "ae807efe-924b-565b-ae0c-286dadc59f3e",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "570a12ab-4605-5fe9-87d4-8917ba19b1a1",
+      "stage_id": "9d9af215-48e0-5961-bc85-b7f038055419",
+      "start_time": "2027-06-19T15:00:00-04:00",
+      "end_time": "2027-06-19T16:00:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "48224f19-9414-5544-bf9c-e182f89d8cc6",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "a56b40f0-eecf-58ee-aefb-c166111021ec",
+      "stage_id": "128d84c9-99f8-5858-88f7-1ea6b30e281e",
+      "start_time": "2027-06-19T15:30:00-04:00",
+      "end_time": "2027-06-19T16:15:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "e6fdc15f-326c-595f-99fc-1af46c8e76a3",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "2f54f30c-6b5a-586d-9dd1-49843173db20",
+      "stage_id": "090b178e-4ead-51fd-b9fa-452ef56b1fcd",
+      "start_time": "2027-06-19T16:30:00-04:00",
+      "end_time": "2027-06-19T17:30:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "9d19d4fa-dbe3-5b7e-8011-2b1b6af0a9d4",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "e69fa664-e375-5069-ba72-356ac085c720",
+      "stage_id": "381b8cb0-ef18-52d5-85fb-5b05d12ff0de",
+      "start_time": "2027-06-19T17:00:00-04:00",
+      "end_time": "2027-06-19T18:00:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "4f2dc89b-5f45-5cc2-bdd1-70edba3904d3",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "af033b8f-f83c-5421-abec-ad0c7e36ad09",
+      "stage_id": "9d9af215-48e0-5961-bc85-b7f038055419",
+      "start_time": "2027-06-19T18:00:00-04:00",
+      "end_time": "2027-06-19T19:15:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "5a13264c-925d-54c7-a25e-79aa3b224837",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "2c2aa85a-053c-5dd5-a897-d4ebfacbd058",
+      "stage_id": "090b178e-4ead-51fd-b9fa-452ef56b1fcd",
+      "start_time": "2027-06-19T19:30:00-04:00",
+      "end_time": "2027-06-19T20:30:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "5f18fa9a-4933-5926-bc7a-2588bf154d85",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "2a06f81b-fd38-53c6-8a9c-6e8071a748b8",
+      "stage_id": "381b8cb0-ef18-52d5-85fb-5b05d12ff0de",
+      "start_time": "2027-06-19T20:00:00-04:00",
+      "end_time": "2027-06-19T21:00:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "157b35d1-d14b-5c7b-93eb-f8fa8a19bb29",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "60dcd563-f055-5b14-97a3-9021e8859c17",
+      "stage_id": "9d9af215-48e0-5961-bc85-b7f038055419",
+      "start_time": "2027-06-19T21:00:00-04:00",
+      "end_time": "2027-06-19T22:30:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "8c12512c-77b7-5495-bfa9-dde7ff5bedd0",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "6006fa3e-5cfb-585b-a61a-8d48767bebbd",
+      "stage_id": "128d84c9-99f8-5858-88f7-1ea6b30e281e",
+      "start_time": "2027-06-19T22:00:00-04:00",
+      "end_time": "2027-06-19T23:00:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "abfcf9aa-88d5-5f22-883c-b1431791487f",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "af7014a5-fe38-58ce-a688-b77473f20a61",
+      "stage_id": "128d84c9-99f8-5858-88f7-1ea6b30e281e",
+      "start_time": "2027-06-19T23:30:00-04:00",
+      "end_time": "2027-06-20T00:30:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "125d1080-d085-57de-a902-b55bd2081750",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "2c2aa85a-053c-5dd5-a897-d4ebfacbd058",
+      "stage_id": "381b8cb0-ef18-52d5-85fb-5b05d12ff0de",
+      "start_time": "2027-06-20T13:30:00-04:00",
+      "end_time": "2027-06-20T14:15:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "16e93893-708a-5d8a-a229-c86919a36a35",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "af7014a5-fe38-58ce-a688-b77473f20a61",
+      "stage_id": "090b178e-4ead-51fd-b9fa-452ef56b1fcd",
+      "start_time": "2027-06-20T14:00:00-04:00",
+      "end_time": "2027-06-20T14:45:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "ac7c8fc5-6cd3-5dea-ad8e-67c485c59261",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "763525b5-cce9-5d66-b8c1-a2a184e899f2",
+      "stage_id": "9d9af215-48e0-5961-bc85-b7f038055419",
+      "start_time": "2027-06-20T15:00:00-04:00",
+      "end_time": "2027-06-20T16:00:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "05824c0c-93b2-5ae8-b06e-b92a41f640b8",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "60dcd563-f055-5b14-97a3-9021e8859c17",
+      "stage_id": "128d84c9-99f8-5858-88f7-1ea6b30e281e",
+      "start_time": "2027-06-20T15:30:00-04:00",
+      "end_time": "2027-06-20T16:15:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "99738bee-d135-5646-82b6-3e9b8b89e761",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "570a12ab-4605-5fe9-87d4-8917ba19b1a1",
+      "stage_id": "090b178e-4ead-51fd-b9fa-452ef56b1fcd",
+      "start_time": "2027-06-20T16:30:00-04:00",
+      "end_time": "2027-06-20T17:30:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "980587e7-fca8-532c-91b7-7d26845b5ae4",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "a56b40f0-eecf-58ee-aefb-c166111021ec",
+      "stage_id": "381b8cb0-ef18-52d5-85fb-5b05d12ff0de",
+      "start_time": "2027-06-20T17:00:00-04:00",
+      "end_time": "2027-06-20T18:00:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "23523b6d-1cdb-52aa-b135-9b67959a3a1a",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "76b97078-5869-5d73-9566-6b037629a753",
+      "stage_id": "9d9af215-48e0-5961-bc85-b7f038055419",
+      "start_time": "2027-06-20T18:00:00-04:00",
+      "end_time": "2027-06-20T19:15:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "92d5239b-f6c8-53b5-bde5-06cdc9d607e3",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "af033b8f-f83c-5421-abec-ad0c7e36ad09",
+      "stage_id": "090b178e-4ead-51fd-b9fa-452ef56b1fcd",
+      "start_time": "2027-06-20T19:30:00-04:00",
+      "end_time": "2027-06-20T20:30:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "f660f0d2-7b53-54bb-b349-76994ecd5917",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "6006fa3e-5cfb-585b-a61a-8d48767bebbd",
+      "stage_id": "381b8cb0-ef18-52d5-85fb-5b05d12ff0de",
+      "start_time": "2027-06-20T20:00:00-04:00",
+      "end_time": "2027-06-20T21:00:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "8bd7a392-ca86-5396-bfd0-d8ec065d8110",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "5d503367-ba85-5923-ae0e-c4458ef76a68",
+      "stage_id": "9d9af215-48e0-5961-bc85-b7f038055419",
+      "start_time": "2027-06-20T21:00:00-04:00",
+      "end_time": "2027-06-20T22:30:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "53b79998-d623-5ead-8013-7f48fb3ced99",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "0761aec7-ced3-500a-a34a-493d50194df6",
+      "stage_id": "128d84c9-99f8-5858-88f7-1ea6b30e281e",
+      "start_time": "2027-06-20T22:00:00-04:00",
+      "end_time": "2027-06-20T23:00:00-04:00",
+      "set_type": "performance"
+    },
+    {
+      "id": "3048a1d2-4626-504f-b351-2b2208ae7a8b",
+      "festival_id": "23201458-2b66-526f-943e-27ba5f93b817",
+      "artist_id": "4cbcf383-681d-5623-b013-c2d5da3b4351",
+      "stage_id": "128d84c9-99f8-5858-88f7-1ea6b30e281e",
+      "start_time": "2027-06-20T23:30:00-04:00",
+      "end_time": "2027-06-21T00:30:00-04:00",
+      "set_type": "performance"
+    }
+  ]
+}

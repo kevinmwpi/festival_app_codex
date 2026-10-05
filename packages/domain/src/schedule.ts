@@ -1,3 +1,5 @@
+import { DEFAULT_DAY_START_HOUR, festivalDayKey } from './time';
+
 export interface Set {
   id: string;
   artist_id: string;
@@ -17,7 +19,8 @@ function toTime(value: string): number {
   return new Date(value).getTime();
 }
 
-export function detectConflict(a: Set, b: Set): boolean {
+/** Two sets conflict when their time ranges overlap; back-to-back sets (end == start) do not. */
+export function detectConflict(a: Pick<Set, 'start_time' | 'end_time'>, b: Pick<Set, 'start_time' | 'end_time'>): boolean {
   return toTime(a.start_time) < toTime(b.end_time) && toTime(a.end_time) > toTime(b.start_time);
 }
 
@@ -25,11 +28,14 @@ export function getConflictsForSet(set: Set, selected: Set[]): Set[] {
   return selected.filter((candidate) => candidate.id !== set.id && detectConflict(set, candidate));
 }
 
-export function getSetsByDay(sets: Set[]): Record<string, Set[]> {
+/**
+ * Groups sets by festival day (see `festivalDayKey`): a 1:00 AM set belongs to the previous day.
+ */
+export function getSetsByDay(sets: Set[], timeZone: string, dayStartHour = DEFAULT_DAY_START_HOUR): Record<string, Set[]> {
   return [...sets]
     .sort((left, right) => toTime(left.start_time) - toTime(right.start_time))
     .reduce<Record<string, Set[]>>((grouped, currentSet) => {
-      const dayKey = currentSet.start_time.slice(0, 10);
+      const dayKey = festivalDayKey(currentSet.start_time, timeZone, dayStartHour);
       grouped[dayKey] ??= [];
       grouped[dayKey].push(currentSet);
       return grouped;

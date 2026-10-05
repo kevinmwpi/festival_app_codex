@@ -1,0 +1,180 @@
+# @festival/data-access
+
+Supabase + offline-cache data layer for the Festie mobile app. It implements
+`docs/v1-architecture.md` §4.1 on top of `@festival/sync-engine` (local SQLite cache and offline
+write queue). Everything here is plain async functions; React Query hooks live in the app
+(`apps/mobile/src/hooks`), with query keys that include the auth user id.
+
+## Ground rules
+
+- **Cache-first reads.** Screens render from `getLocal*` functions (SQLite/MMKV) immediately, then
+  call the matching `refresh*`/`list*`/`fetch*` function in the background only while
+  `isOnline()` (re-exported from `@festival/sync-engine`) is `true`. Refresh functions write the
+  cache and resolve the fresh local rows.
+- **Launch and routing never touch the network.** Use `getStoredSession()` and
+  `getCachedProfile()` only. Never await `supabase.auth.getSession()/getUser()` on launch or
+  render paths.
+- **Identity for offline paths** comes only from `getCachedProfile()` (MMKV). Writes and RPCs
+  check the stored session first and throw `TransientAuthError` **without sending** when it is
+  missing.
+- **Errors.** Show `toUserMessage(error)`. Branch on `getErrorCode(error)` (or
+  `isAppErrorCode(error, 'group_full')`) rather than message text.
+- `users` is never selected with `*` or `email`; member selects use explicit columns.
+- **Refresh reads are complete or fail.** PostgREST caps every response at `max_rows` (1000) without
+  an error, and refreshes delete local rows the server did not return, so every unbounded read is
+  paged (`range` + exact count, ordered by primary key) and `in(…)` filters are chunked. If the data
+  changes mid-read repeatedly, the refresh throws `DataAccessError` `result_changed` (status 503)
+  instead of merging a partial result.
+
+## Setup (MOBILE-A, `src/providers`)
+
+| Export | Signature | Notes |
+|---|---|---|
+| `supabaseConfigError` | `string \| null` | Non-null when `EXPO_PUBLIC_SUPABASE_URL` or `EXPO_PUBLIC_SUPABASE_ANON_KEY` (alias `EXPO_PUBLIC_SUPABASE_KEY`) is missing/invalid. Show the config-error screen; no client exists and every network call throws `ConfigError`. |
+| `configureDataSync()` | `() => void` | Call once at app start. Wires the sync engine to Supabase (`createSupabaseSyncTransport()`) with the stored-session pre-check. |
+| `setAuthAutoRefresh(active)` | `(boolean) => void` | Call with `true` on AppState `active`, `false` on `background`. |
+| `subscribeToAuthChanges(handler)` | `((event, session) => void) => () => void` | Returns an unsubscribe. No-op without config. Call `ensureLocalOwner(getStoredSession().authUserId)` once at launch (before anything is enqueued) and on `SIGNED_IN` call `ensureLocalOwner(session.user.id)` — an expired stored token is recovered with `TOKEN_REFRESHED`/`INITIAL_SESSION`, never `SIGNED_IN`; on `TOKEN_REFRESHED`/`SIGNED_IN` call `flush()`; on `SIGNED_OUT` run the `session_lost` flow. `signOut()`/`deleteAccount()` themselves usually emit `SIGNED_OUT`, so make the orchestrator re-entrancy safe. The subscription follows client replacement (see `signOut()`): `INITIAL_SESSION` is delivered once, and events from a retired client are never delivered. |
+| `getSupabase()` | `() => SupabaseClient<Database>` | Escape hatch; throws `ConfigError` without config. Prefer the functions below. |
+| `fetchWithTimeout(ms?, opts?)` | fetch factory | Used by the client (15 s; storage uploads 90 s). Rejects with `FetchTimeoutError` (`name: 'TimeoutError'`). |
+
+## Session & auth
+
+| Export | Signature | Behaviour |
+|---|---|---|
+| `getStoredSession()` | `() => { authUserId: string; expiresAt: number } \| null` | **Synchronous** parse of MMKV `festival-auth`/`supabase_session`. Requires `refresh_token` and `user.id`. `expiresAt` is epoch **milliseconds** (0 if unknown). Returned even when the access token is expired. |
+| `requireStoredSession()` | `() => StoredSession` | Throws `TransientAuthError` when absent. |
+| `requestEmailCode(email)` | `(string) => Promise<void>` | `auth.signInWithOtp({ email, options: { shouldCreateUser: true } })`. Throws `ValidationError` for a malformed email, `AuthApiError` (e.g. 429 `over_email_send_rate_limit`) or `AuthRetryableFetchError` (offline). |
+| `verifyEmailCode(email, code)` | `(string, string) => Promise<Session>` | `verifyOtp({ email, token, type: 'email' })`; only after an `AuthApiError` 4xx **and** an 8–10 digit code **and** no `demo-login` 404 yet this app session → `demo-login` → `verifyOtp({ token_hash, type: 'email' })`. Otherwise rethrows the original error. Calls `ensureLocalOwner` before resolving. Whitespace in the code is ignored. |
+| `ensureLocalOwner(authUserId)` | `(string) => Promise<void>` | If `app_meta.local_owner_auth_user_id` differs (or is unset), wipes local user data, the signed-URL cache and a foreign profile cache, then records the owner. Idempotent. |
+| `signOut()` | `() => Promise<void>` | `auth.signOut({ scope: 'local' })` (failure ignored, waits at most `SIGN_OUT_SERVER_TIMEOUT_MS` = 5 s) → `clearLocalSession()`. Never throws for network reasons. When the server call times out, the Supabase client is retired: the stalled call can no longer read or write the persisted session or emit events, and the next sign-in runs on a fresh client. |
+| `deleteAccount()` | `() => Promise<void>` | `functions.invoke('delete-account', { method: 'POST' })`; must return `{ deleted: true }` or it throws `DataAccessError` (`status` 5xx/401, or `code: 'delete_not_confirmed'`) and **nothing local is touched**. On success: local sign-out + `clearLocalSession()`. Throws `TransientAuthError` without a session. |
+| `clearLocalSession()` | `() => Promise<void>` | Local wipe only (§4.1 steps 2–4), in order: remove MMKV session → `clearLocalUserData()` → clear MMKV `profile-cache` and the signed-URL cache → clear `local_owner_auth_user_id`. Use for `performSignOut('session_lost')`. |
+
+`performSignOut` order (MOBILE-A) stays: `stopLocationSharingNow()` → `cancelAllReminders()` →
+`signOut()`/`deleteAccount()`/`clearLocalSession()` → `queryClient.clear()` → `resetAppStore()` →
+`router.replace('/auth/enter-email')`. Warn before a voluntary sign-out when
+`getPendingCount() > 0` (sync-engine).
+
+## Profile
+
+| Export | Signature | Behaviour |
+|---|---|---|
+| `getCachedProfile()` | `() => CachedProfile \| null` | Sync MMKV read. `null` unless a stored session exists **and** the cached `auth_user_id` matches it. `CachedProfile = { id, display_name, avatar_type, avatar_value, auth_user_id }` (`id` is `public.users.id`). |
+| `requireCachedProfile()` | `() => CachedProfile` | Throws `TransientAuthError` (no session) or `ProfileRequiredError` (`code: 'profile_required'`). |
+| `getMyProfile()` | `() => Promise<CachedProfile \| null>` | Online RPC `get_my_profile`; refreshes (or clears) the cache. `null` → route to profile setup. |
+| `saveMyProfile(input)` | `({ display_name, avatar_type, avatar_value }) => Promise<CachedProfile>` | Validates (name 1–40 chars trimmed, avatar type `initials`/`emoji`/`color`, value ≤ 100) → RPC `upsert_my_profile` → cache. Server may raise P0001 `content_not_allowed`. |
+| `validateProfileInput`, `AVATAR_TYPES`, `DISPLAY_NAME_MAX_LENGTH` | | For form validation. |
+
+## Festivals
+
+| Export | Signature | Behaviour |
+|---|---|---|
+| `getLocalFestivals()` | `() => Promise<Festival[]>` | Cached published festivals; demo festivals sort last. `is_demo` is a boolean. |
+| `getLocalFestival(id)` | `(string) => Promise<Festival \| null>` | |
+| `refreshFestivalCatalog()` | `() => Promise<Festival[]>` | Online. Upserts published festivals and deletes cached festivals/stages/sets that are no longer published. Call on launch and pull-to-refresh. |
+| `fetchAndCacheFestival(id)` | `(string) => Promise<FestivalBundle \| null>` | Online. Light `select id, version` first; downloads stages/sets/artists only when the version changed. `null` (and removed locally) when no longer published. |
+| `getLocalFestivalBundle(id)` | `(string) => Promise<FestivalBundle \| null>` | `{ festival, stages, artists, sets }`. Stages carry `latitude/longitude` (no `map_x/map_y`). |
+| `hasCachedFestivalBundle(id)` | `(string) => Promise<boolean>` | |
+| `getLocalFestivalLineup(id)` | `(string) => Promise<FestivalLineupRow[]>` | Sets joined with artist/stage names. |
+| `getLocalUserFestivals()` | `() => Promise<LocalUserFestival[]>` | Followed festivals (cache). |
+| `refreshUserFestivals()` | `() => Promise<LocalUserFestival[]>` | Online; replaces the cache. |
+| `followFestival(id)` / `unfollowFestival(id)` | `(string) => Promise<void>` | Online writes (not queued); already-following is not an error. |
+| `toggleUserFestival(id)` | `(string) => Promise<boolean>` | `true` when now followed. |
+
+Format every time with `@festival/domain` helpers and `festival.timezone`.
+
+## Schedule (selections — offline queue)
+
+| Export | Signature | Behaviour |
+|---|---|---|
+| `toggleSetSelection(festivalId, setId)` | `(string, string) => Promise<boolean>` | Queued. Upsert on `(user_id, set_id)` ignoring duplicates; delete by `user_id + set_id`. Works offline. `true` when now selected. |
+| `getLocalSelections(festivalId)` | `(string) => Promise<LocalSelection[]>` | `pending_sync = 1` until the server accepted it. |
+| `getBrowseSchedule(festivalId)` | `(string) => Promise<ScheduleRow[]>` | Full lineup with `selection_id`/`selection_pending`. |
+| `getSelectedSchedule(festivalId)` | `(string) => Promise<ScheduleRow[]>` | |
+| `getLineupWithConflicts(festivalId)` | `(string) => Promise<Array<ScheduleRow & { is_conflicting }>>` | Back-to-back sets do not conflict. |
+| `getConflictSetIds(rows)` | `(rows) => Set<string>` | Pure. |
+| `refreshUserSelections(festivalId)` | `(string) => Promise<LocalSelection[]>` | Online merge: never drops `pending_sync = 1` rows, never resurrects rows with a queued delete — including operations a concurrent flush completes while the fetch is in flight (the queue is snapshotted before the fetch and tracked during it). Writes nothing if local data was wiped (sign-out) meanwhile. |
+| `refreshSchedule(festivalId)` | `(string) => Promise<LocalSelection[]>` | `flush()` then `refreshUserSelections`. |
+
+## Groups ("crews")
+
+| Export | Signature | Behaviour |
+|---|---|---|
+| `getLocalGroups()` | `() => Promise<GroupSummary[]>` | `Group & { my_role, member_count }`, newest first. |
+| `listMyGroups()` | `() => Promise<GroupSummary[]>` | Online. **Replaces** the user's memberships locally: memberships/groups not returned are deleted with their members and meetups. |
+| `getLocalGroupDetail(id)` | `(string) => Promise<GroupDetail \| null>` | `{ group, my_role, members, meetups }`. Each member: `{ ...GroupMemberRow, user: PublicUser \| null, is_blocked }` — render blocked members as "Blocked user" with Unblock. Meetups exclude blocked creators. |
+| `refreshGroupDetail(id)` | `(string) => Promise<GroupDetail \| null>` | Online refresh of group, members, profiles, meetups and members' selections. Meetups and own selections with queue activity before or during the fetch keep their local state (same rule as `refreshUserSelections`). `null` (purged locally) when the user is no longer a member. |
+| `createGroup({ name, festival_id })` | `=> Promise<CreatedGroup>` | RPC `create_group` → `{ group_id, name, festival_id, invite_code }`. Name 1–60. P0001 `festival_not_found`, `rate_limited`, `content_not_allowed`. |
+| `joinGroup(code)` | `(string) => Promise<JoinedGroup>` | Code normalised (uppercase, letters/digits only). Zero rows → `InviteNotFoundError`. P0001 `group_full`, `rate_limited`. → `{ group_id, group_name, festival_id, member_count }`. |
+| `leaveGroup(id)` | `(string) => Promise<void>` | RPC; purges locally. |
+| `removeGroupMember(groupId, userId)` | `=> Promise<void>` | Admin RPC. P0001 `not_group_admin`, `cannot_remove_self`. |
+| `rotateInviteCode(groupId)` | `=> Promise<string>` | Admin RPC; new code. |
+| `renameGroup(groupId, name)` | `=> Promise<void>` | Admin direct update; non-admin → P0001 `not_group_admin`. |
+| `getCombinedSelections(groupId, festivalId)` | `=> Promise<CombinedSelectionRow[]>` | Cache only; excludes blocked users. Refresh via `refreshGroupDetail`. |
+| `normaliseInviteCode(code)`, `isWellFormedInviteCode(code)` | pure | |
+| `purgeGroupLocally(groupId)` | `=> Promise<void>` | Exposed for the location provider on `not_group_member`. |
+
+Any group call that fails with P0001 `not_group_member` purges that group locally before
+rethrowing; the UI should navigate away and invalidate group queries.
+
+## Meetups (offline queue) and totem photos
+
+| Export | Signature | Behaviour |
+|---|---|---|
+| `createMeetup(input)` | `(MeetupInput) => Promise<LocalMeetup>` | `{ group_id, title (1–80), starts_at (ISO), stage_id?, notes? (≤ 500), latitude?, longitude? }` (both or neither). Queued; resolves the optimistic row (`pending_sync: 1`). |
+| `updateMeetup(id, patch)` | `=> Promise<LocalMeetup>` | Creator only (`ValidationError` otherwise, `NotFoundError` if not cached). Queued as an `update` (never an upsert): if the meetup was deleted on the server meanwhile (admin, moderation), the edit is dropped with the local row and the sync engine emits `{ type: 'missing', table: 'meetups', recordId }` — invalidate meetup queries on it. |
+| `deleteMeetup(id)` | `=> Promise<void>` | Creator or admin. Queued; when the delete reaches the server (now or after reconnecting) the transport removes the meetup's totem object, using the path from the deleted server row. |
+| `getLocalMeetups(groupId)` / `getLocalMeetup(id)` | | Cache. |
+| `uploadTotemPhoto(photo, meetup)` | `({ base64, mimeType? }, { id, group_id }) => Promise<string>` | Flushes first; still queued → `MeetupNotSyncedError` ("Add the photo once this meetup syncs"). Input must be **JPEG** base64 (pick with `expo-image-picker` `{ base64: true, quality: 0.8, exif: false }`, iOS `preferredAssetRepresentationMode: Compatible`); EXIF, XMP, IPTC/Photoshop, comment and other non-rendering metadata segments are stripped, ≤ 5 MB. Reads the current `totem_path` from the server (`meetup_not_found` before uploading if the meetup is gone), uploads `totems/<group_id>/<meetup_id>/<uuid>.jpg` with `upsert: false`, sets `meetups.totem_path` online, removes the photo it replaced, updates the cache, resolves the path. |
+| `getTotemSignedUrl(path)` | `(string) => Promise<string>` | 1 h signed URL, cached in memory for 50 min. |
+| `clearSignedUrlCache()` | | Done by sign-out. |
+
+## Location sharing (online RPCs — MOBILE-B `LocationSharingProvider`)
+
+| Export | Signature | Behaviour |
+|---|---|---|
+| `shareLocation(groupId, coords)` | `(string, { latitude, longitude, accuracy?, heading? }) => Promise<void>` | RPC `share_location`. Negative accuracy/heading (expo "unknown") are sent as null. Server throttles to 1 write / 5 s. |
+| `stopSharingLocation(groupId)` | `=> Promise<void>` | RPC `stop_sharing_location`. |
+| `getGroupLocations(groupId)` | `=> Promise<FriendLocation[]>` | Positions from the last 15 min, excluding the caller and blocked users: `{ user_id, display_name, avatar_type, avatar_value, lat, lng, accuracy, heading, recorded_at }`. |
+
+`not_group_member` from these purges the group locally (stop sharing on that error).
+
+## Moderation
+
+| Export | Signature | Behaviour |
+|---|---|---|
+| `reportContent(type, targetId, reason, details?)` | `('user'\|'group'\|'meetup'\|'photo', string, ReportReason, string?) => Promise<string>` | For `photo`, `targetId` is the meetup id. Reasons: `REPORT_REASONS`. Details ≤ 500. Duplicate reports resolve the existing id. P0001 `rate_limited`, `invalid_input`. |
+| `blockUser(userId)` | `=> Promise<void>` | RPC, then deletes that user's meetups and selections from the cache and records the block locally. Invalidate group/meetup/schedule queries afterwards. |
+| `unblockUser(userId)` | `=> Promise<void>` | Content returns on the next refresh. |
+| `listBlockedUsers()` | `=> Promise<BlockedUser[]>` | Online; refreshes the local block list. `display_name` is null when no crew is shared any more. |
+| `getLocalBlockedUsers()` | `=> Promise<BlockedUser[]>` | Cache. |
+
+## Errors
+
+| Class | `code` | When |
+|---|---|---|
+| `ConfigError` | `config_error` | No Supabase config. |
+| `TransientAuthError` | `session_missing` | No stored session; nothing was sent. |
+| `ProfileRequiredError` | `profile_required` | No cached profile for the session. |
+| `InviteNotFoundError` | `invite_not_found` | `joinGroup` code unknown. |
+| `MeetupNotSyncedError` | `meetup_not_synced` | Photo before the meetup synced. |
+| `ValidationError` | `invalid_input` (+ `field`) | Client-side validation; `message` is user-facing copy. |
+| `NotFoundError` | `not_found` | Record missing from the cache. |
+| `DataAccessError` | Postgres/PostgREST code, `P0001`, … (+ `status`) | Any failed request. For P0001, `message` is the app code (`not_group_member`, `group_full`, …). |
+
+Helpers: `toUserMessage(error)`, `getErrorCode(error)`, `getAppErrorCode(error)`,
+`isAppErrorCode(error, code)`. Auth calls throw supabase-js `AuthApiError` /
+`AuthRetryableFetchError`; `toUserMessage` maps those too.
+
+## Sync engine (re-used directly from `@festival/sync-engine`)
+
+`flush()`, `isOnline()`, `getPendingCount()`, `getPendingOperationIds(table)`,
+`getFailedOperations()`, `clearFailedOperations()`, `retryParkedOperations()`,
+`subscribeToSyncEvents(listener)` (`queued` / `synced` / `failed` / `parked` / `cleared` — invalidate
+queries and toast "Couldn't save …" on `failed`). Permanently rejected writes are rolled back in the
+cache automatically.
+
+## Tests
+
+`npm run test -w @festival/data-access` (vitest; MMKV/NetInfo are faked, SQLite runs in sql.js and
+Supabase is a recorded fake client — no network).
