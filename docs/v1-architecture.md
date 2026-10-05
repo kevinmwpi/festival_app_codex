@@ -1,7 +1,8 @@
 # Festie v1 — Architecture Contract (rev 2)
 
 Status: **authoritative contract for the v1 App Store overhaul** (Oct 2026). Rev 2 folds in an
-adversarial security review and an App Store / mobile review of rev 1.
+adversarial security review and an App Store / mobile review of rev 1. Rev 2.1 records decisions made
+during implementation (§5.1 sign-out semantics, terms gate, captive-portal handling).
 Every implementer works from this document. If code and this document disagree, fix the code or
 amend this document explicitly — never silently diverge.
 
@@ -215,7 +216,7 @@ Verification: `deno check` every function (`deno` is installed); `deno test` pur
 
 **Config & client**
 - Reads `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` (alias `EXPO_PUBLIC_SUPABASE_KEY`). No fallbacks: export `supabaseConfigError: string | null`; if set, no client is created and calls throw `ConfigError`.
-- `createClient(..., { global: { fetch: fetchWithTimeout(15_000) } })` (AbortController).
+- `createClient(..., { global: { fetch: fetchWithTimeout(15_000) } })` (AbortController). For refresh-token requests (`/auth/v1/token?grant_type=refresh_token`), a non-OK response that is 5xx or not JSON (captive portal, proxy error page) is converted into a network error so auth-js keeps the session and retries, instead of signing the user out.
 
 **Session (offline-safe)**
 - `getStoredSession(): { authUserId: string; expiresAt: number } | null` — **synchronous**; parses MMKV `festival-auth` / key `supabase_session`; requires `refresh_token` and `user.id`; never calls `supabase.auth.*`. Routing and launch paths use only this and `getCachedProfile()`. `supabase.auth.getSession()/getUser()` are never awaited on launch or render paths.
@@ -297,10 +298,14 @@ Verification: `deno check` every function (`deno` is installed); `deno test` pur
 
 ### 5.1 Shell, routing, sign-out
 
-- `app/_layout.tsx`: fonts + splash, `AppProviders`, config-error screen if `supabaseConfigError`. Wrap `(tabs)` and `settings` in `<Stack.Protected guard={hasSession}>` (expo-router 55).
+- `app/_layout.tsx`: fonts + splash, `AppProviders`, config-error screen if `supabaseConfigError`. Wrap `(tabs)` and `settings` in `<Stack.Protected guard={hasSession && acceptedTerms}>` (expo-router 55).
 - `app/index.tsx` routing: stored session + cached profile with matching `auth_user_id` → `/(tabs)/festivals` (even if the token is expired; auto-refresh fixes it online). Stored session, no cached profile → online: `getMyProfile()` → profile-setup if none; offline: retry screen (never the login screen). No stored session → `/auth/enter-email`.
 - `app/+native-intent.tsx`: `redirectSystemPath({ path })` stores `code` in MMKV `pending-invite-code` when the path starts with `group/join`, returns the path. After sign-in/profile setup, `index` routes to `/(tabs)/group/join?code=<pending>` and clears the key.
-- `src/providers/session-actions.ts` → `performSignOut(mode: 'sign_out' | 'delete_account' | 'session_lost')`, in order: `await stopLocationSharingNow()` (skip for `session_lost`) → `await cancelAllReminders()` → data-access `signOut()`/`deleteAccount()` (for `session_lost`, only the local wipe) → `queryClient.clear()` → `resetAppStore()` → `router.replace('/auth/enter-email')`. Voluntary sign-out warns if `getPendingCount() > 0`.
+- `src/providers/session-actions.ts` → `performSignOut(mode: 'sign_out' | 'delete_account' | 'session_lost')`:
+  - `sign_out`: `await stopLocationSharingNow()` → `await cancelAllReminders()` → data-access `signOut()` → `queryClient.clear()` → `resetAppStore()` → `router.replace('/auth/enter-email')`. Warns first if `getPendingCount() > 0`.
+  - `delete_account`: data-access `deleteAccount()` **first**; only after the server confirms: stop sharing, cancel reminders, wipe, reset, route. A failed deletion leaves the user signed in with everything intact.
+  - `session_lost` (involuntary `SIGNED_OUT`): stop the location watcher locally, clear the signed-URL cache, reset app state and route to sign-in, but **keep** the SQLite cache and offline queue so unsynced writes survive a captive-portal or transient auth failure. A different account signing in is isolated by `ensureLocalOwner`, which wipes before anything is shown or sent.
+  - Re-entrancy: a call with the same mode, or `session_lost`, joins the run in progress; `sign_out` during `session_lost` waits, then wipes; any other combination rejects with `sign_out_in_progress`.
 - Auth listener: `SIGNED_OUT` → `performSignOut('session_lost')`; `SIGNED_IN` → `ensureLocalOwner`.
 - React-query keys for user data include the auth user id.
 - Remove `app/(tabs)/chat`, `app/modal.tsx`, unused Expo template components.
@@ -310,6 +315,7 @@ Verification: `deno check` every function (`deno` is installed); `deno test` pur
 - Enter email: remove the "Your Name" field (it overwrites the email, `enter-email.tsx:55-63`) and both social buttons; rebalance with spacing only. On `requestEmailCode` error (429/5xx) show the message plus an "I already have a code" link to verify.
 - Verify code: `OTP_LENGTH` (from `src/config/app-info.ts`, = 8) boxes over one hidden `TextInput` (`textContentType="oneTimeCode"`, `autoComplete="one-time-code"`); auto-submit only at `OTP_LENGTH` digits; a Verify button accepts pasted 6–10 digits; resend with 60 s cooldown.
 - Profile setup: display name (1–40), avatar; an explicit "I agree to the Terms of Use and Privacy Policy" checkbox (linked) is required to continue.
+- Terms gate: `auth/accept-terms` shows the same explicit agreement to signed-in users who have not accepted the current `TERMS_VERSION` on this device (e.g. the App Review demo account, which already has a profile). Acceptance is stored per device and per `TERMS_VERSION`; bumping the version re-prompts everyone.
 
 ### 5.3 Settings (`app/settings/`, opened from an avatar button in the Fests header)
 
