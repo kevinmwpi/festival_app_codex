@@ -20,9 +20,27 @@ export const colors = {
 
   /** Text — dark forest-green, matches reference #2C3327 */
   textPrimary: '#2C3327',
-  textSecondary: 'rgba(44, 51, 39, 0.4)',
+  /**
+   * Secondary text. Alpha 0.7 keeps ≥ 4.5:1 on white (5.07:1) and on every pastel
+   * `deriveAccentColors(accent).bgTint` / `surfaceTint` (worst case 4.73:1).
+   */
+  textSecondary: 'rgba(44, 51, 39, 0.7)',
+  /** TextInput placeholder — same contrast floor as secondary text. */
+  placeholder: 'rgba(44, 51, 39, 0.7)',
   textOnPrimary: '#2C3327',   // reference buttons use dark text on pastel bg
   textOnAccent: '#2C3327',
+
+  /**
+   * Text links and secondary-button labels. Pastel `primary` and festival accents are
+   * fill-only and never used as text. Contrast: 6.46:1 on white, ≥ 6.03:1 on any pastel
+   * accent `bgTint`/`surfaceTint` (≥ 4.91:1 even on a 12% black tint).
+   */
+  link: '#2F5DA8',
+  linkPressed: '#244A87',
+
+  /** Destructive actions and error copy: 6.57:1 on white, 5.76:1 on `destructiveBg`. */
+  destructive: '#B42318',
+  destructiveBg: '#FDECEC',
 
   /** Borders */
   border: 'rgba(0, 0, 0, 0.05)',
@@ -56,6 +74,14 @@ export const spacing = {
   xl: 24,
   xxl: 32,
   xxxl: 40,
+} as const;
+
+/** Layout constants shared by every screen. */
+export const layout = {
+  /** Bottom padding every scrollable screen under (tabs) adds so content clears the floating tab bar. */
+  tabBarClearance: 120,
+  /** Minimum touch target (Apple HIG / Material): every tappable control is at least 44×44. */
+  minTouchTarget: 44,
 } as const;
 
 export const radii = {
@@ -121,6 +147,9 @@ export function rgba(hex: string, alpha: number): string {
  * bgTint  → very soft screen background (replaces global colors.background)
  * solid   → the accent hex itself (for tab bar, icon boxes, CTA buttons)
  * shadow  → drop shadow colour matching the accent
+ *
+ * Accents are pastel and fill-only: never use `solid` as a text colour. `text` is kept for
+ * backward compatibility and resolves to the accessible `colors.link`.
  */
 export function deriveAccentColors(accentHex: string) {
   return {
@@ -132,6 +161,7 @@ export function deriveAccentColors(accentHex: string) {
     chipBg: rgba(accentHex, 0.18),
     solid: accentHex,
     shadow: rgba(accentHex, 0.2),
-    text: accentHex,
+    /** Readable text colour on any accent tint (accents themselves are never text). */
+    text: colors.link,
   };
 }
