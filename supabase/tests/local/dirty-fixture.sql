@@ -120,3 +120,23 @@ create policy "Avatar images are publicly accessible" on storage.objects
 -- Dashboard-granted direct table access that 007 must revoke.
 grant all on public.users to anon;
 grant all on public.chat_messages to authenticated;
+
+-- Legacy sign-up trigger as found on the hosted project: the function is owned
+-- by postgres, the trigger sits on auth.users (owned by supabase_auth_admin).
+set role postgres;
+create or replace function public.handle_new_auth_user()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+begin
+  insert into public.users (id, email, display_name, avatar_type, avatar_value)
+  values (new.id, new.email, split_part(new.email, '@', 1), 'initials', upper(left(split_part(new.email, '@', 1), 2)))
+  on conflict (email) do nothing;
+  return new;
+end;
+$$;
+reset role;
+create trigger on_auth_user_created after insert on auth.users
+  for each row execute function public.handle_new_auth_user();

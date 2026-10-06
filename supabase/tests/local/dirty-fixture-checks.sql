@@ -1,7 +1,7 @@
 -- Verifies that 007–009 repaired supabase/tests/local/dirty-fixture.sql.
 -- Run after the first apply and again after re-applying 007–009.
 begin;
-select plan(40);
+select plan(42);
 
 -- Users: dedupe, backfill, orphans ------------------------------------------
 select is(
@@ -214,6 +214,21 @@ select is(
     where n.nspname = 'public' and p.proname = 'current_app_user_id'),
   0,
   'legacy public.current_app_user_id() is dropped'
+);
+
+select is(
+  (select count(*)::int from pg_trigger t
+    join pg_proc p on p.oid = t.tgfoid
+    where t.tgname = 'on_auth_user_created' and position('insert' in lower(p.prosrc)) > 0),
+  0,
+  'legacy on_auth_user_created no longer inserts profiles (dropped or a no-op)'
+);
+insert into auth.users (id, email, created_at)
+values ('d1000000-0000-4000-8000-0000000000ff', 'newcomer@example.com', now());
+select is(
+  (select count(*)::int from public.users where lower(email) = 'newcomer@example.com'),
+  0,
+  'a new auth user gets no auto-created profile (profiles come only from upsert_my_profile)'
 );
 
 select * from finish();

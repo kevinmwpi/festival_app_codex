@@ -78,6 +78,40 @@ begin
 end
 $$;
 
+-- Legacy sign-up trigger (found on the hosted project, created outside the
+-- migrations): on_auth_user_created ran public.handle_new_auth_user(), which
+-- inserted a public.users row for every new auth user. v1 creates profiles only
+-- through upsert_my_profile (§1), and the old insert would violate the new
+-- users constraints and break every sign-up. The function is owned by postgres,
+-- so it is made a no-op first; the trigger lives on auth.users (owned by
+-- supabase_auth_admin), so dropping it may be refused, which is then harmless.
+do $$
+begin
+  if to_regprocedure('public.handle_new_auth_user()') is not null then
+    execute $f$
+      create or replace function public.handle_new_auth_user()
+      returns trigger
+      language plpgsql
+      security definer
+      set search_path = ''
+      as $b$ begin return new; end $b$
+    $f$;
+  end if;
+
+  begin
+    drop trigger if exists on_auth_user_created on auth.users;
+  exception when insufficient_privilege then
+    raise notice 'on_auth_user_created kept as a no-op (cannot drop: %)', sqlerrm;
+  end;
+
+  if to_regprocedure('public.handle_new_auth_user()') is not null then
+    if not exists (select 1 from pg_trigger where tgfoid = to_regprocedure('public.handle_new_auth_user()')) then
+      drop function public.handle_new_auth_user();
+    end if;
+  end if;
+end
+$$;
+
 -- The legacy email-based public.current_app_user_id() cannot be dropped here:
 -- the 004 storage policy still depends on it and storage statements belong in
 -- 008. Step 10b re-points it at auth_user_id; 008 drops it once that policy is
