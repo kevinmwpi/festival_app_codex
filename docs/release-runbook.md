@@ -806,8 +806,8 @@ values below are entered in App Store Connect, EAS and Supabase only, never in t
 |---|---|---|
 | `__LEGAL_NAME__` | privacy policy, terms | The person or company that operates Festie (must match the App Store seller) |
 | `__POSTAL_ADDRESS__` | privacy policy, terms | Contact postal address for privacy and legal notices |
-| `__SUPPORT_EMAIL__` | `supportEmail` in `docs/legal/values.json`, `EXPO_PUBLIC_SUPPORT_EMAIL`, review notes | A monitored support mailbox. The legal Markdown keeps the token; the generator and the app fill it in |
-| `__SUPABASE_REGION__` | privacy policy | The Supabase project's region (Project Settings → General) |
+| `__SUPPORT_EMAIL__` | `supportEmail` in `docs/legal/values.json`, `EXPO_PUBLIC_SUPPORT_EMAIL`, review notes | Set: `kevinmwpi+app@gmail.com` (`values.json`). Use the same value for `EXPO_PUBLIC_SUPPORT_EMAIL` in EAS. The legal Markdown keeps the token; the generator and the app fill it in |
+| ~~`__SUPABASE_REGION__`~~ | privacy policy | Filled: the United States (Oregon, AWS us-west-2), the project's region. Update it if you move to a project in another region |
 | `__EMAIL_PROVIDER__` | privacy policy, §2.7 | The SMTP provider that sends sign-in codes; check that its data processing terms exist (privacy policy §4 promises them) |
 | `__GOVERNING_LAW__` | terms §14 | Jurisdiction whose law governs the Terms |
 | `__GOVERNING_VENUE__` | terms §14 | Courts for disputes |

@@ -22,7 +22,7 @@ const TITLE = "Privacy Policy";
 const UPDATED = "October 5, 2026";
 const SUPPORT_EMAIL_TOKEN = '__SUPPORT_EMAIL__';
 /** docs/legal/values.json `supportEmail`, used only when the build has no EXPO_PUBLIC_SUPPORT_EMAIL. */
-const SUPPORT_EMAIL_FALLBACK: string | null = null;
+const SUPPORT_EMAIL_FALLBACK: string | null = "kevinmwpi+app@gmail.com";
 const SUPPORT_ADDRESS = SUPPORT_EMAIL ?? SUPPORT_EMAIL_FALLBACK;
 
 const CONTENT: Block[] = [
@@ -633,7 +633,7 @@ const CONTENT: Block[] = [
       },
       {
         "kind": "text",
-        "text": " hosts our database, sign-in, photo storage and server functions, and stores all account and app data, in __SUPABASE_REGION__."
+        "text": " hosts our database, sign-in, photo storage and server functions, and stores all account and app data, in the United States (Oregon, AWS us-west-2)."
       }
     ]
   },
@@ -1101,7 +1101,7 @@ const CONTENT: Block[] = [
     "spans": [
       {
         "kind": "text",
-        "text": "Our servers are in __SUPABASE_REGION__, and our service providers may process information in other countries, including the United States. Where the law requires it, these transfers are protected by safeguards such as the European Commission's Standard Contractual Clauses."
+        "text": "Our servers are in the United States (Oregon, AWS us-west-2), and our service providers may process information in other countries, including the United States. Where the law requires it, these transfers are protected by safeguards such as the European Commission's Standard Contractual Clauses."
       }
     ]
   },
