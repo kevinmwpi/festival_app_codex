@@ -1,3 +1,7 @@
+-- uuid_generate_v4() lives in the extensions schema on Supabase, and `supabase db push`
+-- does not put that schema on the search_path, so set it for this migration.
+set local search_path = public, extensions;
+
 create extension if not exists "uuid-ossp";
 
 create table users (

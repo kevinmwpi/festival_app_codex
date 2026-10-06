@@ -176,12 +176,15 @@ create_db() {
     || { printf '%s\n' "$out" >&2; fail "[$db] supabase-stubs.sql failed"; }
 }
 
-# Applies one migration as the non-superuser "postgres" role in one transaction.
+# Applies one migration as the non-superuser "postgres" role in one transaction, with
+# search_path = public: `supabase db push` does not put the extensions schema on the path, so a
+# migration that calls an extension function unqualified must set its own search_path.
 apply_migration() {
   local db="$1" file="$2" label="${3:-}"
   local out
   out="$(db_psql "$db" -q --single-transaction \
     -c "set session authorization postgres" \
+    -c "set search_path = public" \
     -f "$file" 2>&1)" \
     || { printf '%s\n' "$out" >&2; fail "[$db] migration $(basename "$file")${label:+ ($label)} failed"; }
   if grep -q 'WARNING' <<<"$out"; then

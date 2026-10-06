@@ -1,3 +1,7 @@
+-- uuid_generate_v4() lives in the extensions schema on Supabase, and `supabase db push`
+-- does not put that schema on the search_path, so set it for this migration.
+set local search_path = public, extensions;
+
 create table if not exists group_invite_generations (
   id uuid primary key default uuid_generate_v4(),
   group_id uuid not null references groups(id) on delete cascade,
