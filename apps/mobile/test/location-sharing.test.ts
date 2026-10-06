@@ -15,6 +15,7 @@ const h = vi.hoisted(() => {
     watchCallback: null as ((location: unknown) => void) | null,
     permission: { granted: true, canAskAgain: true },
     requestResult: { granted: true, canAskAgain: true },
+    servicesEnabled: true,
     log: [] as string[],
     share: null as ((groupId: string, coords: { latitude: number }) => Promise<void>) | null,
     stopSharing: null as ((groupId: string) => Promise<void>) | null,
@@ -52,7 +53,7 @@ vi.mock('expo-location', () => ({
     h.state.permission = h.state.requestResult;
     return h.state.requestResult;
   },
-  hasServicesEnabledAsync: async () => true,
+  hasServicesEnabledAsync: async () => h.state.servicesEnabled,
   getCurrentPositionAsync: async () => h.state.current,
   getLastKnownPositionAsync: async (options?: { maxAge?: number }) => {
     h.state.log.push(`lastKnown maxAge=${options?.maxAge ?? 'none'}`);
@@ -120,6 +121,7 @@ beforeEach(() => {
   h.state.watchCallback = null;
   h.state.permission = { granted: true, canAskAgain: true };
   h.state.requestResult = { granted: true, canAskAgain: true };
+  h.state.servicesEnabled = true;
   h.state.log = [];
   h.state.share = null;
   h.state.stopSharing = null;
@@ -286,5 +288,20 @@ describe('expired "Allow Once" grant', () => {
     emitAppState('active');
     await vi.advanceTimersByTimeAsync(0);
     expect(loaded.controller.getSnapshot()).toMatchObject({ status: 'permission_denied', canAskAgain: false });
+  });
+});
+
+describe('Location Services turned off system-wide', () => {
+  it('reports services_disabled (not a Festie permission problem) and never shows the prompt', async () => {
+    const loaded = await loadController();
+    detach = loaded.detach;
+    // iOS reports the app as denied while Location Services are off.
+    h.state.servicesEnabled = false;
+    h.state.permission = { granted: false, canAskAgain: false };
+
+    const error = await loaded.controller.start('g1', 3_600_000).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(loaded.module.LocationPermissionError);
+    expect(error).toMatchObject({ reason: 'services_disabled', canAskAgain: false });
+    expect(h.state.log).not.toContain('prompt');
   });
 });

@@ -651,7 +651,8 @@ Create a public access token in your Mapbox account (default public scopes are e
 10.3.0 podspec marks `RNMapboxMapsDownloadToken` as deprecated and no longer required
 (`node_modules/@rnmapbox/maps/rnmapbox-maps.podspec`), and `app.json` pins the native SDK with
 `RNMapboxMapsVersion: 11.18.2`. Do not set `RNMAPBOX_MAPS_DOWNLOAD_TOKEN`. The app disables Mapbox
-telemetry at startup. Watch the token's monthly usage in the Mapbox dashboard.
+telemetry at every launch (a user can opt in from the map's (i) menu until the next launch; see
+[`app-store-privacy.md`](./app-store-privacy.md)). Watch the token's monthly usage in the Mapbox dashboard.
 
 ### 5.3 Build and submit
 
@@ -709,12 +710,15 @@ The production profile auto-increments the build number (`appVersionSource: remo
 
    (With a local Xcode archive, Organizer → the archive → **Generate Privacy Report** gives the same as a
    PDF.) Every collected type listed must appear in [`app-store-privacy.md`](./app-store-privacy.md) §1
-   with matching "linked" and "tracking" answers. Mapbox is expected to declare a Device ID (already in
-   the Device ID row); if it, or another SDK, declares anything else, add it to that page, the privacy
+   with matching "linked" and "tracking" answers (a type Festie itself already declares as linked stays
+   linked). The Mapbox Maps 11.18.2 manifest declares User ID, Precise Location and Coarse Location, not
+   linked, for App Functionality and Analytics (already covered by those rows), and Mapbox may also
+   declare a Device ID (already in the Device ID row); if it, or another SDK, declares anything else, add it to that page, the privacy
    policy and [`legal/data-compliance.md`](./legal/data-compliance.md), regenerate (§4) and rebuild
    before you answer App Privacy.
 4. **Mapbox telemetry is really off.** The privacy policy (§2) and
-   [`app-store-privacy.md`](./app-store-privacy.md) say the map's optional telemetry is off. The app calls
+   [`app-store-privacy.md`](./app-store-privacy.md) say the map's optional telemetry is off unless the
+   user opts in from the map's (i) menu, and that the next launch turns it off again. The app calls
    `Mapbox.setTelemetryEnabled(false)` (`apps/mobile/src/providers/app-providers.tsx`); in `@rnmapbox/maps`
    10.3.0 that writes the `MGLMapboxMetricsEnabled` user default on iOS (`ios/RNMBX/RNMBXModule.swift`),
    and Mapbox Maps SDK 11.18.2 observes that key and applies it to its events collection
@@ -725,7 +729,8 @@ The production profile auto-increments the build number (`appVersionSource: remo
    - Route one iPhone through an HTTPS-inspecting proxy on your Mac (Proxyman or Charles: install and
      trust its root certificate on the phone, enable SSL proxying for `*.mapbox.com`).
    - Fresh install, sign in, allow location when sharing asks for it, open the Map tab so your own dot
-     shows, and keep the map on screen for 10 minutes, moving around a little.
+     shows, and keep the map on screen for 10 minutes, moving around a little. Do not open the map's (i)
+     menu during this run: its "Mapbox Telemetry" → "Participate" choice turns telemetry on by design.
    - Expected: style, tile and font requests to `api.mapbox.com`, and to `events.mapbox.com` at most the
      billing events (the turnstile event `appUserTurnstile`, and map-load events, which the opt-out does not
      stop: [mapbox-maps-ios#1964](https://github.com/mapbox/mapbox-maps-ios/issues/1964)). Nothing else: no
@@ -734,10 +739,15 @@ The production profile auto-increments the build number (`appVersionSource: remo
      more than a few POSTs to `events.mapbox.com` during the 10 minutes means telemetry is on. Xcode's
      Instruments (Network template) on a development build shows the same connections.
    - **If telemetry is on, do not submit.** Ask the mobile owner to turn it off through the Mapbox SDK's
-     own telemetry API (MapboxCommon), rebuild and repeat this check. Only if that is impossible, declare
-     what Mapbox collects in App Privacy (location telemetry adds a Location type with the Analytics
-     purpose) and update the privacy policy §2 and §4, [`app-store-privacy.md`](./app-store-privacy.md)
-     and [`legal/data-compliance.md`](./legal/data-compliance.md) before you answer App Privacy.
+     own telemetry API (MapboxCommon), rebuild and repeat this check. Only if that is impossible, say in
+     the privacy policy §2 and §4, [`app-store-privacy.md`](./app-store-privacy.md) and
+     [`legal/data-compliance.md`](./legal/data-compliance.md) that Mapbox telemetry is always on (the
+     Location rows already carry the Analytics purpose for the opt-in) before you answer App Privacy.
+   - Reset at launch: tap the map's (i) button, "Mapbox Telemetry", "Participate", then close Festie
+     completely (swipe it away) and reopen it. With the map on screen for another few minutes,
+     `events.mapbox.com` again receives at most the billing events. If location events continue, the
+     launch reset no longer works: the privacy policy and App Privacy answers say it does, so do not
+     submit until it is fixed or those documents are changed.
    Record the result (build number, date, what `events.mapbox.com` received) in the QA sign-off.
 5. **Physical-device QA:** install from TestFlight on two iPhones and complete
    [`qa-checklist.md`](./qa-checklist.md).
@@ -828,7 +838,8 @@ Legal text is not legal advice; have it reviewed if you can.
 - [ ] EAS environment variables set for production; the production build succeeded (§5.1–5.3).
 - [ ] **First TestFlight upload has no ITMS-91053**; Info.plist checked; no local-network prompt; privacy
       manifests reconciled with [`app-store-privacy.md`](./app-store-privacy.md); **Mapbox sends no
-      telemetry beyond billing events** (§5.4).
+      telemetry beyond billing events**, and a user's opt-in from the map's (i) menu is reset at the next
+      launch (§5.4).
 - [ ] [`qa-checklist.md`](./qa-checklist.md) completed and signed off on two physical iPhones.
 - [ ] **Festival times spot-checked on physical iOS and Android devices** (gate 7 wording; QA §7).
 - [ ] **App Privacy answers match [`app-store-privacy.md`](./app-store-privacy.md)**.

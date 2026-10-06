@@ -37,10 +37,22 @@ enable_signup = true
 enable_anonymous_sign_ins = false
 
 [auth.rate_limit]
-# Emails sent per hour (project-wide, needs custom SMTP on hosted).
+# Emails sent per hour (project-wide, needs custom SMTP on hosted). Every sign-in code counts, and
+# sign_in_sign_ups (template value 30 per 5 minutes per IP) does not stop one client that rotates
+# addresses from using it up, which blocks every sign-in for the rest of the hour. CAPTCHA (below)
+# is the fix once the app sends a token.
 email_sent = 200
 # OTP verifications per 5 minutes per IP.
 token_verifications = 30
+
+# Not enabled yet: turning CAPTCHA on makes GoTrue reject every signInWithOtp call without a token,
+# so it must ship together with an app build that passes options.captchaToken (Cloudflare Turnstile,
+# invisible widget) from the enter-email screen. Then uncomment, set the secret as an env var for
+# `supabase config push`, and add it to the release runbook's expected diff.
+# [auth.captcha]
+# enabled = true
+# provider = "turnstile"
+# secret = "env(SUPABASE_AUTH_CAPTCHA_SECRET)"
 
 [auth.email]
 enable_signup = true

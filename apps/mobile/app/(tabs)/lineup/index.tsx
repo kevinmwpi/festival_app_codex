@@ -202,7 +202,7 @@ export default function LineupScreen() {
 
       {festival ? (
         <>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.filterRow}>
             {[ALL, ...days].map((day) => {
               const active = dayFilter === day;
               const label = day === ALL ? 'All' : clock.date(day, { weekday: 'short', day: 'numeric' });
@@ -223,7 +223,7 @@ export default function LineupScreen() {
           </ScrollView>
 
           {stages.length > 1 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.filterRow}>
               {[ALL, ...stages].map((stage) => (
                 <Chip
                   key={stage}
@@ -288,6 +288,9 @@ export default function LineupScreen() {
 /* ─── Styles ─────────────────────────────────────────────── */
 
 const styles = StyleSheet.create({
+  // React Native gives horizontal ScrollViews flexGrow/flexShrink 1; in a flex column they would take
+  // a share of the free height away from the list below.
+  chipScroller: { flexGrow: 0 },
   container: { flex: 1 },
   statePad: { padding: spacing.lg },
 

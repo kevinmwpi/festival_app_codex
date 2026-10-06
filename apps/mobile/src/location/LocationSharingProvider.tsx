@@ -503,16 +503,18 @@ class LocationSharingController {
 
   private async checkAccess(request: boolean): Promise<{ ok: true } | { ok: false; reason: 'permission' | 'services_disabled'; canAskAgain: boolean }> {
     try {
+      // Location Services first: with them off system-wide, iOS reports every app's authorization as
+      // denied, which would otherwise send the user to Festie's own Settings page instead.
+      const servicesEnabled = await Location.hasServicesEnabledAsync().catch(() => true);
+      if (!servicesEnabled) {
+        return { ok: false, reason: 'services_disabled', canAskAgain: false };
+      }
       let permission = await Location.getForegroundPermissionsAsync();
       if (!permission.granted && request && permission.canAskAgain) {
         permission = await Location.requestForegroundPermissionsAsync();
       }
       if (!permission.granted) {
         return { ok: false, reason: 'permission', canAskAgain: permission.canAskAgain };
-      }
-      const servicesEnabled = await Location.hasServicesEnabledAsync().catch(() => true);
-      if (!servicesEnabled) {
-        return { ok: false, reason: 'services_disabled', canAskAgain: false };
       }
       return { ok: true };
     } catch {

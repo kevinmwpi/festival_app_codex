@@ -8,7 +8,9 @@ import {
   describeSweepPlan,
   listAllObjects,
   listReferencedTotemPaths,
+  listReportedTotemPaths,
   MIN_ORPHAN_AGE_MS,
+  planBucketSweep,
   planOrphanSweep,
   type StorageListEntry,
 } from '../src/storage/sweep-orphans';
@@ -222,6 +224,88 @@ describe('listReferencedTotemPaths', () => {
       },
     } as unknown as SupabaseClient;
     await expect(listReferencedTotemPaths(client)).rejects.toThrow('Reading meetup photo paths failed: timeout');
+  });
+});
+
+describe('listReportedTotemPaths and planBucketSweep', () => {
+  /** Serves `meetups` and `reports` keyset scans plus a one-folder storage listing. */
+  function fakeSweepClient(options: {
+    files: StorageListEntry[];
+    meetups: Array<{ id: string; totem_path: string | null }>;
+    reports: Array<{ id: string; target_snapshot: string | null }>;
+  }) {
+    const filters: string[][] = [];
+    const client = {
+      storage: {
+        from: () => ({
+          list: async (prefix: string, { offset }: { offset: number }) => {
+            if (offset > 0) {
+              return { data: [], error: null };
+            }
+            if (prefix === '') {
+              return { data: [{ name: G, id: null, created_at: null, metadata: null }], error: null };
+            }
+            if (prefix === G) {
+              return { data: [{ name: M1, id: null, created_at: null, metadata: null }], error: null };
+            }
+            return { data: options.files, error: null };
+          },
+        }),
+      },
+      from(table: string) {
+        const applied: string[] = [];
+        filters.push(applied);
+        let gt: string | null = null;
+        const builder = {
+          select: () => builder,
+          eq: (column: string, value: string) => {
+            applied.push(`${column}=${value}`);
+            return builder;
+          },
+          in: (column: string, values: string[]) => {
+            applied.push(`${column} in ${values.join(',')}`);
+            return builder;
+          },
+          not: () => builder,
+          order: () => builder,
+          limit: () => builder,
+          gt: (_column: string, value: string) => {
+            gt = value;
+            return builder;
+          },
+          then: (resolve: (value: unknown) => void) => {
+            const source: Array<{ id: string }> = table === 'meetups' ? options.meetups : options.reports;
+            resolve({ data: source.filter((row) => gt === null || row.id > gt), error: null });
+          },
+        };
+        return builder;
+      },
+    } as unknown as SupabaseClient;
+    return { client, filters };
+  }
+
+  const file = (name: string): StorageListEntry => ({ name, id: `id-${name}`, created_at: OLD, metadata: { size: 1 } });
+
+  it('reads the snapshot paths of open/reviewed photo reports only', async () => {
+    const { client, filters } = fakeSweepClient({
+      files: [],
+      meetups: [],
+      reports: [{ id: 'r1', target_snapshot: `${G}/${M1}/reported.jpg` }],
+    });
+    expect([...(await listReportedTotemPaths(client))]).toEqual([`${G}/${M1}/reported.jpg`]);
+    expect(filters[0]).toEqual(['target_type=photo', 'status in open,reviewed']);
+  });
+
+  it('never plans a reported photo for deletion, even when no meetup references it any more', async () => {
+    const { client } = fakeSweepClient({
+      files: [file('live.jpg'), file('reported.jpg'), file('replaced.jpg')],
+      meetups: [{ id: 'm1', totem_path: `${G}/${M1}/live.jpg` }],
+      reports: [{ id: 'r1', target_snapshot: `${G}/${M1}/reported.jpg` }],
+    });
+    const plan = await planBucketSweep(client, NOW);
+    expect(plan.referenced).toBe(2);
+    expect(plan.orphans.map((entry) => entry.path)).toEqual([`${G}/${M1}/replaced.jpg`]);
+    expect(describeSweepPlan(plan)).toContain('2 referenced by a meetup or an unresolved photo report (kept)');
   });
 });
 

@@ -39,11 +39,11 @@ seeing any crew content. Names, crew names and meetup text pass a disallowed-wor
   tap "Send report") or "Block Maya" (confirm "Block"). A blocked member's meetups, picks and location
   disappear; unblock in the same menu or in Settings, "Blocked users".
 - Report a meetup or photo: on Jordan's meetup tap "⋯", then "Report meetup" or "Report photo".
-- Report the crew: scroll down, tap "Report this crew". ("Leave crew" below it leaves the crew, which the
-  location steps need; try it last.)
-- Remove a member: crew admins see "Remove from crew" and "Remove meetup" in the same menus. The demo
-  crew's admin is the demo member Maya, so to see these create a crew ("Create" on the Group tab); its
-  creator is the admin and can remove anyone who joins with its invite code.
+- Report the crew: scroll down, tap "Report this crew". ("Leave crew" is below it; the location steps
+  need the crew, so try it last.)
+- Admins also get "Remove from crew" on another member and "Remove meetup" on another member's
+  meetup. The demo crew's admin is demo member Maya, so these need a second account: create a crew
+  ("Create" on the Group tab), join it with its invite code from another email and add a meetup there.
 Reports are reviewed within 24 hours; offending content is removed and offending users are banned.
 
 LOCATION SHARING

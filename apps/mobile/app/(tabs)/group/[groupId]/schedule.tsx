@@ -249,7 +249,7 @@ export default function CombinedScheduleScreen() {
               {view === 'divergence' && 'All picks and who is going'}
             </Text>
             {days.length > 1 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayRow}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.dayRow}>
                 {[ALL, ...days].map((value) => (
                   <Chip key={value} active={day === value} onPress={() => setDay(value)} label={value === ALL ? 'All days' : clock.date(value)} />
                 ))}
@@ -277,6 +277,9 @@ export default function CombinedScheduleScreen() {
 }
 
 const styles = StyleSheet.create({
+  // React Native gives horizontal ScrollViews flexGrow/flexShrink 1; in a flex column they would take
+  // a share of the free height away from the list below.
+  chipScroller: { flexGrow: 0 },
   container: { flex: 1, backgroundColor: colors.background },
   statePad: { padding: spacing.lg },
   scroll: { flex: 1 },

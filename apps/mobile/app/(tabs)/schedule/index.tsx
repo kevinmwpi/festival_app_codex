@@ -277,7 +277,7 @@ export default function PersonalScheduleScreen() {
       {header}
 
       {festival && hasPicks ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.dayRow}>
           {days.map((day) => {
             const count = countsByDay.get(day) ?? 0;
             return (
@@ -382,6 +382,9 @@ export default function PersonalScheduleScreen() {
 /* ─── Styles ─────────────────────────────────────────────── */
 
 const styles = StyleSheet.create({
+  // React Native gives horizontal ScrollViews flexGrow/flexShrink 1; in a flex column they would take
+  // a share of the free height away from the list below.
+  chipScroller: { flexGrow: 0 },
   container: { flex: 1 },
   statePad: { padding: spacing.lg },
   dayRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },

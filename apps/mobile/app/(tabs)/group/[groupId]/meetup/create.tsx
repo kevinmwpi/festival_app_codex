@@ -28,7 +28,7 @@ import Mapbox from '@rnmapbox/maps';
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { SubScreenHeader } from '@/src/components/ScreenHeader';
 import { ErrorState, LoadingState } from '@/src/components/StateViews';
@@ -36,6 +36,7 @@ import { isMapboxConfigured } from '@/src/config/app-info';
 import { invalidateGroupQueries } from '@/src/hooks/query-keys';
 import { useFestivalBundle, useFestivalClock } from '@/src/hooks/use-festival';
 import { useGroupDetail } from '@/src/hooks/use-groups';
+import { writeAndAwaitSync } from '@/src/hooks/sync-outcome';
 import {
   chooseTotemSource,
   pickTotemPhoto,
@@ -133,16 +134,25 @@ export default function CreateMeetupScreen() {
     setSaving(true);
     setError(null);
     try {
-      const meetup = await createMeetup({
-        group_id: group.id,
-        title: title.trim(),
-        starts_at: startsAt.toISOString(),
-        stage_id: stageId,
-        notes: notes.trim() || null,
-        latitude: pin ? pin[1] : null,
-        longitude: pin ? pin[0] : null,
-      });
+      // Online, wait briefly for the server: a rejection (e.g. the text filter, `content_not_allowed`)
+      // is shown here instead of a success toast followed by a rollback.
+      const { record: meetup, outcome } = await writeAndAwaitSync('meetups', () =>
+        createMeetup({
+          group_id: group.id,
+          title: title.trim(),
+          starts_at: startsAt.toISOString(),
+          stage_id: stageId,
+          notes: notes.trim() || null,
+          latitude: pin ? pin[1] : null,
+          longitude: pin ? pin[0] : null,
+        }),
+      );
       await invalidateGroupQueries(queryClient);
+      if (outcome.status === 'failed') {
+        // Rolled back locally; the form keeps the user's input so they can change it and save again.
+        setError(toUserMessage({ code: outcome.failure.errorCode, message: outcome.failure.errorMessage ?? '' }));
+        return;
+      }
 
       if (festival) {
         const stageName = stageId ? stages.find((stage) => stage.id === stageId)?.name : null;
@@ -157,7 +167,7 @@ export default function CreateMeetupScreen() {
         await finishPhoto(meetup, photo);
         await invalidateGroupQueries(queryClient);
       }
-      showToast(meetup.pending_sync === 1 ? 'Meetup saved — it syncs when you have signal.' : 'Meetup saved.', 'success');
+      showToast(outcome.status === 'synced' ? 'Meetup saved.' : 'Meetup saved — it syncs when you have signal.', 'success');
       if (router.canGoBack()) {
         router.back();
       } else {
@@ -194,8 +204,8 @@ export default function CreateMeetupScreen() {
   const festivalTimeLabel = `${clock.date(startsAt.toISOString())} · ${clock.time(startsAt.toISOString())}`;
 
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         {header}
         <View style={styles.content}>
           <SectionCard subtitle="Meetups save on your phone first and sync to your crew when you have signal.">
@@ -337,7 +347,7 @@ export default function CreateMeetupScreen() {
           </SectionCard>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

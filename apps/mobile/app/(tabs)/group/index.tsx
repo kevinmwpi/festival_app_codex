@@ -100,12 +100,21 @@ export default function GroupsScreen() {
         {list.map((group) => {
           const festival = festivalsById.get(group.festival_id);
           const memberLabel = `${group.member_count} member${Number(group.member_count) === 1 ? '' : 's'}`;
-          const sharingHere = sharing.groupId === group.id && sharing.status !== 'off';
+          // Truthful status (§5.6): only an active share earns the success badge.
+          const sharingStatus = sharing.groupId === group.id ? sharing.status : 'off';
+          const sharingBadge =
+            sharingStatus === 'sharing'
+              ? { label: 'Sharing location', tone: 'success' as const, a11y: ', sharing your location' }
+              : sharingStatus === 'permission_denied'
+                ? { label: 'Location access off', tone: 'warning' as const, a11y: ', location sharing on but location access is off' }
+                : sharingStatus === 'paused'
+                  ? { label: 'Sharing paused', tone: 'neutral' as const, a11y: ', location sharing paused' }
+                  : null;
           return (
             <Pressable
               key={group.id}
               accessibilityRole="button"
-              accessibilityLabel={`${group.name}, ${festival?.name ?? 'festival'}, ${memberLabel}${group.my_role === 'admin' ? ', you are an admin' : ''}${sharingHere ? ', sharing your location' : ''}`}
+              accessibilityLabel={`${group.name}, ${festival?.name ?? 'festival'}, ${memberLabel}${group.my_role === 'admin' ? ', you are an admin' : ''}${sharingBadge?.a11y ?? ''}`}
               onPress={() => {
                 setSelectedGroupId(group.id);
                 router.push(`/(tabs)/group/${group.id}`);
@@ -125,7 +134,7 @@ export default function GroupsScreen() {
                 <View style={styles.badges}>
                   {group.my_role === 'admin' ? <Badge label="Admin" /> : null}
                   {festival?.is_demo ? <Badge label="Sample" tone="sample" /> : null}
-                  {sharingHere ? <Badge label="Sharing location" tone="success" /> : null}
+                  {sharingBadge ? <Badge label={sharingBadge.label} tone={sharingBadge.tone} /> : null}
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />

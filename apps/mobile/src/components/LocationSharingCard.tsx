@@ -44,7 +44,7 @@ export function LocationSharingCard({
     if (sharing.status === 'permission_denied') {
       title = 'Location access is off';
       detail = sharing.canAskAgain
-        ? "Festie can't read your location, so your crew can't see you. Allow location access to keep sharing."
+        ? "Festie can't read your location, so your crew can't see you. To keep sharing, turn location back on — iOS will ask you next."
         : "Festie can't read your location, so your crew can't see you. Turn on location access in Settings.";
     } else {
       title = sharing.status === 'paused' ? 'Sharing paused' : 'Sharing your location';
@@ -72,7 +72,7 @@ export function LocationSharingCard({
   }, [sharing]);
 
   const [requesting, setRequesting] = React.useState(false);
-  const allowLocation = React.useCallback(async () => {
+  const resumeLocation = React.useCallback(async () => {
     setRequesting(true);
     try {
       await sharing.requestAccess();
@@ -96,7 +96,8 @@ export function LocationSharingCard({
         <View style={styles.actions}>
           {sharing.status === 'permission_denied' ? (
             sharing.canAskAgain ? (
-              <SecondaryButton label="Allow location" onPress={() => void allowLocation()} loading={requesting} />
+              // Neutral label (App Review 5.1.1): the iOS permission prompt follows this tap.
+              <SecondaryButton label="Turn location back on" onPress={() => void resumeLocation()} loading={requesting} />
             ) : (
               <SecondaryButton label="Open Settings" onPress={() => void Linking.openSettings()} />
             )

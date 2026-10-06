@@ -113,7 +113,7 @@ export function describeSweepPlan(plan: OrphanSweepPlan): string {
   const hours = Math.round(plan.minAgeMs / (60 * 60 * 1000));
   const lines = [
     `Bucket "${plan.bucket}": ${plan.total} object(s)`,
-    `  - ${plan.referenced} referenced by a meetup (kept)`,
+    `  - ${plan.referenced} referenced by a meetup or an unresolved photo report (kept)`,
     `  - ${plan.recent} unreferenced but newer than ${hours} h or of unknown age (kept)`,
     `  - ${plan.orphans.length} orphaned (${formatBytes(plan.orphanBytes)}): delete in ${plan.batches.length} batch(es) of <= ${REMOVE_BATCH_SIZE}`,
   ];
@@ -215,11 +215,52 @@ export async function listReferencedTotemPaths(client: SupabaseClient, pageSize 
   }
 }
 
+/**
+ * Photo paths that an open or reviewed photo report points at (`target_snapshot`). The reported photo
+ * may no longer be on its meetup (replaced, or the meetup deleted); it is kept as evidence until a
+ * moderator resolves the report (reports:remove-content removes it then).
+ */
+export async function listReportedTotemPaths(client: SupabaseClient, pageSize = PAGE_SIZE): Promise<Set<string>> {
+  const paths = new Set<string>();
+  let lastId: string | null = null;
+  // Same keyset scan as listReferencedTotemPaths: ends only on an empty page.
+  for (;;) {
+    let query = client
+      .from('reports')
+      .select('id, target_snapshot')
+      .eq('target_type', 'photo')
+      .in('status', ['open', 'reviewed'])
+      .not('target_snapshot', 'is', null)
+      .order('id', { ascending: true })
+      .limit(pageSize);
+    if (lastId) {
+      query = query.gt('id', lastId);
+    }
+    const rows = check(await query, 'Reading reported photo paths') as Array<{ id: string; target_snapshot: string | null }>;
+    if (rows.length === 0) {
+      return paths;
+    }
+    for (const row of rows) {
+      if (row.target_snapshot) {
+        paths.add(row.target_snapshot);
+      }
+    }
+    const nextId = rows[rows.length - 1].id;
+    if (lastId !== null && nextId <= lastId) {
+      throw new Error('Reading reported photo paths: rows are not ordered by id; aborting the sweep.');
+    }
+    lastId = nextId;
+  }
+}
+
 export async function planBucketSweep(client: SupabaseClient, now = new Date()): Promise<OrphanSweepPlan> {
-  // References are read after the listing: a photo set on a meetup meanwhile is either referenced
-  // here or younger than the minimum age, so it is never planned for deletion.
+  // References are read after the listing: a photo set on a meetup (or reported) meanwhile is either
+  // referenced here or younger than the minimum age, so it is never planned for deletion.
   const objects = await listAllObjects(storageListPage(client, TOTEMS_BUCKET));
   const referenced = await listReferencedTotemPaths(client);
+  for (const path of await listReportedTotemPaths(client)) {
+    referenced.add(path);
+  }
   return planOrphanSweep(objects, referenced, now);
 }
 

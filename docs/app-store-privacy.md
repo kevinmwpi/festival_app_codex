@@ -24,7 +24,8 @@ ads dependency; `expo-insights` was removed in v1.)
 |---|---|---|---|---|
 | Contact Info → **Email Address** | Sign-in email (Supabase Auth, `public.users.email`) | Yes | No | App Functionality |
 | Contact Info → **Name** | Display name, 1–40 chars, shown to crews (may be a real name) | Yes | No | App Functionality |
-| Location → **Precise Location** | Live location while sharing with a crew (`location_shares`: lat, lng, accuracy, heading), plus optional meetup pins | Yes | No | App Functionality |
+| Location → **Precise Location** | Live location while sharing with a crew (`location_shares`: lat, lng, accuracy, heading), plus optional meetup pins; and Mapbox telemetry location events, only after the user opts in from the map's (i) menu (see "Mapbox telemetry" below) | Yes | No | App Functionality, Analytics |
+| Location → **Coarse Location** | Mapbox telemetry location events when the user has opted in (see "Mapbox telemetry" below) and allowed only approximate location | No | No | Analytics |
 | User Content → **Photos or Videos** | Totem photos (JPEG, metadata stripped) in the private `totems` bucket | Yes | No | App Functionality |
 | User Content → **Other User Content** | Crew names, meetup titles/notes, festival follows, set picks, reports (reason, details, snapshot) and blocks | Yes | No | App Functionality |
 | Identifiers → **User ID** | Account UUIDs (`auth.users.id`, `public.users.id`) used by the server | Yes | No | App Functionality |
@@ -33,9 +34,15 @@ ads dependency; `expo-insights` was removed in v1.)
 Notes on the choices:
 
 - **Precise Location**: the app requests "When In Use" only; there is no background mode and no
-  `NSLocationAlways*` key (`apps/mobile/app.json` expo-location plugin). Coarse location is not collected
-  separately. The user's own blue dot on the map is rendered on device and never uploaded, so it is not
-  "collected".
+  `NSLocationAlways*` key (`apps/mobile/app.json` expo-location plugin). The user's own blue dot on the
+  map is rendered on device and never uploaded by Festie. Analytics is declared for Mapbox's opt-in
+  telemetry: Mapbox does not link it to the account, but App Store Connect takes one "linked" answer per
+  data type, and Festie's own sharing is linked.
+- **Coarse Location**: Festie itself never sends coarse location separately. It is declared only for
+  Mapbox's opt-in telemetry, which gets approximate fixes when the user allowed only approximate
+  location. The Mapbox Maps privacy manifest declares Precise Location, Coarse Location and User ID, all
+  not linked, for App Functionality and Analytics
+  ([`PrivacyInfo.xcprivacy` at v11.18.2](https://github.com/mapbox/mapbox-maps-ios/blob/v11.18.2/Sources/MapboxMaps/PrivacyInfo.xcprivacy)).
 - **Device ID**: `expo-updates` (`updates.url` in `apps/mobile/app.json`) adds `EAS-Client-ID`, a
   per-install UUID created by `expo-eas-client`, to update requests
   (`node_modules/expo-updates/ios/EXUpdates/AppLoader/FileDownloader.swift`); Expo also uses it to count
@@ -66,7 +73,6 @@ Notes on the choices:
 | Purchases | None |
 | Product Interaction, Advertising Data, Other Usage Data | No analytics SDK; nothing records taps or screens |
 | Crash Data, Performance Data, Other Diagnostic Data | No crash-reporting SDK (Apple's own opt-in crash reports are Apple's, not ours) |
-| Coarse Location | Not collected separately from precise sharing |
 | Other Data Types | Nothing else leaves the device |
 
 Server-side technical data (IP addresses in Supabase Auth sign-in logs and sessions, kept at most 90
@@ -77,10 +83,10 @@ after creation; Mapbox tile requests sent directly by the device) is used only t
 requests and is not used to identify or profile users, so it is not declared as a data type. It is
 disclosed in the privacy policy.
 
-### Mapbox telemetry: off, re-checked on every release build
+### Mapbox telemetry: off unless the user opts in, re-checked on every release build
 
-These answers assume the Mapbox SDK sends no telemetry beyond its billing events. The app turns the
-optional telemetry off with `Mapbox.setTelemetryEnabled(false)` at startup
+Apart from the opt-in below, these answers assume the Mapbox SDK sends no telemetry beyond its billing
+events. The app turns the optional telemetry off with `Mapbox.setTelemetryEnabled(false)` at startup
 (`apps/mobile/src/providers/app-providers.tsx`). On iOS `@rnmapbox/maps` 10.3.0 implements that by writing
 the `MGLMapboxMetricsEnabled` user default (`node_modules/@rnmapbox/maps/ios/RNMBX/RNMBXModule.swift`;
 Android calls the SDK's telemetry API). Mapbox Maps SDK 11.18.2, the version `app.json` pins, still honours
@@ -90,17 +96,31 @@ that key: its `EventsManager` registers it with a default of `true`, observes it
 events with the per-install id after the opt-out ([mapbox-maps-ios#1964](https://github.com/mapbox/mapbox-maps-ios/issues/1964)); they are declared as
 Device ID above.
 
+**User opt-in.** Mapbox's terms require the map's attribution, so the (i) button stays on the map
+(`apps/mobile/app/(tabs)/map/index.tsx` only moves it). On iOS its menu always includes "Mapbox Telemetry",
+whose "Participate" choice writes `MGLMapboxMetricsEnabled = true`, the same user default
+([`AttributionMenu.swift` at v11.18.2](https://github.com/mapbox/mapbox-maps-ios/blob/v11.18.2/Sources/MapboxMaps/Attribution/AttributionMenu.swift)).
+`EventsManager` applies the change at once, so from then on Mapbox collects its telemetry (including
+location events) until the app process ends. Festie calls `setTelemetryEnabled(false)` once per launch,
+so the next cold start turns telemetry off again; switching apps does not. Apple's optional-disclosure
+exemption does not cover this (the data is not entered by the user in a form each time), so it is
+declared above: Analytics on Precise Location and a Coarse Location row. The privacy policy (§2 and the
+Mapbox entry in §4) and [`legal/data-compliance.md`](./legal/data-compliance.md) describe the opt-in. If
+the app ever keeps the user's choice across launches (for example by applying the off default only on
+first launch), update those three places.
+
 This rests on the SDK source, not on observed traffic, so the traffic check in
 [`release-runbook.md`](./release-runbook.md) §5.4 step 4 still has to pass on the build you submit. Read
 `EventsManager.swift` again whenever `RNMapboxMapsVersion` or `@rnmapbox/maps` changes. If the check fails
-and the SDK's own opt-out cannot be wired in, add what Mapbox collects (at least a Location type with the
-Analytics purpose, not linked, no tracking) to the table above, and update the privacy policy and
-[`legal/data-compliance.md`](./legal/data-compliance.md) before answering App Privacy.
+and the SDK's own opt-out cannot be wired in, the Location rows above already carry the Analytics
+purpose, but add anything else Mapbox collects to the table above, and update the privacy policy and
+[`legal/data-compliance.md`](./legal/data-compliance.md) to say telemetry is always on before answering
+App Privacy.
 
 ### Third-party SDK privacy manifests
 
 The App Privacy answers must also cover data collected by SDKs. Festie's native SDKs with a network
-component are Mapbox Maps (telemetry off, see above; its turnstile and map-load
+component are Mapbox Maps (telemetry off unless the user opts in, see above; its turnstile and map-load
 billing events with the per-install id are still sent, Device ID above), `expo-updates` (Device ID above) and Supabase JS (talks only to
 our own project). After the first production build is processed, check the email from App Store Connect
 for ITMS-91053 (missing privacy manifest reasons) and other warnings, and fix them before submission.

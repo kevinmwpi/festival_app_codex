@@ -112,7 +112,7 @@ export default function BrowseScheduleScreen() {
               returnKeyType="search"
               accessibilityLabel="Search artists or stages"
             />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.filterRow}>
               {[ALL, ...days].map((day) => (
                 <Chip
                   key={day}
@@ -177,6 +177,9 @@ export default function BrowseScheduleScreen() {
 }
 
 const styles = StyleSheet.create({
+  // React Native gives horizontal ScrollViews flexGrow/flexShrink 1; in a flex column they would take
+  // a share of the free height away from the list below.
+  chipScroller: { flexGrow: 0 },
   container: { flex: 1 },
   statePad: { padding: spacing.lg },
   scroll: { flex: 1 },

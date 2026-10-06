@@ -41,7 +41,12 @@ Admin commands: [`festival-data.md`](./festival-data.md).
       the email (or the iOS keyboard suggestion) works.
 - [ ] A wrong code shows an error and lets you retry; "Resend code" is disabled for 60 seconds, then
       sends a new code; "Use a different email" returns to the email screen.
-- [ ] From the email screen, "I already have a code" opens the code screen without sending a new email.
+- [ ] "I already have a code" is shown only after a send error: tap "Use a different email", keep (or
+      re-enter) the same email and tap "Enter Festival" again within 60 seconds of the last code. An
+      error ("Too many codes requested…") appears with an "I already have a code" link. The link opens
+      the code screen ("Enter the 8-digit code we emailed to …") without sending a new email, the last
+      code still signs in, and "Resend code" is available straight away. Before a send has failed the
+      link is not shown.
 - [ ] Profile setup: name required (1–40 characters), avatar choice works; "Let's go" stays disabled
       until "I agree to the Terms of Use and Privacy Policy" is ticked; both links open the documents
       (hosted pages in an in-app browser when `EXPO_PUBLIC_*_URL` is set, otherwise the in-app screens);
@@ -249,6 +254,9 @@ Admin commands: [`festival-data.md`](./festival-data.md).
       events. The SDK source says the opt-out works on 11.18.2; this check confirms the build. Procedure
       and what to do if it fails: [`release-runbook.md`](./release-runbook.md) §5.4 step 4. Record the
       result in the sign-off.
+- [ ] **Mapbox telemetry opt-in resets at launch:** the map's (i) button shows "Mapbox Telemetry"; after
+      choosing "Participate" and then closing Festie completely and reopening it, the traffic check above
+      again shows only billing events ([`release-runbook.md`](./release-runbook.md) §5.4 step 4).
 
 ## 15. Accessibility and appearance
 

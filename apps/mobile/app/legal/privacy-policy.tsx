@@ -58,7 +58,7 @@ const CONTENT: Block[] = [
     "spans": [
       {
         "kind": "text",
-        "text": "No ads, no tracking, and no analytics, crash-reporting or advertising SDKs. We do not sell your personal information or share it for advertising. The only counting is of app installations: Mapbox (maps) and Expo (app updates) count them with a random identifier that is not linked to your account (section 4)."
+        "text": "No ads, no tracking, and no analytics, crash-reporting or advertising SDKs. We do not sell your personal information or share it for advertising. The only counting is of app installations: Mapbox (maps) and Expo (app updates) count them with a random identifier that is not linked to your account (section 4). Mapbox's optional map telemetry stays off unless you turn it on yourself in the map (section 4)."
       }
     ]
   },
@@ -440,7 +440,7 @@ const CONTENT: Block[] = [
     "spans": [
       {
         "kind": "text",
-        "text": "Analytics, crash-reporting or advertising data. Festie contains no analytics, crash-reporting or advertising SDKs, and it turns off the map's optional Mapbox telemetry. The only counting is the installation count described in section 4, with a random identifier that is not linked to your account."
+        "text": "Analytics, crash-reporting or advertising data. Festie contains no analytics, crash-reporting or advertising SDKs, and it turns off the map's optional Mapbox telemetry each time it starts (you can turn it on yourself; see Mapbox in section 4). The only counting is the installation count described in section 4, with a random identifier that is not linked to your account."
       }
     ]
   },
@@ -659,7 +659,7 @@ const CONTENT: Block[] = [
       },
       {
         "kind": "text",
-        "text": " provides map tiles when you open the map or download a festival map for offline use. Your device sends Mapbox its IP address, basic device information, the map area being loaded and a random identifier for the installation that Mapbox uses to count active users, but no account information."
+        "text": " provides map tiles when you open the map or download a festival map for offline use. Your device sends Mapbox its IP address, basic device information, the map area being loaded and a random identifier for the installation that Mapbox uses to count active users, but no account information. Festie turns off Mapbox's optional telemetry each time it starts. The map's information (i) button includes a Mapbox Telemetry option: if you choose to participate there, the map also sends Mapbox anonymous usage data, which can include your device's location while Festie is open, until you close Festie completely. When Festie next starts, it turns telemetry off again. Mapbox uses telemetry data you choose to send under its own privacy policy."
       }
     ]
   },

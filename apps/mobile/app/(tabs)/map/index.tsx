@@ -54,6 +54,7 @@ import { OFFLINE_MAP_STYLE, useOfflinePack, type OfflinePackState } from '@/src/
 import { useUserKey } from '@/src/hooks/use-session';
 import { visibleFriendLocations } from '@/src/location/friend-visibility';
 import { cancelCrewReminders } from '@/src/notifications/crew-reminders';
+import { restoreMeetupReminders } from '@/src/notifications/restore-reminders';
 import { STOP_NOT_CONFIRMED_MESSAGE, useLocationSharing } from '@/src/location/LocationSharingProvider';
 import { useAppStore } from '@/src/state/app-store';
 
@@ -155,7 +156,11 @@ function useMeetups(groupId: string | null) {
   return useCacheFirstQuery<LocalMeetup[]>({
     queryKey: queryKeys.meetups(userKey, groupId ?? 'none'),
     readLocal: () => (groupId ? getLocalMeetups(groupId) : Promise.resolve([])),
-    refresh: groupId ? () => refreshGroupDetail(groupId) : undefined,
+    refresh: groupId
+      ? async () => {
+          if ((await refreshGroupDetail(groupId)) !== null) void restoreMeetupReminders([groupId]);
+        }
+      : undefined,
     enabled: Boolean(groupId),
     refreshStaleTime: 2 * 60_000,
   });
@@ -262,7 +267,7 @@ function ControlPill({
 function GroupChips({ groups, selectedId, onSelect, accent }: { groups: GroupSummary[]; selectedId: string | null; onSelect: (id: string) => void; accent: string }) {
   if (groups.length < 2) return null;
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.groupChips}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.groupChips}>
       {groups.map((group) => (
         <Chip key={group.id} label={group.name} active={group.id === selectedId} accentColor={accent} onPress={() => onSelect(group.id)} />
       ))}
@@ -574,7 +579,12 @@ export default function MapScreen() {
           ...(sharing.status === 'permission_denied'
             ? [
                 sharing.canAskAgain
-                  ? { label: 'Allow location', onPress: () => void sharing.requestAccess() }
+                  ? {
+                      // Neutral label (App Review 5.1.1): the iOS permission prompt follows this tap.
+                      label: 'Turn location back on',
+                      hint: 'iOS asks for location access next',
+                      onPress: () => void sharing.requestAccess(),
+                    }
                   : { label: 'Open Settings', onPress: () => void Linking.openSettings() },
               ]
             : []),
@@ -642,7 +652,7 @@ export default function MapScreen() {
           </Text>
         </View>
         <GroupChips groups={groups} selectedId={group?.id ?? null} onSelect={select} accent={accent} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.controlRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.controlRow}>
           {group ? (
             <ControlPill
               label={sharingLabel}
@@ -722,6 +732,9 @@ export default function MapScreen() {
 /* ─── Styles ─────────────────────────────────────────────── */
 
 const styles = StyleSheet.create({
+  // React Native gives horizontal ScrollViews flexGrow/flexShrink 1; in a flex column they would take
+  // a share of the free height away from the list below.
+  chipScroller: { flexGrow: 0 },
   container: { flex: 1 },
   map: { left: 0, position: 'absolute', right: 0, top: 0 },
   statePad: { padding: spacing.lg },

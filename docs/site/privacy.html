@@ -50,7 +50,7 @@ footer { padding-bottom: 40px; font-size: 14px; color: var(--muted); }
 <h2 id="summary">Summary</h2>
 <ul>
 <li>We collect only what Festie needs to work: your email address, the profile you choose, your festival plans and crews, the meetups and photos you post and, only while you turn it on, your location.</li>
-<li>No ads, no tracking, and no analytics, crash-reporting or advertising SDKs. We do not sell your personal information or share it for advertising. The only counting is of app installations: Mapbox (maps) and Expo (app updates) count them with a random identifier that is not linked to your account (section 4).</li>
+<li>No ads, no tracking, and no analytics, crash-reporting or advertising SDKs. We do not sell your personal information or share it for advertising. The only counting is of app installations: Mapbox (maps) and Expo (app updates) count them with a random identifier that is not linked to your account (section 4). Mapbox's optional map telemetry stays off unless you turn it on yourself in the map (section 4).</li>
 <li>Your live location is shown only to the crew you choose, only while Festie is open, and is visible to your crew for at most 15 minutes after the last update, then deleted.</li>
 <li>You can delete your account at any time in Settings, Delete account.</li>
 </ul>
@@ -110,7 +110,7 @@ footer { padding-bottom: 40px; font-size: 14px; color: var(--muted); }
 <li>Your location in the background, or at any time you are not sharing it with a crew.</li>
 <li>Microphone or audio. Festie never asks for microphone access.</li>
 <li>Your advertising identifier. Festie does not track you across other companies' apps or websites, so it never shows the App Tracking Transparency prompt.</li>
-<li>Analytics, crash-reporting or advertising data. Festie contains no analytics, crash-reporting or advertising SDKs, and it turns off the map's optional Mapbox telemetry. The only counting is the installation count described in section 4, with a random identifier that is not linked to your account.</li>
+<li>Analytics, crash-reporting or advertising data. Festie contains no analytics, crash-reporting or advertising SDKs, and it turns off the map's optional Mapbox telemetry each time it starts (you can turn it on yourself; see Mapbox in section 4). The only counting is the installation count described in section 4, with a random identifier that is not linked to your account.</li>
 <li>Payment information. Festie is free and has no purchases.</li>
 </ul>
 <h2 id="3-how-we-use-information">3. How we use information</h2>
@@ -136,7 +136,7 @@ footer { padding-bottom: 40px; font-size: 14px; color: var(--muted); }
 <ul>
 <li><strong>Supabase</strong> hosts our database, sign-in, photo storage and server functions, and stores all account and app data, in __SUPABASE_REGION__.</li>
 <li><strong>__EMAIL_PROVIDER__</strong> delivers sign-in code emails. It receives your email address and the email itself.</li>
-<li><strong>Mapbox</strong> provides map tiles when you open the map or download a festival map for offline use. Your device sends Mapbox its IP address, basic device information, the map area being loaded and a random identifier for the installation that Mapbox uses to count active users, but no account information.</li>
+<li><strong>Mapbox</strong> provides map tiles when you open the map or download a festival map for offline use. Your device sends Mapbox its IP address, basic device information, the map area being loaded and a random identifier for the installation that Mapbox uses to count active users, but no account information. Festie turns off Mapbox's optional telemetry each time it starts. The map's information (i) button includes a Mapbox Telemetry option: if you choose to participate there, the map also sends Mapbox anonymous usage data, which can include your device's location while Festie is open, until you close Festie completely. When Festie next starts, it turns telemetry off again. Mapbox uses telemetry data you choose to send under its own privacy policy.</li>
 <li><strong>Expo</strong> provides the app update service described in section 1 and uses its random installation identifier to count how many installations receive each update. It receives no account information.</li>
 </ul>
 <p>Apple distributes Festie through the App Store under Apple's own privacy policy. Festie does not use Apple's or Expo's push notification services.</p>

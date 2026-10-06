@@ -101,6 +101,7 @@ describe('config function', () => {
   const ENV = {
     EXPO_PUBLIC_SUPABASE_URL: 'https://abc.supabase.co',
     EXPO_PUBLIC_SUPABASE_ANON_KEY: 'anon',
+    EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: 'pk.test-token',
     EXPO_PUBLIC_SUPPORT_EMAIL: 'help@example.com',
     EXPO_PUBLIC_PRIVACY_POLICY_URL: 'https://example.com/privacy.html',
     EXPO_PUBLIC_SUPPORT_URL: 'https://example.com/support.html',
@@ -128,6 +129,16 @@ describe('config function', () => {
     process.env.EAS_BUILD_PROFILE = 'production';
     writeFileSync(join(dir, 'app/legal/terms-of-use.tsx'), '"Governed by __GOVERNING_LAW__"');
     expect(run).toThrow(/terms-of-use\.tsx still contains __GOVERNING_LAW__/);
+  });
+
+  it('fails a production build without a public Mapbox token', () => {
+    process.env.EAS_BUILD_PROFILE = 'production';
+    writeFileSync(join(dir, 'app/legal/terms-of-use.tsx'), '"Governed by the laws of Ruritania."');
+    delete process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
+    expect(run).toThrow(/EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN is not set/);
+
+    process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN = 'sk.secret-token';
+    expect(run).toThrow(/EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN must be a Mapbox public token/);
   });
 
   it('passes a production build with final content, and never guards development builds', () => {

@@ -2,9 +2,10 @@
  * Dynamic Expo config. Everything static lives in `app.json`; this file only adds release guards.
  *
  * Store builds (EAS profiles `preview` and `production`) refuse to build without the public runtime
- * configuration the app needs to work and to pass App Review: Supabase (sign-in and data), the support
- * email and support page (shown in Settings), and the hosted privacy policy (linked from Settings and
- * the App Store listing). The values are `EXPO_PUBLIC_*`, i.e. embedded in the app binary — none of them
+ * configuration the app needs to work and to pass App Review: Supabase (sign-in and data), the Mapbox
+ * public token (the Map tab and meetup pins — without it the Map tab shows its fallback, an incomplete
+ * feature under guideline 2.1), the support email and support page (shown in Settings), and the hosted
+ * privacy policy (linked from Settings and the App Store listing). The values are `EXPO_PUBLIC_*`, i.e. embedded in the app binary — none of them
  * is secret. Set them as EAS environment variables (plain text or sensitive visibility, so the EAS CLI
  * can read them while resolving this config) for the matching EAS environment; see
  * docs/release-runbook.md §5.1. Development builds and local runs never throw: the app shows its
@@ -42,6 +43,12 @@ const RELEASE_REQUIREMENTS: Requirement[] = [
     names: ['EXPO_PUBLIC_SUPABASE_ANON_KEY', 'EXPO_PUBLIC_SUPABASE_KEY'],
     check: isPresent,
     expectation: 'the Supabase anon (publishable) key',
+  },
+  {
+    names: ['EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN'],
+    // Same rule as src/config/app-info.ts: only a public `pk.` token enables the map.
+    check: (value) => value.startsWith('pk.'),
+    expectation: 'a Mapbox public token (pk.…)',
   },
   { names: ['EXPO_PUBLIC_SUPPORT_EMAIL'], check: isEmail, expectation: 'an email address' },
   { names: ['EXPO_PUBLIC_PRIVACY_POLICY_URL'], check: isHttpsUrl, expectation: 'an https URL' },

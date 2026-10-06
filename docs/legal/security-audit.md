@@ -97,7 +97,9 @@ project). Re-scan before each release:
   `MGLMapboxMetricsEnabled` default, which Mapbox Maps SDK 11.18.2 observes and applies
   ([`EventsManager.swift` at v11.18.2](https://github.com/mapbox/mapbox-maps-ios/blob/v11.18.2/Sources/MapboxMaps/Foundation/Events/EventsManager.swift)); turnstile and map-load billing events continue
   ([mapbox-maps-ios#1964](https://github.com/mapbox/mapbox-maps-ios/issues/1964)). The traffic check in runbook §5.4 step 4 confirms it on each release
-  build; re-read the SDK source when its version changes. No analytics or advertising SDKs; no tracking.
+  build; re-read the SDK source when its version changes. A user can opt in from the map's (i) attribution
+  menu ("Mapbox Telemetry"); that lasts until the next launch, which turns telemetry off again, and is
+  disclosed in the privacy policy and App Privacy answers. No analytics or advertising SDKs; no tracking.
 - Release builds: `ITSAppUsesNonExemptEncryption = false` (TLS only); privacy manifest in `app.json`.
 - Custom URL scheme `festivalapp://` only for invite deep links; invite codes are stored and pre-filled,
   never auto-joined.

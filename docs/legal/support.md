@@ -13,7 +13,8 @@ Need help with Festie? Email __SUPPORT_EMAIL__ and include your app version (Set
 ## Signing in
 
 - Festie signs you in with an 8-digit code sent to your email; there is no password. Codes expire after 10 minutes and work once.
-- No code? Check your spam or junk folder, wait a minute and tap Resend code. If you already have a code, tap "I already have a code" on the sign-in screen.
+- No code? Check your spam or junk folder, wait a minute and tap Resend code. Each new code replaces the previous one, so use the code from the newest email.
+- If Festie cannot send a code (for example, you asked for one less than a minute ago), the sign-in screen shows "I already have a code" under the message. Tap it to enter a code you already have without sending a new one.
 - Your schedule and crews stay on your phone when you are offline, even if your sign-in has expired. Festie syncs again when you are back online.
 
 ## Crews and meetups

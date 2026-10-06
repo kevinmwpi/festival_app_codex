@@ -70,8 +70,8 @@ function sharingCopy(
       return {
         value: 'No access',
         subtitle: canAskAgain
-          ? 'Tap to allow location access again and keep sharing with your crew'
-          : 'Allow location access for Festie in Settings to share with your crew',
+          ? 'Tap to turn location back on and keep sharing with your crew — iOS will ask you next'
+          : 'Turn on location access for Festie in Settings to share with your crew',
       };
     default:
       return { value: 'Off', subtitle: "Turn it on from a crew's map when you want friends to find you" };

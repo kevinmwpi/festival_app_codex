@@ -8,6 +8,8 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
+import { restoreSetReminders } from '@/src/notifications/restore-reminders';
+
 import { queryKeys } from './query-keys';
 import { useCacheFirstQuery } from './use-cache-first-query';
 import { useFestivalBundle } from './use-festival';
@@ -35,6 +37,15 @@ function useReReadOnBundleChange(bundleData: unknown, keys: ReadonlyArray<readon
   }, [bundleData, queryClient]);
 }
 
+/**
+ * After the picks come back from the server (e.g. after signing in again, when every reminder was
+ * cancelled), schedule the reminders they are missing. Never prompts; never blocks the refresh.
+ */
+async function refreshPicksAndReminders(festivalId: string, refresh: (festivalId: string) => Promise<unknown>): Promise<void> {
+  await refresh(festivalId);
+  void restoreSetReminders(festivalId);
+}
+
 /** Full lineup of a festival with the user's picks and conflicts (cache first; picks refresh online). */
 export function useLineup(festivalId: string | null) {
   const userKey = useUserKey();
@@ -43,7 +54,7 @@ export function useLineup(festivalId: string | null) {
   const lineup = useCacheFirstQuery<LineupRow[]>({
     queryKey: key,
     readLocal: () => (festivalId ? getLineupWithConflicts(festivalId) : Promise.resolve([])),
-    refresh: festivalId ? () => refreshUserSelections(festivalId) : undefined,
+    refresh: festivalId ? () => refreshPicksAndReminders(festivalId, refreshUserSelections) : undefined,
     enabled: Boolean(festivalId),
   });
   useReReadOnBundleChange(bundle.data, [key]);
@@ -58,7 +69,7 @@ export function useMySchedule(festivalId: string | null) {
   const schedule = useCacheFirstQuery<ScheduleRow[]>({
     queryKey: key,
     readLocal: () => (festivalId ? getSelectedSchedule(festivalId) : Promise.resolve([])),
-    refresh: festivalId ? () => refreshSchedule(festivalId) : undefined,
+    refresh: festivalId ? () => refreshPicksAndReminders(festivalId, refreshSchedule) : undefined,
     enabled: Boolean(festivalId),
   });
   useReReadOnBundleChange(bundle.data, [key]);
