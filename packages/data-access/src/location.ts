@@ -21,6 +21,8 @@ export interface FriendLocation {
   accuracy: number | null;
   heading: number | null;
   recorded_at: string;
+  /** Seconds since `recorded_at`, measured on the server clock (immune to a wrong phone clock). */
+  age_seconds: number | null;
 }
 
 function normaliseAccuracy(value: number | null | undefined): number | null {
@@ -82,5 +84,6 @@ export async function getGroupLocations(groupId: string): Promise<FriendLocation
     accuracy: row.accuracy === null ? null : Number(row.accuracy),
     heading: row.heading === null ? null : Number(row.heading),
     recorded_at: row.recorded_at,
+    age_seconds: row.age_seconds === null || row.age_seconds === undefined ? null : Number(row.age_seconds),
   }));
 }

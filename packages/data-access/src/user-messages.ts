@@ -13,6 +13,7 @@ const APP_CODE_MESSAGES: Record<string, string> = {
   invalid_input: 'Something in that form is not valid. Please check it and try again.',
   festival_not_found: "That festival isn't available.",
   meetup_not_found: 'That meetup no longer exists.',
+  meetup_limit_reached: "You've reached the limit of 100 meetups in this crew. Delete an old one to add another.",
   cannot_remove_self: "You can't remove yourself. Leave the crew instead.",
 };
 

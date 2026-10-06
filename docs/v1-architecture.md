@@ -1,8 +1,9 @@
-# Festie v1 — Architecture Contract (rev 2)
+# Festie v1 — Architecture Contract (rev 2.2)
 
 Status: **authoritative contract for the v1 App Store overhaul** (Oct 2026). Rev 2 folds in an
 adversarial security review and an App Store / mobile review of rev 1. Rev 2.1 records decisions made
-during implementation (§5.1 sign-out semantics, terms gate, captive-portal handling).
+during implementation (§5.1 sign-out semantics, terms gate, captive-portal handling). Rev 2.2 records the
+fixes from the final adversarial review; **§9 lists them and supersedes any earlier text it conflicts with.**
 Every implementer works from this document. If code and this document disagree, fix the code or
 amend this document explicitly — never silently diverge.
 
@@ -17,7 +18,7 @@ Non-goals for v1: chat (removed), background location, social login, universal l
 
 Global conventions:
 
-- **One error convention.** Every app-level database error is `raise exception using errcode = 'P0001', message = '<code>'`, including triggers and rate limits. Codes: `not_authenticated, profile_required, not_group_member, not_group_admin, group_full, rate_limited, content_not_allowed, invalid_input, festival_not_found, meetup_not_found, cannot_remove_self`. (`invite_not_found` is not raised — see `join_group`.) PostgREST returns HTTP 400 for P0001; clients classify by `error.code === 'P0001'` + `error.message`.
+- **One error convention.** Every app-level database error is `raise exception using errcode = 'P0001', message = '<code>'`, including triggers and rate limits. Codes: `not_authenticated, profile_required, not_group_member, not_group_admin, group_full, rate_limited, content_not_allowed, invalid_input, festival_not_found, meetup_not_found, meetup_limit_reached, cannot_remove_self`. (`invite_not_found` is not raised — see `join_group`.) PostgREST returns HTTP 400 for P0001; clients classify by `error.code === 'P0001'` + `error.message`.
 - **An RPC that must persist something on a failure path returns the failure as a value and never raises** (a raise rolls back the whole RPC transaction).
 - Never `select('*')` or embed `users(*)` against `public.users`.
 
@@ -88,7 +89,7 @@ End of 007: `revoke execute on all functions in schema public, private from publ
 - `location_shares`: `unique (user_id, group_id)`; lat ∈ [-90,90], lng ∈ [-180,180], accuracy ≥ 0 or null, heading ∈ [0,360) or null.
 - `chat_messages`, `group_invite_generations`, `auth_attempts`: locked (RLS on, no policies, no grants to anon/authenticated).
 - New `user_blocks(blocker_id uuid references users on delete cascade, blocked_id uuid references users on delete cascade, created_at timestamptz default now(), primary key (blocker_id, blocked_id), check (blocker_id <> blocked_id))`.
-- New `reports(id uuid pk default gen_random_uuid(), reporter_id uuid references users on delete set null, target_type text check in ('user','group','meetup','photo'), target_id uuid not null, group_id uuid references groups on delete set null, reason text check in ('spam','harassment','hate','sexual','violence','impersonation','other'), details text check (char_length(details) <= 500), target_snapshot text, status text not null default 'open' check in ('open','reviewed','actioned','dismissed'), created_at timestamptz default now(), unique (reporter_id, target_type, target_id))`. For `photo`, `target_id` = the meetup id. `target_snapshot` = text of the target at report time (name/title/notes/totem_path).
+- New `reports(id uuid pk default gen_random_uuid(), reporter_id uuid references users on delete set null, target_type text check in ('user','group','meetup','photo','block'), target_id uuid not null, group_id uuid references groups on delete set null, reason text check in ('spam','harassment','hate','sexual','violence','impersonation','other'), details text check (char_length(details) <= 500), target_snapshot text, status text not null default 'open' check in ('open','reviewed','actioned','dismissed'), created_at timestamptz default now(), unique (reporter_id, target_type, target_id))`. For `photo`, `target_id` = the meetup id. `target_snapshot` = text of the target at report time (name/title/notes/totem_path).
 - New `moderation_terms(term text primary key)` — locked.
 - New `rate_limit_events(key text not null, action text not null, created_at timestamptz not null default now())`, index `(key, action, created_at)` — locked.
 - Triggers (private, created last, **column-scoped** so FK actions and unrelated updates never fire them):
@@ -157,9 +158,10 @@ End of 007: `revoke execute on all functions in schema public, private from publ
 ```sql
 do $$ begin
   create extension if not exists pg_cron;
-  perform cron.unschedule(jobid) from cron.job where jobname in ('purge-stale-locations','purge-rate-limit-events');
+  perform cron.unschedule(jobid) from cron.job where jobname in ('purge-stale-locations','purge-rate-limit-events','refresh-demo-crew');
   perform cron.schedule('purge-stale-locations', '*/5 * * * *', 'select public.purge_stale_locations()');
   perform cron.schedule('purge-rate-limit-events', '17 * * * *', 'select public.purge_rate_limit_events()');
+  perform cron.schedule('refresh-demo-crew', '*/5 * * * *', 'select private.refresh_demo_crew()');
 exception when others then raise notice 'pg_cron unavailable: %', sqlerrm;
 end $$;
 ```
@@ -201,7 +203,9 @@ Remove `request-otp`, `verify-otp`, `create_group_invite`, `join_group_from_invi
 `supabase/config.toml` (local dev; hosted is applied with `supabase config push` after review, see runbook):
 - `[api] schemas = ["public", "graphql_public"]` (stop exposing `storage`).
 - `[auth] site_url` = non-localhost placeholder documented in the runbook; `additional_redirect_urls = ["festivalapp://"]`.
-- `[auth.email] enable_signup = true, enable_confirmations = false, otp_length = 8, otp_expiry = 600` (8 matches the hosted project; see commit `da99227`).
+- `[auth.email] enable_signup = true, enable_confirmations = true, double_confirm_changes = true, otp_length = 8, otp_expiry = 600, max_frequency = "60s"` (8 matches the hosted project, see commit `da99227`; `max_frequency` must stay explicit or `config push` resets the hosted 60 s). Confirmations **must stay on**: GoTrue accepts `{email, password}` on `/signup` even though the app never uses passwords, and with autoconfirm an attacker could pre-register a victim's address.
+- `[auth.hook.custom_access_token] enabled = true, uri = "pg-functions://postgres/public/custom_access_token_hook"` — refuses tokens whose `authentication_method` is `password` (hosted: Authentication → Hooks).
+- `[auth] refresh_token_reuse_interval = 30` (default 10): pairs with the client's 10 s refresh timeout (§4.1) so a retry after a lost refresh response is accepted instead of signing the user out.
 - `[auth.email.template.magic_link]` and `[auth.email.template.confirmation]`: `subject` + `content_path = "./supabase/templates/<name>.html"`; templates show `{{ .Token }}` prominently and contain **no link**.
 - `[auth.rate_limit] email_sent = 200, token_verifications = 30`.
 - `[functions.delete-account] verify_jwt = true`, `[functions.demo-login] verify_jwt = false`.
@@ -216,7 +220,7 @@ Verification: `deno check` every function (`deno` is installed); `deno test` pur
 
 **Config & client**
 - Reads `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` (alias `EXPO_PUBLIC_SUPABASE_KEY`). No fallbacks: export `supabaseConfigError: string | null`; if set, no client is created and calls throw `ConfigError`.
-- `createClient(..., { global: { fetch: fetchWithTimeout(15_000) } })` (AbortController). For refresh-token requests (`/auth/v1/token?grant_type=refresh_token`), a response that is 5xx, 429, not JSON (including a 200 HTML captive-portal page), or JSON without a session is converted into a network error so auth-js keeps the session and retries, instead of signing the user out. A genuine JSON 4xx auth error (e.g. `refresh_token_not_found`) still signs out. See `packages/data-access/README.md`.
+- `createClient(..., { global: { fetch: fetchWithTimeout(15_000) } })` (AbortController); token refreshes time out after 10 s so a retry lands inside the 30 s `refresh_token_reuse_interval`. For refresh-token requests (`/auth/v1/token?grant_type=refresh_token`), a response that is 5xx, 429, not JSON (including a 200 HTML captive-portal page), or JSON without a session is converted into a network error so auth-js keeps the session and retries, instead of signing the user out. A genuine JSON 4xx auth error (e.g. `refresh_token_not_found`) still signs out. See `packages/data-access/README.md`.
 
 **Session (offline-safe)**
 - `getStoredSession(): { authUserId: string; expiresAt: number } | null` — **synchronous**; parses MMKV `festival-auth` / key `supabase_session`; requires `refresh_token` and `user.id`; never calls `supabase.auth.*`. Routing and launch paths use only this and `getCachedProfile()`. `supabase.auth.getSession()/getUser()` are never awaited on launch or render paths.
@@ -426,3 +430,68 @@ Interfaces between slices:
 - `cancelAllReminders()` is called by the app orchestrator, never by data-access.
 - BE-FN's deploy script changes go into root `package.json` via BE-DB (or the integrator).
 - DOCS owns the legal copy; canonical location retention copy: "visible to your crew for at most 15 minutes after the last update, then deleted".
+
+## 9. Rev 2.2 amendments (final adversarial review)
+
+These record behaviour shipped after rev 2.1. Where they conflict with earlier sections, **this section wins**.
+
+### 9.1 Database (§2)
+
+- **Helpers (§2.2)**, all `private`, definer, `search_path = ''`, executable by `anon` and `authenticated` for policy evaluation:
+  - `is_banned()`: `auth.users.banned_until > now()` for `auth.uid()`. `current_app_user_id()` returns null and `require_profile()` raises `not_authenticated` for a banned caller, so a ban takes effect even for already-issued access tokens.
+  - `can_view_totem(p_group_id uuid, p_meetup_id uuid, p_owner_id text)`: member of the group and no block either way with the meetup's creator or the uploader (`owner_id`).
+  - `is_reported_totem(p_name text)`: a photo report with status `open` or `reviewed` whose `target_snapshot` equals the object name.
+  - `can_upload_totem` additionally requires fewer than 5 objects already in `<group>/<meetup>/`.
+  - `refresh_demo_crew(p_group_id uuid default null)` / `refresh_demo_crew_content`: keep the seeded fake members' locations fresh and roll their meetups that have started (or start within 30 minutes) to the start of the current hour + 2 h. No-op for any non-demo group.
+- **Triggers (§2.3)**: `meetups_insert_limits` (profile-JWT inserts only; a sync replay of an existing id is not counted): more than 30 new meetups an hour per user → `rate_limited` (transient, clears by itself); 100 meetups per user per crew → `meetup_limit_reached` (permanent).
+- **Reports (§2.3)**: `target_type` also allows `block` (see `block_user`).
+- **RPCs (§2.6)**:
+  - `join_group`: besides the 10 failures/hour per user, a project-wide `join_group:global` budget: once 200 wrong codes land in an hour, profiles younger than 7 days are refused and older ones get 3 failures an hour. Each failure records both the user and the global event.
+  - `remove_group_member`: also deletes the removed member's meetups in that crew and rotates the invite code under the group row lock, so the removed person cannot rejoin with the code they had.
+  - `block_user`: a new block also files a moderation notice — a `reports` row with `target_type 'block'`, `reason 'other'`, `target_snapshot` = display name, `group_id` = first shared crew (`on conflict do nothing`).
+  - `get_group_locations`: returns `age_seconds double precision` (age on the server clock) so clients never judge freshness by the phone's clock; calls `refresh_demo_crew` first. Its earlier definition is dropped before re-creation because the return type changed.
+  - `prepare_demo_account`: also refreshes the demo crew's meetups and locations (above).
+  - New `prepare_account_ban(p_auth_user_id uuid)` → `table(storage_path text)`, **service_role only**: runs `prepare_account_deletion`, rotates the invite code of every crew the user was in, deletes the user's meetups, returns every photo path to remove; idempotent.
+  - New `public.check_rate_limit(...)`: service_role-only wrapper around `private.check_rate_limit` (PostgREST exposes only `public`); used by `demo-login`.
+  - New `public.custom_access_token_hook(event jsonb)`: executable only by `supabase_auth_admin`; returns a 403 error when `event->>'authentication_method' = 'password'`, otherwise passes the claims through.
+- **Cron (§2.7)**: adds `refresh-demo-crew` every 5 minutes (see the block in §2.7).
+- **Storage (§2.8)**: the restrictive `totems_guard` USING clause and the permissive select policy use `private.can_view_totem(folder[1], folder[2], owner_id)`; the delete policy adds `and not private.is_reported_totem(name)`, so reported photos are kept for review until a moderator resolves the report.
+
+### 9.2 Edge functions and auth config (§3)
+
+- Auth config as in §3 (confirmations on, password-token hook, `max_frequency = "60s"`, `refresh_token_reuse_interval = 30`).
+- Edge functions read the new secret key from `SUPABASE_SECRET_KEYS` (`default` entry) and fall back to the legacy `SUPABASE_SERVICE_ROLE_KEY`, so both key-rotation routes work.
+- `demo-login` order: per-IP limit first (20/h, the only 429); then the email digest; then exactly one more limiter call — `demo-login:global` (30 attempts/h, taken before the code is compared) if the email matched, otherwise `demo-login:other` (result ignored). A full global cap answers the same 401 `invalid_code` as a wrong code. On a match: ensure the auth user → `generateLink` → `prepare_demo_account(user id)` → 200, so the token is returned only once the account is ready.
+
+### 9.3 Client data layer (§4)
+
+- `fetchWithTimeout`: token refreshes use a 10 s timeout (`REFRESH_TIMEOUT_MS`), other requests 15 s, storage uploads 90 s.
+- Sync engine (§4.2):
+  - `flush()` sends nothing unless the stored session's user equals `app_meta.local_owner_auth_user_id` and stops mid-pass if the account changes.
+  - Operations parked after 20 attempts get a fresh round on every external `flush()` (launch, foreground, `TOKEN_REFRESHED`, sign-in, pull to refresh) and on a NetInfo offline→online change; the engine's own retries never release them.
+  - A 4xx without a PostgREST or Postgres error code, a non-JSON body, or a body that is not PostgREST-shaped (including an empty 2xx/204 or empty 404 from a middlebox) is a connectivity failure (transient), never permanent or success. "Permanent" covers only 4xx responses that carry a code. Every queued write selects `id`, so a non-PostgREST empty reply is never read as success.
+- `listMyGroups` (§4.1) does not purge crews written by `createGroup`, `refreshGroupDetail` or `joinGroup` while it is in flight, and rejects on an empty reply instead of treating it as "no crews"; direct cache writes made during a refresh are not undone by the refresh's stale snapshot.
+
+### 9.4 Mobile (§5)
+
+- Routes: `auth/delete-account`, guarded by `hasSession` only and linked from `auth/accept-terms` and `auth/profile-setup`, so an account can be deleted without first accepting the terms.
+- Reminders: sign-out cancels every reminder; afterwards the app recreates missing reminders (silently, only when notification permission is already granted) for future picked sets and the user's own future meetups whenever picks or crews refresh from the server. Reminders for a crew are cancelled when the user is removed from it or it is purged.
+- Create Meetup: while online it waits up to 8 s for the server's verdict before confirming success and shows server rejections (e.g. `content_not_allowed`, `meetup_limit_reached`) inline.
+- Location sharing (§5.6):
+  - The heartbeat sends only a fresh fix: the last fix of the current foreground session or `getLastKnownPositionAsync({ maxAge: 2 min })`; nothing is sent without one.
+  - `useLocationSharing()` adds `stop(): Promise<boolean>` (true when the server row is gone), `requestAccess(): Promise<boolean>` and `canAskAgain` (re-prompt after an expired "Allow Once").
+  - `stop()` waits up to 1.5 s for an in-flight share before deleting, and deletes again if a late share lands; `stopLocationSharingNow()` times out after 4.5 s.
+  - The map hides friends whose server-measured age exceeds 15 minutes (falls back to `recorded_at` vs the device clock only when the server sends no age).
+- Release guards (`app.config.ts`): preview/production builds also fail on template artwork, on bundled legal `__PLACEHOLDER__` tokens (run `node docs/legal/generate.mjs --release` with real values), and on a missing Mapbox `pk.` token.
+- `apps/mobile` has a vitest suite (`apps/mobile/test/*.test.ts`), run by `npm run test`.
+
+### 9.5 Admin tools (§6)
+
+- `users:ban <user_id>`: `auth.admin.updateUserById(id, { ban_duration: '876000h' })` → `rpc('prepare_account_ban')` → remove the returned `totems` paths in chunks of ≤ 1000 → mark open/reviewed reports about the user `actioned`. The profile is kept and reports keep `target_snapshot`. Safe to re-run.
+- `reports:remove-content` on a photo report deletes the reported object (the path in `target_snapshot`), not the meetup's current photo. `storage:sweep-orphans` keeps photos under an open or reviewed report.
+
+### 9.6 Known residual risks (accepted for v1, revisit after launch)
+
+- No CAPTCHA on email-code requests: one client can exhaust the project-wide email budget (200/h) and block sign-ins until it resets. Enabling Turnstile needs a Cloudflare account, a captcha token in `signInWithOtp`, and the commented `[auth.captcha]` block in `supabase/config.toml`.
+- Invite codes are 6 characters (32⁶) and never expire unless rotated; per-account and project-wide guess budgets apply.
+- `auth.sessions` rows (IP, user agent) persist for devices that never sign out online; disclosed in the privacy policy.

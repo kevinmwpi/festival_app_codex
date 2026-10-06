@@ -252,7 +252,7 @@ The diff may contain only these changes (any of them may be absent if the hosted
 | Area | Expected changes |
 |---|---|
 | API | exposed schemas `public, graphql_public` (`storage` removed), `extra_search_path`, `max_rows = 1000` |
-| Auth general | `site_url`, redirect URLs `festivalapp://`, JWT expiry 3600, refresh-token rotation on with reuse interval 10, sign-ups on, anonymous sign-ins off, manual linking off |
+| Auth general | `site_url`, redirect URLs `festivalapp://`, JWT expiry 3600, refresh-token rotation on with reuse interval **30** (hosted default is 10; the app's 10 s refresh timeout relies on 30 so a retry after a lost response is accepted), sign-ups on, anonymous sign-ins off, manual linking off |
 | Auth email | email sign-up on, confirmations **on** (no autoconfirm), secure email change on, OTP length 8, OTP expiry 600, `smtp_max_frequency` 60 s (never 1 s), both templates with the subject "Your Festie sign-in code" |
 | Auth rate limits | `email_sent` 200, `token_verifications` 30; `sign_in_sign_ups`, `token_refresh`, `anonymous_users`, `sms_sent`, `web3` at the template values (30, 150, 30, 30, 30), which match the hosted defaults |
 | Auth hooks | Customize Access Token (JWT) Claims on, Postgres function `public.custom_access_token_hook` |

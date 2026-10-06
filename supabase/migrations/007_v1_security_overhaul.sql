@@ -1087,6 +1087,9 @@ $$;
 -- without a profile in the JWT): at most 30 new meetups an hour per user and
 -- 100 per user per crew, so one member cannot flood a crew. A sync replay of a
 -- meetup that already exists (upsert on id) is not a new meetup.
+-- The hourly limit clears by itself, so it is 'rate_limited' (clients retry);
+-- the per-crew cap does not, so it is 'meetup_limit_reached' (clients give up
+-- and tell the user, instead of retrying a write that can never succeed).
 create or replace function private.meetups_insert_limits()
 returns trigger
 language plpgsql
@@ -1104,7 +1107,7 @@ begin
     select count(*) from public.meetups mt
     where mt.group_id = new.group_id and mt.created_by_user_id = v_me
   ) >= 100 then
-    raise exception using errcode = 'P0001', message = 'rate_limited';
+    raise exception using errcode = 'P0001', message = 'meetup_limit_reached';
   end if;
 
   if not private.check_rate_limit('user:' || v_me::text, 'meetup_create', 30, interval '1 hour') then
@@ -1505,6 +1508,12 @@ begin
 end
 $$;
 
+-- age_seconds is measured on the server clock, so clients judge freshness without
+-- trusting the phone's clock (a phone set fast would otherwise hide every friend).
+-- The return type changed during v1 development, and create or replace cannot
+-- change a return type, so drop any earlier definition first (no policy or view
+-- depends on this RPC; its grant is re-applied in the grants section below).
+drop function if exists public.get_group_locations(uuid);
 create or replace function public.get_group_locations(p_group_id uuid)
 returns table (
   user_id uuid,
@@ -1515,7 +1524,8 @@ returns table (
   lng double precision,
   accuracy double precision,
   heading double precision,
-  recorded_at timestamptz
+  recorded_at timestamptz,
+  age_seconds double precision
 )
 language plpgsql
 volatile
@@ -1547,7 +1557,8 @@ begin
     l.lng::double precision,
     l.accuracy::double precision,
     l.heading::double precision,
-    l.recorded_at
+    l.recorded_at,
+    greatest(0, extract(epoch from (now() - l.recorded_at)))::double precision
   from public.location_shares l
   join public.users u on u.id = l.user_id
   join public.group_members m on m.group_id = l.group_id and m.user_id = l.user_id

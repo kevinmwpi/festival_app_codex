@@ -10,7 +10,7 @@
 -- Run with: npm run db:test
 
 begin;
-select plan(297);
+select plan(298);
 
 -- ===========================================================================
 -- Identities
@@ -996,7 +996,7 @@ select pg_temp.become('solo');
 select throws_ok(
   $$ insert into public.meetups (id, group_id, title, starts_at, created_by_user_id)
      values ('e0000000-0000-4000-8000-000000000042', '90000000-0000-4000-8000-000000000005', 'One too many', now(), 'b0000000-0000-4000-8000-000000000009') $$,
-  'P0001', 'rate_limited', 'G24 a member can have at most 100 meetups in one crew'
+  'P0001', 'meetup_limit_reached', 'G24 a member can have at most 100 meetups in one crew (permanent code, not rate_limited)'
 );
 select pg_temp.become('superuser');
 delete from public.meetups
@@ -1021,6 +1021,11 @@ select is(
   array(select user_id::text from public.get_group_locations('90000000-0000-4000-8000-000000000001') order by user_id),
   array['b0000000-0000-4000-8000-000000000005', 'b0000000-0000-4000-8000-000000000014'],
   'H3 get_group_locations returns fresh groupmates, excluding the caller'
+);
+select ok(
+  (select count(*) > 0 and bool_and(age_seconds is not null and age_seconds >= 0 and age_seconds < 15 * 60)
+     from public.get_group_locations('90000000-0000-4000-8000-000000000001')),
+  'H3b get_group_locations reports each row''s age on the server clock (0 <= age_seconds < 15 min)'
 );
 select pg_temp.become('superuser');
 select is(

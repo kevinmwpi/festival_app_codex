@@ -48,6 +48,7 @@ describe('classifySyncError', () => {
     ['P0001 not_group_member', err('P0001', 400, 'not_group_member')],
     ['P0001 content_not_allowed', err('P0001', 400, 'content_not_allowed')],
     ['P0001 invalid_input', err('P0001', 400, 'invalid_input')],
+    ['P0001 meetup_limit_reached', err('P0001', 400, 'meetup_limit_reached')],
     ['other 4xx with a PostgREST code', err('PGRST205', 404)],
     ['other 4xx with a Postgres code', err('42P01', 404)],
     ['23505 on meetups', err('23505', 409)],

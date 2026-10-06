@@ -765,6 +765,7 @@ export type Database = {
         Args: { p_group_id: string }
         Returns: {
           accuracy: number | null
+          age_seconds: number | null
           avatar_type: string
           avatar_value: string
           display_name: string

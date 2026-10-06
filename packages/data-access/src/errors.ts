@@ -121,6 +121,7 @@ export type AppErrorCode =
   | 'invalid_input'
   | 'festival_not_found'
   | 'meetup_not_found'
+  | 'meetup_limit_reached'
   | 'cannot_remove_self';
 
 interface PostgrestLikeError {

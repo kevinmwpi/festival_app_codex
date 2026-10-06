@@ -32,7 +32,11 @@ site_url = "https://festivalapp.invalid"
 additional_redirect_urls = ["festivalapp://"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
-refresh_token_reuse_interval = 10
+# Seconds a just-rotated refresh token is still accepted. 30 s (not the 10 s default) so a client
+# whose refresh response was lost on a bad network can retry inside the window instead of being
+# signed out with refresh_token_already_used; pairs with REFRESH_TIMEOUT_MS = 10 s in
+# packages/data-access/src/config.ts. Reuse outside the window still revokes the token family.
+refresh_token_reuse_interval = 30
 enable_signup = true
 enable_anonymous_sign_ins = false
 

@@ -3,6 +3,21 @@ import { ConfigError } from './errors';
 export const REQUEST_TIMEOUT_MS = 15_000;
 /** Storage object uploads (≤ 5 MB on festival networks) get longer than ordinary requests. */
 export const UPLOAD_TIMEOUT_MS = 90_000;
+/**
+ * Token refreshes get a shorter timeout so that a retry after a lost response still lands inside
+ * Supabase Auth's `refresh_token_reuse_interval` (supabase/config.toml: 30 s).
+ *
+ * GoTrue rotates the refresh token as soon as it processes a refresh. If the response is lost on the
+ * way back (common on festival networks), auth-js retries with the same — now revoked — token. GoTrue
+ * accepts a revoked token only within the reuse interval of its revocation; after that it answers
+ * `400 refresh_token_already_used`, which is authoritative, so auth-js removes the session and the user
+ * is signed out (and, offline, cannot sign back in to reach their cached schedule). auth-js starts its
+ * first retry 200 ms after the failed attempt and keeps retrying within one 30 s auto-refresh tick
+ * (@supabase/auth-js 2.99.3 GoTrueClient.js `_refreshAccessToken`, l. 1993-2008). With a 10 s refresh
+ * timeout the first two retries start about 10.2 s and 20.6 s after the original request, both inside
+ * a 30 s reuse window even when the retry itself is slow to arrive.
+ */
+export const REFRESH_TIMEOUT_MS = 10_000;
 
 export interface SupabaseConfig {
   url: string;
@@ -159,7 +174,8 @@ function isStorageUpload(input: RequestInfo | URL, init?: RequestInit): boolean 
 
 /**
  * A `fetch` that aborts after `timeoutMs` (default 15 s) and rejects with `FetchTimeoutError`.
- * Storage object uploads use `uploadTimeoutMs` instead. A caller-supplied `signal` still aborts.
+ * Storage object uploads use `uploadTimeoutMs` instead, and token refreshes use the shorter
+ * `refreshTimeoutMs` (see `REFRESH_TIMEOUT_MS`). A caller-supplied `signal` still aborts.
  *
  * Captive-portal resilience: a token-refresh response that is not Supabase Auth's verdict on the
  * refresh token (see `isNonAuthoritativeRefreshResponse`) is turned into a rejected
@@ -190,15 +206,17 @@ function isStorageUpload(input: RequestInfo | URL, init?: RequestInit): boolean 
  */
 export function fetchWithTimeout(
   timeoutMs: number = REQUEST_TIMEOUT_MS,
-  options: { uploadTimeoutMs?: number; fetchImpl?: FetchLike } = {},
+  options: { uploadTimeoutMs?: number; refreshTimeoutMs?: number; fetchImpl?: FetchLike } = {},
 ): FetchLike {
   const uploadTimeoutMs = options.uploadTimeoutMs ?? Math.max(timeoutMs, UPLOAD_TIMEOUT_MS);
+  const refreshTimeoutMs = Math.min(timeoutMs, options.refreshTimeoutMs ?? REFRESH_TIMEOUT_MS);
 
   return (input, init = {}) => {
     const baseFetch = options.fetchImpl ?? (globalThis.fetch as FetchLike);
     const controller = new AbortController();
     const upstream = init.signal ?? undefined;
-    const effectiveTimeout = isStorageUpload(input, init) ? uploadTimeoutMs : timeoutMs;
+    const refreshRequest = isRefreshTokenRequest(requestUrl(input));
+    const effectiveTimeout = isStorageUpload(input, init) ? uploadTimeoutMs : refreshRequest ? refreshTimeoutMs : timeoutMs;
     let timedOut = false;
 
     const onUpstreamAbort = () => controller.abort();
@@ -214,8 +232,6 @@ export function fetchWithTimeout(
       timedOut = true;
       controller.abort();
     }, effectiveTimeout);
-
-    const refreshRequest = isRefreshTokenRequest(requestUrl(input));
 
     return baseFetch(input, { ...init, signal: controller.signal })
       .then(async (response) => {

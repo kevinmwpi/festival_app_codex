@@ -1,7 +1,7 @@
 import { AuthApiError, AuthRetryableFetchError, FunctionsFetchError } from '@supabase/supabase-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { FetchTimeoutError, fetchWithTimeout, resolveSupabaseConfig, supabaseConfigError } from '../src/config';
+import { FetchTimeoutError, REFRESH_TIMEOUT_MS, fetchWithTimeout, resolveSupabaseConfig, supabaseConfigError } from '../src/config';
 import {
   ConfigError,
   DataAccessError,
@@ -28,6 +28,7 @@ describe('toUserMessage', () => {
     ['content_not_allowed', "That text isn't allowed. Please try different wording."],
     ['festival_not_found', "That festival isn't available."],
     ['meetup_not_found', 'That meetup no longer exists.'],
+    ['meetup_limit_reached', "You've reached the limit of 100 meetups in this crew. Delete an old one to add another."],
     ['cannot_remove_self', "You can't remove yourself. Leave the crew instead."],
     ['profile_required', 'Finish setting up your profile first.'],
     ['invalid_input', 'Something in that form is not valid. Please check it and try again.'],
@@ -133,6 +134,40 @@ describe('fetchWithTimeout', () => {
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(70_000);
     expect((await request) as Error).toBeInstanceOf(FetchTimeoutError);
+  });
+
+  it('gives token refreshes the shorter refresh timeout so a retry fits the reuse window', async () => {
+    vi.useFakeTimers();
+    const fetchImpl = hangingFetch();
+    const fetcher = fetchWithTimeout(15_000, { fetchImpl });
+    let refreshSettled = false;
+    let otherSettled = false;
+    const refresh = fetcher('https://x.supabase.co/auth/v1/token?grant_type=refresh_token', { method: 'POST' }).catch((error: Error) => {
+      refreshSettled = true;
+      return error;
+    });
+    const other = fetcher('https://x.supabase.co/auth/v1/token?grant_type=password', { method: 'POST' }).catch((error: Error) => {
+      otherSettled = true;
+      return error;
+    });
+
+    await vi.advanceTimersByTimeAsync(REFRESH_TIMEOUT_MS - 1);
+    expect(refreshSettled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect((await refresh) as Error).toMatchObject({ name: 'TimeoutError', message: `Request timed out after ${REFRESH_TIMEOUT_MS} ms` });
+    expect(otherSettled).toBe(false);
+    await vi.advanceTimersByTimeAsync(15_000 - REFRESH_TIMEOUT_MS);
+    expect((await other) as Error).toBeInstanceOf(FetchTimeoutError);
+  });
+
+  it('never makes a refresh wait longer than the base timeout', async () => {
+    vi.useFakeTimers();
+    const fetchImpl = hangingFetch();
+    const refresh = fetchWithTimeout(5_000, { fetchImpl })('https://x.supabase.co/auth/v1/token?grant_type=refresh_token').catch(
+      (error: Error) => error,
+    );
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect((await refresh) as Error).toMatchObject({ message: 'Request timed out after 5000 ms' });
   });
 
   it('passes through responses and caller aborts', async () => {
