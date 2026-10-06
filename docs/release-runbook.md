@@ -221,7 +221,7 @@ Supabase's built-in email service only delivers to members of the project's team
 limited, so App Review and real users would never receive a code. Configure your own SMTP **before**
 §2.8 (the raised email rate limit needs it):
 
-1. Choose a transactional email provider (`__EMAIL_PROVIDER__`; it is named in the privacy policy).
+1. Transactional email provider: **Resend** (named in the privacy policy; changing provider means updating the policy). Resend needs a domain you own to send from.
 2. Verify a sending domain with the provider and publish the DNS records it gives you: SPF, DKIM and a
    DMARC policy. Wait until the provider shows the domain as verified.
 3. Create SMTP credentials at the provider.
@@ -821,13 +821,13 @@ values below are entered in App Store Connect, EAS and Supabase only, never in t
 
 | Placeholder | Where | What to decide |
 |---|---|---|
-| `__LEGAL_NAME__` | privacy policy, terms | The person or company that operates Festie (must match the App Store seller) |
-| `__POSTAL_ADDRESS__` | privacy policy, terms | Contact postal address for privacy and legal notices |
+| ~~`__LEGAL_NAME__`~~ | privacy policy, terms | Filled: Kevin M Pi (must match the App Store seller name) |
+| ~~`__POSTAL_ADDRESS__`~~ | privacy policy, terms | Removed by decision: contact is name + support email (no home address published). Add a PO box or virtual mailbox to §12/§17 if you want one later |
 | `__SUPPORT_EMAIL__` | `supportEmail` in `docs/legal/values.json`, `EXPO_PUBLIC_SUPPORT_EMAIL`, review notes | Set: `kevinmwpi+app@gmail.com` (`values.json`). Use the same value for `EXPO_PUBLIC_SUPPORT_EMAIL` in EAS. The legal Markdown keeps the token; the generator and the app fill it in |
 | ~~`__SUPABASE_REGION__`~~ | privacy policy | Filled: the United States (Oregon, AWS us-west-2), the project's region. Update it if you move to a project in another region |
-| `__EMAIL_PROVIDER__` | privacy policy, §2.7 | The SMTP provider that sends sign-in codes; check that its data processing terms exist (privacy policy §4 promises them) |
-| `__GOVERNING_LAW__` | terms §14 | Jurisdiction whose law governs the Terms |
-| `__GOVERNING_VENUE__` | terms §14 | Courts for disputes |
+| ~~`__EMAIL_PROVIDER__`~~ | privacy policy, §2.7 | Filled: Resend. Accept Resend's data processing addendum when you create the account (privacy policy §4 promises one) |
+| ~~`__GOVERNING_LAW__`~~ | terms §14 | Filled: the State of Texas |
+| ~~`__GOVERNING_VENUE__`~~ | terms §14 | Filled: state and federal courts in Dallas County, Texas |
 | `__PRIVACY_POLICY_URL__` | app-store-privacy, EAS env, App Store Connect | Hosted `privacy.html` (§4) |
 | `__SUPPORT_URL__` | app-store-privacy, EAS env, App Store Connect | Hosted `support.html` (§4) |
 | `__DEMO_LOGIN_EMAIL__` | review notes, function secret (§2.10) | A mailbox you control; never committed |

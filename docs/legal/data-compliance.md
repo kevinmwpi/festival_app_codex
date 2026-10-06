@@ -66,7 +66,7 @@ tracking (no ATT prompt, no IDFA). `expo-insights` is not a dependency.
 | Processor | Purpose | Data |
 |---|---|---|
 | Supabase | Database, Auth, Storage, Edge Functions | Everything in §1, in `the United States (Oregon, AWS us-west-2)` |
-| `__EMAIL_PROVIDER__` | Sign-in code emails (custom SMTP) | Email address, email content |
+| Resend | Sign-in code emails (custom SMTP) | Email address, email content |
 | Mapbox | Map tiles and offline packs; optional telemetry only if the user opts in from the map's (i) menu | IP address, device info, requested map area, anonymous per-install id used for monthly-active-user billing (no account data); after a user opt-in, Mapbox telemetry (usage and location events, not linked to the account) until the app is next launched |
 | Expo (EAS Update) | App update checks | App version, platform, installation id |
 

@@ -31,7 +31,7 @@ const CONTENT: Block[] = [
     "spans": [
       {
         "kind": "text",
-        "text": "Festie is a festival planning app operated by __LEGAL_NAME__ (\"Festie\", \"we\", \"us\"). This policy explains what information the Festie app and its servers handle, why, who can see it, how long we keep it and the choices you have. If you have a question, email __SUPPORT_EMAIL__."
+        "text": "Festie is a festival planning app operated by Kevin M Pi (\"Festie\", \"we\", \"us\"). This policy explains what information the Festie app and its servers handle, why, who can see it, how long we keep it and the choices you have. If you have a question, email __SUPPORT_EMAIL__."
       }
     ]
   },
@@ -642,7 +642,7 @@ const CONTENT: Block[] = [
     "spans": [
       {
         "kind": "bold",
-        "text": "__EMAIL_PROVIDER__"
+        "text": "Resend"
       },
       {
         "kind": "text",
@@ -1137,7 +1137,7 @@ const CONTENT: Block[] = [
     "spans": [
       {
         "kind": "text",
-        "text": "__LEGAL_NAME__, __POSTAL_ADDRESS__"
+        "text": "Kevin M Pi"
       }
     ]
   },

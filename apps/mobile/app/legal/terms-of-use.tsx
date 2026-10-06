@@ -31,7 +31,7 @@ const CONTENT: Block[] = [
     "spans": [
       {
         "kind": "text",
-        "text": "These Terms of Use (\"Terms\") are an agreement between you and __LEGAL_NAME__ (\"Festie\", \"we\", \"us\") for using the Festie app and its services. By creating an account or using Festie you agree to these Terms and confirm you have read our "
+        "text": "These Terms of Use (\"Terms\") are an agreement between you and Kevin M Pi (\"Festie\", \"we\", \"us\") for using the Festie app and its services. By creating an account or using Festie you agree to these Terms and confirm you have read our "
       },
       {
         "kind": "route",
@@ -499,7 +499,7 @@ const CONTENT: Block[] = [
     "spans": [
       {
         "kind": "text",
-        "text": "These Terms are governed by the laws of __GOVERNING_LAW__, without regard to conflict-of-law rules, and disputes will be resolved in the courts of __GOVERNING_VENUE__, unless the law where you live gives you the right to bring a claim in your local courts or under your local law."
+        "text": "These Terms are governed by the laws of the State of Texas, without regard to conflict-of-law rules, and disputes will be resolved in the state and federal courts located in Dallas County, Texas, unless the law where you live gives you the right to bring a claim in your local courts or under your local law."
       }
     ]
   },
@@ -607,7 +607,7 @@ const CONTENT: Block[] = [
     "spans": [
       {
         "kind": "text",
-        "text": "__LEGAL_NAME__, __POSTAL_ADDRESS__"
+        "text": "Kevin M Pi"
       }
     ]
   },

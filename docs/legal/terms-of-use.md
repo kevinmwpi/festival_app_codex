@@ -11,7 +11,7 @@ template variable filled in by the generator (see docs/legal/generate.mjs), not 
 
 Last updated: October 5, 2026
 
-These Terms of Use ("Terms") are an agreement between you and __LEGAL_NAME__ ("Festie", "we", "us") for using the Festie app and its services. By creating an account or using Festie you agree to these Terms and confirm you have read our [Privacy Policy](./privacy-policy.md). If you do not agree, do not use Festie.
+These Terms of Use ("Terms") are an agreement between you and Kevin M Pi ("Festie", "we", "us") for using the Festie app and its services. By creating an account or using Festie you agree to these Terms and confirm you have read our [Privacy Policy](./privacy-policy.md). If you do not agree, do not use Festie.
 
 ## 1. Zero tolerance for objectionable content and abuse
 
@@ -91,7 +91,7 @@ We may update these Terms. We will change the date at the top and, for significa
 
 ## 14. Governing law and disputes
 
-These Terms are governed by the laws of __GOVERNING_LAW__, without regard to conflict-of-law rules, and disputes will be resolved in the courts of __GOVERNING_VENUE__, unless the law where you live gives you the right to bring a claim in your local courts or under your local law.
+These Terms are governed by the laws of the State of Texas, without regard to conflict-of-law rules, and disputes will be resolved in the state and federal courts located in Dallas County, Texas, unless the law where you live gives you the right to bring a claim in your local courts or under your local law.
 
 ## 15. Apple App Store terms
 
@@ -109,6 +109,6 @@ If any part of these Terms is found unenforceable, the rest stays in effect. If 
 
 ## 17. Contact
 
-__LEGAL_NAME__, __POSTAL_ADDRESS__
+Kevin M Pi
 
 Email: __SUPPORT_EMAIL__

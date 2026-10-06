@@ -12,7 +12,7 @@ and EXPO_PUBLIC_SUPPORT_EMAIL (in-app screens).
 
 Last updated: October 5, 2026
 
-Festie is a festival planning app operated by __LEGAL_NAME__ ("Festie", "we", "us"). This policy explains what information the Festie app and its servers handle, why, who can see it, how long we keep it and the choices you have. If you have a question, email __SUPPORT_EMAIL__.
+Festie is a festival planning app operated by Kevin M Pi ("Festie", "we", "us"). This policy explains what information the Festie app and its servers handle, why, who can see it, how long we keep it and the choices you have. If you have a question, email __SUPPORT_EMAIL__.
 
 ## Summary
 
@@ -112,7 +112,7 @@ We can access the data on our servers to operate Festie, answer support requests
 These companies process data for us, only to run Festie. Each provider may use the information only to provide its service to us, is bound by contract (including data processing terms where the law requires them) to protect it at least as well as this policy does, and may not use it for its own purposes.
 
 - **Supabase** hosts our database, sign-in, photo storage and server functions, and stores all account and app data, in the United States (Oregon, AWS us-west-2).
-- **__EMAIL_PROVIDER__** delivers sign-in code emails. It receives your email address and the email itself.
+- **Resend** delivers sign-in code emails. It receives your email address and the email itself.
 - **Mapbox** provides map tiles when you open the map or download a festival map for offline use. Your device sends Mapbox its IP address, basic device information, the map area being loaded and a random identifier for the installation that Mapbox uses to count active users, but no account information. Festie turns off Mapbox's optional telemetry each time it starts. The map's information (i) button includes a Mapbox Telemetry option: if you choose to participate there, the map also sends Mapbox anonymous usage data, which can include your device's location while Festie is open, until you close Festie completely. When Festie next starts, it turns telemetry off again. Mapbox uses telemetry data you choose to send under its own privacy policy.
 - **Expo** provides the app update service described in section 1 and uses its random installation identifier to count how many installations receive each update. It receives no account information.
 
@@ -181,6 +181,6 @@ When we change this policy we will update the date at the top. If a change is si
 
 ## 12. Contact
 
-__LEGAL_NAME__, __POSTAL_ADDRESS__
+Kevin M Pi
 
 Email: __SUPPORT_EMAIL__
