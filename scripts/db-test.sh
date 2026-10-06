@@ -288,7 +288,7 @@ main() {
   local required=(
     001_initial_schema.sql 002_rls.sql 003_supporting_tables.sql 004_security_hardening.sql
     005_rate_limiting.sql 006_user_festivals_and_festival_theme.sql 007_v1_security_overhaul.sql
-    008_storage_totems.sql 009_seed_moderation_terms.sql
+    008_storage_totems.sql 009_seed_moderation_terms.sql 010_foreign_key_indexes.sql
   )
   for m in "${required[@]}"; do
     [[ -f "$MIGRATIONS_DIR/$m" ]] || fail "missing migration $m"
@@ -328,7 +328,7 @@ main() {
   done
   apply_superuser_file "$db_main" "$LOCAL_DIR/dirty-fixture.sql"
   pass_line "[$db_main] 001-006 + dirty fixture applied"
-  for m in 007_v1_security_overhaul.sql 008_storage_totems.sql 009_seed_moderation_terms.sql; do
+  for m in 007_v1_security_overhaul.sql 008_storage_totems.sql 009_seed_moderation_terms.sql 010_foreign_key_indexes.sql; do
     apply_migration "$db_main" "$MIGRATIONS_DIR/$m"
   done
   pass_line "[$db_main] 007-009 applied as postgres"
@@ -336,7 +336,7 @@ main() {
   run_tap "$db_main" "$TESTS_DIR/rls.sql" "rls.sql"
 
   step "Re-applying 007-009 (idempotency)"
-  for m in 007_v1_security_overhaul.sql 008_storage_totems.sql 009_seed_moderation_terms.sql; do
+  for m in 007_v1_security_overhaul.sql 008_storage_totems.sql 009_seed_moderation_terms.sql 010_foreign_key_indexes.sql; do
     apply_migration "$db_main" "$MIGRATIONS_DIR/$m" "re-apply"
   done
   pass_line "[$db_main] 007-009 re-applied"

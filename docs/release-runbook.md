@@ -165,7 +165,7 @@ festivals (14 stages, 44 artists, 64 sets), no crews, meetups or photos. So, for
 ```sh
 npx supabase migration repair --status reverted 20260328045611 20260329180317 20260408060752
 npx supabase migration repair --status applied 001 002 003 004   # NOT 005: its table is missing
-npx supabase db push --dry-run      # must list exactly 005, 006, 007, 008, 009
+npx supabase db push --dry-run      # must list exactly 005, 006, 007, 008, 009, 010
 npx supabase db push
 ```
 
@@ -180,8 +180,10 @@ npx supabase db push
 ```
 
 - 006 is idempotent; 007 is idempotent and safe on a database with dashboard edits or only one of the two
-  historical `005` files. Each migration runs in its own transaction; if one fails, nothing of it is kept
-  and `db push` can simply be re-run after fixing the cause.
+  historical `005` files. **The CLI does not wrap a migration file in a transaction** (it prints
+  `SET LOCAL can only be used in transaction blocks`), so a failure can leave earlier statements of that
+  file applied. 006–010 are idempotent, so after fixing the cause simply re-run `db push`. A failed 005
+  rolls back cleanly only if it fails at its first statement; otherwise inspect before re-running.
 - 007 sets `lock_timeout = '5s'`. If it fails with a lock timeout, run it again at a quiet moment.
 - 008 holds all `storage.*` statements so a hosted storage-permission problem cannot roll back 007. If only
   008 fails, fix the reported permission problem and re-run `db push`.
