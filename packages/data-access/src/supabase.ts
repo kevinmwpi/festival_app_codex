@@ -2,7 +2,7 @@ import { createClient, type AuthChangeEvent, type Session, type SupabaseClient }
 
 import { fetchWithTimeout, getSupabaseConfig, REQUEST_TIMEOUT_MS, supabaseConfigError, type SupabaseConfig } from './config';
 import type { Database } from './database.types';
-import { toDataAccessError } from './errors';
+import { toDataAccessError, unexpectedResponseError } from './errors';
 import { requireStoredSession } from './session';
 import { AUTH_SESSION_KEY, getAuthStorage } from './storage';
 
@@ -169,6 +169,19 @@ export async function callRpc<Name extends RpcName>(
   }
 
   return data as PublicFunctions[Name]['Returns'];
+}
+
+/**
+ * The rows returned by an RPC that returns a table. PostgREST always answers those with a JSON array
+ * (`[]` when nothing matched); anything else (e.g. an empty reply, which supabase-js reports as
+ * `null`) did not come from PostgREST and throws a retryable `DataAccessError` (status 0) instead of
+ * reading as "no rows".
+ */
+export function requireRpcRows<T>(rows: readonly T[] | null | undefined): readonly T[] {
+  if (!Array.isArray(rows)) {
+    throw unexpectedResponseError();
+  }
+  return rows;
 }
 
 /** Throws a `DataAccessError` for a failed supabase-js result, otherwise returns `data`. */

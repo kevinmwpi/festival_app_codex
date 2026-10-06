@@ -101,7 +101,7 @@ export async function banUser(client: SupabaseClient, target: BanTarget): Promis
       await client
         .from('reports')
         .update({ status: 'actioned' })
-        .eq('target_type', 'user')
+        .in('target_type', ['user', 'block'])
         .eq('target_id', target.profileId)
         .in('status', ['open', 'reviewed']),
       'Updating report status',

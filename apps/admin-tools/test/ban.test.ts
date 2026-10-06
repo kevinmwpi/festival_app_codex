@@ -53,8 +53,11 @@ function fakeClient(options: Options = {}) {
         },
         in(column: string, values: unknown[]) {
           filters.push(`${column} in ${values.join(',')}`);
+          return builder;
+        },
+        then(resolve: (value: unknown) => void) {
           calls.push(`${table}:${filters.join(' ')}`);
-          return Promise.resolve({ data: null, error: null });
+          resolve({ data: null, error: null });
         },
       };
       return builder;
@@ -78,7 +81,7 @@ describe('banUser', () => {
       `ban:${AUTH_ID}:${BAN_DURATION}`,
       `rpc:prepare_account_ban:${AUTH_ID}`,
       'remove:totems:2',
-      `reports:update:{"status":"actioned"} target_type=user target_id=${PROFILE_ID} status in open,reviewed`,
+      `reports:update:{"status":"actioned"} target_type in user,block target_id=${PROFILE_ID} status in open,reviewed`,
     ]);
     // Photos on meetups that still exist are removed too: the meetups are deleted with the ban.
     expect(removed).toEqual([[`${G}/m1/a.jpg`, `${G}/m2/b.jpg`]]);

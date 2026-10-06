@@ -46,14 +46,13 @@ function toTransportError(error: { message?: string; code?: string; details?: st
   });
 }
 
-/** A write without `.select()` asks PostgREST for no body (`return=minimal`): any body means it did not answer. */
-function expectNoBody(data: unknown, status: number | null): void {
-  if (data !== null && data !== undefined) {
-    throw unexpectedResponse(status);
-  }
-}
-
-/** A write with `.select()` gets a JSON array of the affected rows from PostgREST. */
+/**
+ * Every write selects at least `id` (`return=representation`), so PostgREST answers with a JSON array
+ * of the affected rows (possibly empty). Anything else did not come from PostgREST, including an empty
+ * 2xx/204 or an empty 404, which supabase-js reports as success with `data: null`. Requiring the array
+ * is the only way to tell those apart from success: PostgREST's own `return=minimal` reply is also an
+ * empty 201/204.
+ */
 function expectRows<T>(data: unknown, status: number | null): T[] {
   if (!Array.isArray(data)) {
     throw unexpectedResponse(status);
@@ -72,7 +71,8 @@ function requireSession(): void {
  * whitelist; selections upsert on `(user_id, set_id)` ignoring duplicates and delete by
  * `user_id + set_id`. Meetup creates upsert; meetup edits are plain updates (`update … where id`), so an
  * edit queued while the meetup was deleted on the server can never re-create it. Deleting a meetup also
- * removes its totem photo from storage. Nothing is sent without a stored session.
+ * removes its totem photo from storage. Every write returns the affected ids (see `expectRows`), so a
+ * reply that is not PostgREST's keeps the write queued. Nothing is sent without a stored session.
  */
 export function createSupabaseSyncTransport(): SyncTransport {
   return {
@@ -80,14 +80,18 @@ export function createSupabaseSyncTransport(): SyncTransport {
       requireSession();
       const body = stripPayloadForServer(table, payload);
       const client = getSupabase();
+      // A duplicate selection is ignored and returns no row; that is still a PostgREST array.
       const { data, error, status } =
         table === 'user_set_selections'
-          ? await client.from('user_set_selections').upsert(body as never, { onConflict: 'user_id,set_id', ignoreDuplicates: true })
-          : await client.from('meetups').upsert(body as never);
+          ? await client
+              .from('user_set_selections')
+              .upsert(body as never, { onConflict: 'user_id,set_id', ignoreDuplicates: true })
+              .select('id')
+          : await client.from('meetups').upsert(body as never).select('id');
       if (error) {
         throw toTransportError(error, status);
       }
-      expectNoBody(data, status);
+      expectRows(data, status);
     },
 
     async update(table: MutableTable, payload: Record<string, unknown>) {
@@ -122,11 +126,12 @@ export function createSupabaseSyncTransport(): SyncTransport {
           .from('user_set_selections')
           .delete()
           .eq('user_id', payload.user_id)
-          .eq('set_id', payload.set_id);
+          .eq('set_id', payload.set_id)
+          .select('id');
         if (error) {
           throw toTransportError(error, status);
         }
-        expectNoBody(data, status);
+        expectRows(data, status);
         return;
       }
 
@@ -150,11 +155,11 @@ export function createSupabaseSyncTransport(): SyncTransport {
         return;
       }
 
-      const { data, error, status } = await client.from(table).delete().eq('id', payload.id);
+      const { data, error, status } = await client.from(table).delete().eq('id', payload.id).select('id');
       if (error) {
         throw toTransportError(error, status);
       }
-      expectNoBody(data, status);
+      expectRows(data, status);
     },
   };
 }

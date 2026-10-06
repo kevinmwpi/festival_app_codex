@@ -3,7 +3,8 @@ import { getDb, upsertRows } from '@festival/sync-engine';
 
 import { fetchAndCacheFestival, getLocalFestivalBundle } from '../src/festivals';
 import { getCombinedSelections, listMyGroups, refreshGroupDetail } from '../src/groups';
-import { PAGE_SIZE, selectAllRows } from '../src/paging';
+import { PAGE_SIZE, readOptionalRow, selectAllRows } from '../src/paging';
+import { OFFLINE_ERROR_MESSAGE, toUserMessage } from '../src/user-messages';
 import { getLocalSelections } from '../src/schedule';
 import { PROFILE_ID, setupDataAccessTest, storeProfile, storeSession, teardownDataAccessTest } from './helpers';
 import type { FakeSupabase, QueryCall } from './mocks/supabase-client';
@@ -72,13 +73,17 @@ describe('selectAllRows', () => {
     await expect(selectAllRows(unstable.build, 1)).rejects.toMatchObject({ code: 'result_changed', status: 503 });
   });
 
-  it('without a count, pages until an empty page', async () => {
-    const { build } = pagedQuery([
-      { data: [1, 2], count: null },
-      { data: [3], count: null },
-      { data: [], count: null },
-    ]);
-    expect(await selectAllRows(build, 2)).toEqual([1, 2, 3]);
+  // supabase-js reports an empty 2xx/204 or an empty 404 as success with data and count null; PostgREST
+  // always sends a JSON array and (for count=exact) a Content-Range count.
+  it.each([
+    ['no body and no count', { data: null, count: null }],
+    ['an array without a count', { data: [], count: null }],
+    ['a count without an array', { data: null, count: 0 }],
+    ['an object body', { data: { status: 'login required' }, count: 1 }],
+  ])('throws a retryable connectivity error for a page with %s', async (_label, page) => {
+    const build = () => ({ range: () => Promise.resolve({ ...page, error: null, status: 204 }) });
+    await expect(selectAllRows(build)).rejects.toMatchObject({ name: 'DataAccessError', status: 0 });
+    expect(toUserMessage(await selectAllRows(build).catch((error: unknown) => error))).toBe(OFFLINE_ERROR_MESSAGE);
   });
 
   it('throws a DataAccessError for a failed page', async () => {
@@ -86,6 +91,27 @@ describe('selectAllRows', () => {
       range: () => Promise.resolve({ data: null, error: { message: 'permission denied', code: '42501' }, status: 403, count: null }),
     });
     await expect(selectAllRows(build)).rejects.toMatchObject({ code: '42501', status: 403 });
+  });
+});
+
+describe('readOptionalRow', () => {
+  it('reads the row, or null for a real "no rows" reply (count 0)', () => {
+    expect(readOptionalRow({ data: { id: 'g1' }, error: null, status: 200, count: 1 })).toEqual({ id: 'g1' });
+    expect(readOptionalRow({ data: null, error: null, status: 200, count: 0 })).toBeNull();
+  });
+
+  it.each([
+    ['no count (an empty 2xx, 204 or empty 404)', { data: null, count: null }],
+    ['a count but no row', { data: null, count: 1 }],
+    ['an array body', { data: [], count: 0 }],
+  ])('throws a retryable connectivity error for %s', (_label, result) => {
+    expect(() => readOptionalRow({ ...result, error: null, status: 204 })).toThrow(expect.objectContaining({ status: 0 }));
+  });
+
+  it('throws a DataAccessError for a failed read', () => {
+    expect(() => readOptionalRow({ data: null, error: { message: 'permission denied', code: '42501' }, status: 403, count: null })).toThrow(
+      expect.objectContaining({ code: '42501', status: 403 }),
+    );
   });
 });
 

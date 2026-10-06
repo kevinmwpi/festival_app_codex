@@ -1,7 +1,7 @@
 import { AppError, ProfileRequiredError, ValidationError } from './errors';
 import { getStoredSession, requireStoredSession } from './session';
 import { PROFILE_CACHE_KEY, getProfileStorage } from './storage';
-import { callRpc } from './supabase';
+import { callRpc, requireRpcRows } from './supabase';
 
 export const AVATAR_TYPES = ['initials', 'emoji', 'color'] as const;
 export type AvatarType = (typeof AVATAR_TYPES)[number];
@@ -128,8 +128,9 @@ export function peekProfileCacheOwner(): string | null {
  */
 export async function getMyProfile(): Promise<CachedProfile | null> {
   const session = requireStoredSession();
-  const rows = await callRpc('get_my_profile');
-  const profile = rows?.[0];
+  // Only a real empty result means "no profile": an empty reply from something else must not clear
+  // the cache (offline launches and every queued write depend on it).
+  const profile = requireRpcRows(await callRpc('get_my_profile'))[0];
   if (!profile) {
     clearProfileCache();
     return null;
@@ -165,7 +166,7 @@ export async function saveMyProfile(input: ProfileInput): Promise<CachedProfile>
     p_avatar_type: valid.avatar_type,
     p_avatar_value: valid.avatar_value,
   });
-  const profile = rows?.[0];
+  const profile = requireRpcRows(rows)[0];
   if (!profile) {
     throw new AppError('profile_not_saved', 'The profile could not be saved.');
   }

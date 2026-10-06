@@ -26,6 +26,7 @@ drop trigger if exists groups_moderate_text on public.groups;
 drop trigger if exists meetups_moderate_text on public.meetups;
 drop trigger if exists meetups_immutable_columns on public.meetups;
 drop trigger if exists meetups_touch_updated_at on public.meetups;
+drop trigger if exists meetups_insert_limits on public.meetups;
 drop trigger if exists group_members_clear_location on public.group_members;
 drop trigger if exists user_set_selections_festival_consistency on public.user_set_selections;
 
@@ -397,7 +398,7 @@ create table if not exists public.reports (
 alter table public.reports drop constraint if exists reports_target_type_check;
 alter table public.reports
   add constraint reports_target_type_check
-  check (target_type in ('user', 'group', 'meetup', 'photo'));
+  check (target_type in ('user', 'group', 'meetup', 'photo', 'block'));
 alter table public.reports drop constraint if exists reports_reason_check;
 alter table public.reports
   add constraint reports_reason_check
@@ -622,6 +623,9 @@ as $$
   )
 $$;
 
+-- Only the meetup's creator, while a member, and at most 5 objects per meetup
+-- folder (a replaced photo stays until the app removes it, and a reported one
+-- until a moderator handles the report), so uploads cannot fill the bucket.
 create or replace function private.can_upload_totem(p_group_id uuid, p_meetup_id uuid)
 returns boolean
 language sql
@@ -637,6 +641,32 @@ as $$
       and mt.created_by_user_id = private.current_app_user_id()
   )
   and private.is_group_member(p_group_id)
+  and (
+    select count(*)
+    from storage.objects o
+    where o.bucket_id = 'totems'
+      and o.name like p_group_id::text || '/' || p_meetup_id::text || '/%'
+  ) < 5
+$$;
+
+-- A totem object that an unresolved photo report points at (its
+-- target_snapshot). Clients cannot delete it, so replacing the photo or
+-- deleting the meetup does not destroy the evidence before a moderator acts
+-- (admin-tools uses the service role; account deletion still removes it).
+create or replace function private.is_reported_totem(p_name text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.reports r
+    where r.target_type = 'photo'
+      and r.status in ('open', 'reviewed')
+      and r.target_snapshot = p_name
+  )
 $$;
 
 create or replace function private.try_uuid(p text)
@@ -1053,6 +1083,37 @@ begin
 end
 $$;
 
+-- Client-created meetups only (definer RPCs, the service role and pg_cron run
+-- without a profile in the JWT): at most 30 new meetups an hour per user and
+-- 100 per user per crew, so one member cannot flood a crew. A sync replay of a
+-- meetup that already exists (upsert on id) is not a new meetup.
+create or replace function private.meetups_insert_limits()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_me uuid := private.current_app_user_id();
+begin
+  if v_me is null or exists (select 1 from public.meetups mt where mt.id = new.id) then
+    return new;
+  end if;
+
+  if (
+    select count(*) from public.meetups mt
+    where mt.group_id = new.group_id and mt.created_by_user_id = v_me
+  ) >= 100 then
+    raise exception using errcode = 'P0001', message = 'rate_limited';
+  end if;
+
+  if not private.check_rate_limit('user:' || v_me::text, 'meetup_create', 30, interval '1 hour') then
+    raise exception using errcode = 'P0001', message = 'rate_limited';
+  end if;
+  return new;
+end
+$$;
+
 create or replace function private.group_members_clear_location()
 returns trigger
 language plpgsql
@@ -1214,9 +1275,13 @@ as $$
 declare
   v_me uuid := private.require_profile();
   v_key text := 'user:' || v_me::text;
+  -- Every failure is also counted project-wide, so guessing spread over many
+  -- accounts is bounded too (each account alone gets 10 an hour).
+  v_global_key constant text := 'join_group:global';
   v_code text;
   v_group public.groups%rowtype;
   v_failures integer;
+  v_global_failures integer;
   v_members integer;
 begin
   -- Same lock key as private.check_rate_limit(v_key, 'join_fail', ...).
@@ -1231,6 +1296,25 @@ begin
     raise exception using errcode = 'P0001', message = 'rate_limited';
   end if;
 
+  -- Under project-wide guessing pressure (200+ wrong codes in the last hour,
+  -- far above honest typos), profiles younger than 7 days get no attempts and
+  -- older ones at most 3 failures an hour. Not locked: an approximate count is
+  -- enough and joins must not serialize on one key.
+  select count(*) into v_global_failures
+  from public.rate_limit_events e
+  where e.key = v_global_key
+    and e.action = 'join_fail'
+    and e.created_at > now() - interval '1 hour';
+  if v_global_failures >= 200 and (
+    v_failures >= 3
+    or exists (
+      select 1 from public.users u
+      where u.id = v_me and u.created_at > now() - interval '7 days'
+    )
+  ) then
+    raise exception using errcode = 'P0001', message = 'rate_limited';
+  end if;
+
   v_code := upper(regexp_replace(coalesce(p_invite_code, ''), '[^A-Za-z0-9]', '', 'g'));
 
   select g.* into v_group
@@ -1240,7 +1324,8 @@ begin
 
   if not found then
     -- Persisted failure: return zero rows instead of raising.
-    insert into public.rate_limit_events (key, action) values (v_key, 'join_fail');
+    insert into public.rate_limit_events (key, action)
+    values (v_key, 'join_fail'), (v_global_key, 'join_fail');
     return;
   end if;
 
@@ -1339,9 +1424,15 @@ begin
     and m.user_id = p_user_id;
 
   -- Every member can read the invite code and earlier invites may have been
-  -- shared, so the removed person could rejoin with it: replace it.
+  -- shared, so the removed person could rejoin with it: replace it. Their
+  -- meetups in this crew go with them, so an admin can clear a flood in one
+  -- step (photos become orphans for storage:sweep-orphans; reports keep their
+  -- target_snapshot).
   if found then
     perform private.replace_invite_code(p_group_id);
+    delete from public.meetups mt
+    where mt.group_id = p_group_id
+      and mt.created_by_user_id = p_user_id;
   end if;
 end
 $$;
@@ -1482,6 +1573,7 @@ set search_path = ''
 as $$
 declare
   v_me uuid := private.require_profile();
+  v_group_id uuid;
 begin
   if p_user_id is null or p_user_id = v_me
      or not exists (select 1 from public.users u where u.id = p_user_id) then
@@ -1497,6 +1589,25 @@ begin
   insert into public.user_blocks (blocker_id, blocked_id)
   values (v_me, p_user_id)
   on conflict (blocker_id, blocked_id) do nothing;
+
+  -- A new block also notifies the developer (App Review Guideline 1.2): it
+  -- files an open 'block' report, which reports:list and the report email
+  -- trigger pick up. One per blocker and blocked user (later re-blocks are
+  -- covered by the first); not counted against the reporter's report budget.
+  if found then
+    select mine.group_id into v_group_id
+    from public.group_members mine
+    join public.group_members theirs on theirs.group_id = mine.group_id
+    where mine.user_id = v_me and theirs.user_id = p_user_id
+    order by mine.joined_at, mine.group_id
+    limit 1;
+
+    insert into public.reports (reporter_id, target_type, target_id, group_id, reason, target_snapshot)
+    select v_me, 'block', p_user_id, v_group_id, 'other', u.display_name::text
+    from public.users u
+    where u.id = p_user_id
+    on conflict (reporter_id, target_type, target_id) do nothing;
+  end if;
 end
 $$;
 
@@ -2070,6 +2181,10 @@ create trigger meetups_touch_updated_at
   before update on public.meetups
   for each row execute function private.meetups_touch_updated_at();
 
+create trigger meetups_insert_limits
+  before insert on public.meetups
+  for each row execute function private.meetups_insert_limits();
+
 create trigger group_members_clear_location
   after delete on public.group_members
   for each row execute function private.group_members_clear_location();
@@ -2099,6 +2214,7 @@ grant execute on function
   private.is_blocked_with(uuid),
   private.can_upload_totem(uuid, uuid),
   private.can_view_totem(uuid, uuid, text),
+  private.is_reported_totem(text),
   private.try_uuid(text),
   private.contains_disallowed_text(text)
 to anon, authenticated;

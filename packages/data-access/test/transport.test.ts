@@ -116,12 +116,14 @@ describe('createSupabaseSyncTransport: responses that are not from PostgREST', (
   const html = (status: number) => new Response('<html><body>Blocked</body></html>', { status, headers: { 'content-type': 'text/html' } });
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const empty = (status: number) => new Response(null, { status });
+  /** PostgREST's reply to a write that selects `id` (`return=representation`). */
+  const rows = (status = 201) => json([{ id: 'm1' }], status);
 
   beforeEach(() => {
     setupDataAccessTest();
     setSupabaseClientForTests(null);
     requests = [];
-    respond = () => empty(201);
+    respond = () => rows();
     setSupabaseConfigForTests({
       url: PROJECT_URL,
       anonKey: 'anon',
@@ -173,14 +175,73 @@ describe('createSupabaseSyncTransport: responses that are not from PostgREST', (
     respond = () => json({ message: 'Invalid authentication credentials' }, 401);
     await expect(transport.upsert('meetups', { id: 'm1' })).rejects.toMatchObject({ code: null, status: 401 });
 
-    respond = () => empty(201);
+    respond = () => rows();
     await expect(transport.upsert('meetups', { id: 'm1' })).resolves.toBeUndefined();
+    respond = () => json([], 201); // a duplicate selection, ignored by ON CONFLICT DO NOTHING
+    await expect(transport.upsert('user_set_selections', { id: 's1', user_id: 'u1', set_id: 'set1' })).resolves.toBeUndefined();
     respond = () => json([]);
     await expect(transport.update('meetups', { id: 'm1', title: 'Gate' })).resolves.toEqual({ found: false });
     respond = () => json([{ id: 'm1' }]);
     await expect(transport.update('meetups', { id: 'm1', title: 'Gate' })).resolves.toEqual({ found: true });
-    respond = () => empty(204);
+    respond = () => json([]);
     await expect(transport.delete('user_set_selections', { id: 's1', user_id: 'u1', set_id: 'set1' })).resolves.toBeUndefined();
+  });
+
+  it('asks PostgREST for the affected ids on every write', async () => {
+    const transport = createSupabaseSyncTransport();
+    respond = () => rows();
+    await transport.upsert('meetups', { id: 'm1', group_id: GROUP, title: 'Tree' });
+    await transport.upsert('user_set_selections', { id: 's1', user_id: 'u1', festival_id: 'f1', set_id: 'set1' });
+    respond = () => json([]);
+    await transport.delete('user_set_selections', { id: 's1', user_id: 'u1', set_id: 'set1' });
+    await transport.delete('meetups', { id: 'm1' });
+    expect(requests.map(({ url }) => new URL(url).searchParams.get('select'))).toEqual(['id', 'id', 'id', 'id,totem_path']);
+  });
+
+  // supabase-js reports an empty 2xx, a 204 and an empty 404 as success with `data: null`. PostgREST's own
+  // return=minimal reply looks the same, which is why every write selects its ids.
+  it.each([
+    ['an empty 200', () => new Response('', { status: 200 })],
+    ['an empty 201', () => empty(201)],
+    ['a 204', () => empty(204)],
+    ['an empty 404', () => empty(404)],
+  ])('reports %s on any write as a connectivity failure', async (_label, response) => {
+    respond = response;
+    const transport = createSupabaseSyncTransport();
+    await expectRetriedAsConnectivity(transport.upsert('meetups', { id: 'm1', group_id: GROUP, title: 'Tree' }));
+    await expectRetriedAsConnectivity(transport.upsert('user_set_selections', { id: 's1', user_id: 'u1', festival_id: 'f1', set_id: 'set1' }));
+    await expectRetriedAsConnectivity(transport.update('meetups', { id: 'm1', title: 'Gate' }));
+    await expectRetriedAsConnectivity(transport.delete('meetups', { id: 'm1' }));
+    await expectRetriedAsConnectivity(transport.delete('user_set_selections', { id: 's1', user_id: 'u1', set_id: 'set1' }));
+  });
+
+  it.each([
+    ['an empty 200', () => new Response('', { status: 200 })],
+    ['a 204', () => empty(204)],
+    ['an empty 404', () => empty(404)],
+  ])('a queued pick and its removal stay queued after %s', async (_label, response) => {
+    await setMeta(LOCAL_OWNER_META_KEY, AUTH_USER_ID);
+    configureDataSync();
+    setRetrySchedulerForTests(() => 0);
+    const db = await getDb();
+    respond = response;
+    setOnlineStatusForTests(true);
+
+    expect(await toggleSetSelection('f1', 'set1')).toBe(true);
+    await flush();
+    expect(await db.getFirstAsync('SELECT pending_sync FROM user_set_selections WHERE set_id = ?;', ['set1'])).toEqual({ pending_sync: 1 });
+    expect(await getPendingCount()).toBe(1);
+
+    respond = () => json([{ id: 'x' }], 201);
+    await db.runAsync('UPDATE sync_queue SET next_retry_at = NULL;');
+    await flush();
+    expect(await getPendingCount()).toBe(0);
+
+    respond = response;
+    expect(await toggleSetSelection('f1', 'set1')).toBe(false);
+    await flush();
+    expect(await getPendingCount()).toBe(1);
+    expect(await getFailedOperations()).toEqual([]);
   });
 
   it.each([
@@ -200,7 +261,7 @@ describe('createSupabaseSyncTransport: responses that are not from PostgREST', (
     expect(await getPendingCount()).toBe(1);
     expect(await getFailedOperations()).toEqual([]);
 
-    respond = () => empty(201);
+    respond = () => rows();
     await db.runAsync('UPDATE sync_queue SET next_retry_at = NULL;');
     await flush();
     expect(await getPendingCount()).toBe(0);
@@ -215,7 +276,7 @@ describe('configureDataSync: local owner gate', () => {
 
   it("never sends account A's kept queue with account B's stored session", async () => {
     const fake = setupDataAccessTest();
-    fake.setQueryHandler(() => ({ data: null, status: 201 }));
+    fake.setQueryHandler(() => ({ data: [], status: 201 }));
     storeSession();
     storeProfile();
     await setMeta(LOCAL_OWNER_META_KEY, AUTH_USER_ID);

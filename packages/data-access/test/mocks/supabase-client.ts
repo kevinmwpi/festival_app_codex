@@ -2,7 +2,8 @@
  * Minimal fake of the supabase-js client surface data-access uses. Every query records a
  * `QueryCall` and resolves to whatever the test's handler returns (no `data` for a write without
  * `.select()`, as with PostgREST's `return=minimal`). Like PostgREST, a `range(from, to)`
- * slices an array result, `select(…, { count: 'exact' })` reports the full row count, and
+ * slices an array result, `select(…, { count: 'exact' })` reports the full row count (0 or 1 for a
+ * `maybeSingle()` read whose handler returns an object or null), and
  * `maxRows` (see `createFakeSupabase`) silently caps every array response.
  */
 export type QueryOp = 'select' | 'insert' | 'upsert' | 'update' | 'delete';
@@ -114,7 +115,10 @@ function createBuilder(table: string, handler: QueryHandler, calls: QueryCall[],
           const minimalWrite = call.op !== 'select' && call.returning === null;
           let data = minimalWrite ? null : (response.data ?? null);
           let count: number | null = null;
-          if (Array.isArray(data) && !response.error) {
+          if (call.single === 'maybeSingle' && call.op === 'select' && !response.error && !Array.isArray(data)) {
+            // supabase-js reads a maybeSingle() as an array and keeps PostgREST's Content-Range count.
+            count = call.count ? (response.count ?? (data === null ? 0 : 1)) : null;
+          } else if (Array.isArray(data) && !response.error) {
             count = call.count ? (response.count ?? data.length) : null;
             const from = call.range ? call.range[0] : 0;
             const to = call.range ? call.range[1] : Number.POSITIVE_INFINITY;

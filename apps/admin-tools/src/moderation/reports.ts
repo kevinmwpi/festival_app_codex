@@ -5,7 +5,8 @@ import { isUuid } from '../lib/uuid';
 
 export const REPORT_STATUSES = ['open', 'reviewed', 'actioned', 'dismissed'] as const;
 export type ReportStatus = (typeof REPORT_STATUSES)[number];
-export type TargetType = 'user' | 'group' | 'meetup' | 'photo';
+/** `block` rows are filed by block_user (a user blocked someone); the others by report_content. */
+export type TargetType = 'user' | 'group' | 'meetup' | 'photo' | 'block';
 
 export interface ReportRow {
   id: string;
@@ -100,10 +101,13 @@ async function removeStorageObject(client: SupabaseClient, path: string): Promis
 /**
  * Plans the removal of reported content:
  *   meetup -> delete the meetup and its totem photo
- *   photo  -> delete the photo and clear meetups.totem_path
+ *   photo  -> delete the REPORTED photo (the report's target_snapshot path, kept by the database while
+ *             the report is open) and clear meetups.totem_path only if it still points at it; a newer,
+ *             unreviewed photo on the meetup is left in place and flagged
  *   group  -> reset the group name to "My crew"
  *   user   -> reset display name/avatar (use users:ban to remove the person)
- * then mark every open/reviewed report on the same target as actioned.
+ *   block  -> nothing to remove (a block notice); review the user and run users:ban if needed
+ * then mark every open/reviewed report on the same target (for photos: the same photo) as actioned.
  * Storage is removed before rows so a failed run can simply be retried.
  */
 export async function planContentRemoval(client: SupabaseClient, reportId: string): Promise<RemovalAction[]> {
@@ -119,7 +123,9 @@ export async function planContentRemoval(client: SupabaseClient, reportId: strin
   }
 
   const actions: RemovalAction[] = [];
-  if (report.target_type === 'meetup' || report.target_type === 'photo') {
+  if (report.target_type === 'photo') {
+    actions.push(...(await planPhotoRemoval(client, report)));
+  } else if (report.target_type === 'meetup') {
     const meetup = check(
       await client.from('meetups').select('id, title, totem_path').eq('id', report.target_id).maybeSingle(),
       'Reading the meetup',
@@ -131,21 +137,12 @@ export async function planContentRemoval(client: SupabaseClient, reportId: strin
         const path = meetup.totem_path;
         actions.push({ description: `remove storage object totems/${path}`, run: () => removeStorageObject(client, path) });
       }
-      if (report.target_type === 'meetup') {
-        actions.push({
-          description: `delete meetup ${meetup.id} ("${meetup.title}")`,
-          run: async () => {
-            check(await client.from('meetups').delete().eq('id', meetup.id), 'Deleting the meetup');
-          },
-        });
-      } else if (meetup.totem_path) {
-        actions.push({
-          description: `clear totem_path on meetup ${meetup.id}`,
-          run: async () => {
-            check(await client.from('meetups').update({ totem_path: null }).eq('id', meetup.id), 'Clearing the photo');
-          },
-        });
-      }
+      actions.push({
+        description: `delete meetup ${meetup.id} ("${meetup.title}")`,
+        run: async () => {
+          check(await client.from('meetups').delete().eq('id', meetup.id), 'Deleting the meetup');
+        },
+      });
     }
   } else if (report.target_type === 'group') {
     actions.push({
@@ -156,6 +153,11 @@ export async function planContentRemoval(client: SupabaseClient, reportId: strin
           'Renaming the group',
         );
       },
+    });
+  } else if (report.target_type === 'block') {
+    actions.push({
+      description: `block notice: no content to remove for user ${report.target_id} (run users:ban to remove the person)`,
+      run: async () => {},
     });
   } else {
     actions.push({
@@ -172,19 +174,65 @@ export async function planContentRemoval(client: SupabaseClient, reportId: strin
     });
   }
 
+  const samePhoto = report.target_type === 'photo' && report.target_snapshot ? report.target_snapshot : null;
   actions.push({
-    description: `mark open/reviewed reports on ${report.target_type} ${report.target_id} as actioned`,
+    description: `mark open/reviewed reports on ${report.target_type} ${report.target_id}${samePhoto ? ' (this photo)' : ''} as actioned`,
     run: async () => {
-      check(
-        await client
-          .from('reports')
-          .update({ status: 'actioned' })
-          .eq('target_type', report.target_type)
-          .eq('target_id', report.target_id)
-          .in('status', ['open', 'reviewed']),
-        'Updating report status',
-      );
+      let query = client
+        .from('reports')
+        .update({ status: 'actioned' })
+        .eq('target_type', report.target_type)
+        .eq('target_id', report.target_id);
+      if (samePhoto) {
+        query = query.eq('target_snapshot', samePhoto);
+      }
+      check(await query.in('status', ['open', 'reviewed']), 'Updating report status');
     },
   });
+  return actions;
+}
+
+/**
+ * A photo report's target_snapshot is the reported object's path. The meetup may since show a different
+ * photo (the reporter's target replaced it) or be gone; act on the reported object either way and never
+ * touch a photo nobody reported.
+ */
+async function planPhotoRemoval(client: SupabaseClient, report: ReportRow): Promise<RemovalAction[]> {
+  const reportedPath = report.target_snapshot;
+  if (!reportedPath) {
+    throw new Error(`Photo report ${report.id} has no target_snapshot (photo path); review meetup ${report.target_id} by hand`);
+  }
+  const meetup = check(
+    await client.from('meetups').select('id, title, totem_path').eq('id', report.target_id).maybeSingle(),
+    'Reading the meetup',
+  ) as { id: string; title: string; totem_path: string | null } | null;
+
+  const actions: RemovalAction[] = [
+    {
+      description: `remove storage object totems/${reportedPath} (the reported photo)`,
+      run: () => removeStorageObject(client, reportedPath),
+    },
+  ];
+  if (!meetup) {
+    actions.push({ description: `meetup ${report.target_id} no longer exists (no row to update)`, run: async () => {} });
+  } else if (meetup.totem_path === reportedPath) {
+    actions.push({
+      description: `clear totem_path on meetup ${meetup.id}`,
+      run: async () => {
+        // Only while it still points at the reported photo (the creator may replace it meanwhile).
+        check(
+          await client.from('meetups').update({ totem_path: null }).eq('id', meetup.id).eq('totem_path', reportedPath),
+          'Clearing the photo',
+        );
+      },
+    });
+  } else {
+    actions.push({
+      description: meetup.totem_path
+        ? `WARNING: meetup ${meetup.id} now shows a different photo (totems/${meetup.totem_path}) that was not reported; left in place, review it separately`
+        : `meetup ${meetup.id} no longer shows a photo (no row to update)`,
+      run: async () => {},
+    });
+  }
   return actions;
 }

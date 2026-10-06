@@ -6,6 +6,7 @@ import {
   MEMBER_COLUMNS,
   SELECTION_COLUMNS,
   USER_PUBLIC_COLUMNS,
+  createChangeTracker,
   mergeOwnSelections,
   placeholders,
   pruneOrphanedMembers,
@@ -17,11 +18,11 @@ import {
 } from './cache';
 import { InviteNotFoundError, NotFoundError, ValidationError, toDataAccessError } from './errors';
 import { createId } from './ids';
-import { selectAllRows, selectAllRowsIn } from './paging';
+import { readOptionalRow, selectAllRows, selectAllRowsIn } from './paging';
 import type { Group, GroupMember, GroupMemberRow, LocalMeetup, PublicUser, UserSetSelectionRow } from './models';
 import { getCachedProfile, requireCachedProfile, textLength } from './profile';
 import { requireStoredSession } from './session';
-import { callRpc, getSupabase, unwrapResult } from './supabase';
+import { callRpc, getSupabase, requireRpcRows, unwrapResult } from './supabase';
 
 export const GROUP_NAME_MAX_LENGTH = 60;
 export const MEETUP_TITLE_MAX_LENGTH = 80;
@@ -216,18 +217,17 @@ export async function getCombinedSelections(groupId: string, festivalId: string)
 // ---- Refresh (online) --------------------------------------------------------------------------
 
 /**
- * One set per in-flight `listMyGroups`: ids of groups written locally (created, joined or refreshed)
- * since that refresh started. Its membership snapshot may predate those writes, so it must not purge
- * them as stale; the next refresh settles them.
+ * Groups written locally (created, joined or refreshed) while a `listMyGroups` is in flight. Its
+ * membership snapshot may predate those writes, so it must not purge them as stale.
  */
-const groupWriteTrackers = new Set<Set<string>>();
+const groupWrites = createChangeTracker();
 
-/** Call before writing a group locally, so an overlapping `listMyGroups` keeps it. */
-function noteGroupWritten(groupId: string): void {
-  for (const written of groupWriteTrackers) {
-    written.add(groupId);
-  }
-}
+/**
+ * Groups changed by a direct online write (left, member removed, renamed, invite code rotated) while a
+ * `listMyGroups` or `refreshGroupDetail` is in flight. Their local state is newer than the refresh's
+ * snapshot, so the refresh must not write them back.
+ */
+const groupChanges = createChangeTracker();
 
 async function fetchPublicUsers(userIds: string[]): Promise<PublicUser[]> {
   const client = getSupabase();
@@ -239,161 +239,175 @@ async function fetchPublicUsers(userIds: string[]): Promise<PublicUser[]> {
 /**
  * Refreshes the signed-in user's groups and replaces the local copy: memberships the server no longer
  * returns are deleted locally, together with groups nobody references any more. A group created, joined
- * or refreshed locally while this refresh was in flight is kept (its snapshot may predate it).
+ * or refreshed locally while this refresh was in flight is kept (its snapshot may predate it), and a
+ * group left, renamed or changed by an admin action meanwhile keeps its local state.
  */
 export async function listMyGroups(): Promise<GroupSummary[]> {
   const profile = requireCachedProfile();
   requireStoredSession();
   const client = getSupabase();
-  const writtenDuringRefresh = new Set<string>();
-  groupWriteTrackers.add(writtenDuringRefresh);
 
-  try {
-    await withRefreshGuard(async (guard) => {
-      // Every read is paged: PostgREST caps each response at `max_rows` without an error, and rows
-      // missing from these results are deleted locally.
-      const membershipRows = await selectAllRows<GroupMemberRow & { groups: Group | null }>((options) =>
-        client
-          .from('group_members')
-          .select(`${MEMBER_COLUMNS}, groups(${GROUP_COLUMNS})`, options)
-          .eq('user_id', profile.id)
-          .order('id', { ascending: true }),
-      );
-
-      const memberships = membershipRows.filter((row) => row.groups);
-      const groups = memberships.map((row) => row.groups as Group);
-      const groupIds = groups.map((group) => group.id);
-
-      const members = await selectAllRowsIn<GroupMemberRow>(groupIds, (ids, options) =>
-        client.from('group_members').select(MEMBER_COLUMNS, options).in('group_id', ids).order('id', { ascending: true }),
-      );
-      const users = await fetchPublicUsers([...new Set(members.map((member) => member.user_id))]);
-
-      await withDbTransaction(async (tx) => {
-        if (guard.stale) {
-          return;
-        }
-        await upsertRows('groups', groups as unknown as Rows, tx);
-
-        const staleGroups = await tx.getAllAsync<{ id: string }>(
-          groupIds.length
-            ? `SELECT id FROM groups WHERE id NOT IN (${placeholders(groupIds.length)});`
-            : 'SELECT id FROM groups;',
-          groupIds,
+  await groupWrites.track((writtenDuringRefresh) =>
+    groupChanges.track((changedDuringRefresh) =>
+      withRefreshGuard(async (guard) => {
+        // Every read is paged: PostgREST caps each response at `max_rows` without an error, and rows
+        // missing from these results are deleted locally.
+        const membershipRows = await selectAllRows<GroupMemberRow & { groups: Group | null }>((options) =>
+          client
+            .from('group_members')
+            .select(`${MEMBER_COLUMNS}, groups(${GROUP_COLUMNS})`, options)
+            .eq('user_id', profile.id)
+            .order('id', { ascending: true }),
         );
-        for (const { id } of staleGroups) {
-          if (!writtenDuringRefresh.has(id)) {
-            await purgeGroupRows(tx, id);
+
+        const memberships = membershipRows.filter((row) => row.groups);
+        const groups = memberships.map((row) => row.groups as Group);
+        const groupIds = groups.map((group) => group.id);
+
+        const members = await selectAllRowsIn<GroupMemberRow>(groupIds, (ids, options) =>
+          client.from('group_members').select(MEMBER_COLUMNS, options).in('group_id', ids).order('id', { ascending: true }),
+        );
+        const users = await fetchPublicUsers([...new Set(members.map((member) => member.user_id))]);
+
+        await withDbTransaction(async (tx) => {
+          if (guard.stale) {
+            return;
           }
-        }
+          // Groups changed locally since the fetch started keep their (newer) local state: a left crew
+          // stays gone, a removed member stays removed. Their ids still count as current below.
+          const isCurrent = (groupId: string) => !changedDuringRefresh.has(groupId);
+          await upsertRows('groups', groups.filter((group) => isCurrent(group.id)) as unknown as Rows, tx);
 
-        for (const groupId of groupIds) {
-          const groupMembers = members.filter((member) => member.group_id === groupId);
-          const memberIds = groupMembers.map((member) => member.id);
-          await tx.runAsync(
-            memberIds.length
-              ? `DELETE FROM group_members WHERE group_id = ? AND id NOT IN (${placeholders(memberIds.length)});`
-              : 'DELETE FROM group_members WHERE group_id = ?;',
-            [groupId, ...memberIds],
+          const staleGroups = await tx.getAllAsync<{ id: string }>(
+            groupIds.length
+              ? `SELECT id FROM groups WHERE id NOT IN (${placeholders(groupIds.length)});`
+              : 'SELECT id FROM groups;',
+            groupIds,
           );
-        }
+          for (const { id } of staleGroups) {
+            if (!writtenDuringRefresh.has(id)) {
+              await purgeGroupRows(tx, id);
+            }
+          }
 
-        const ownRows = memberships.map(({ groups: _group, ...membership }) => membership);
-        await upsertRows('group_members', [...members, ...ownRows] as unknown as Rows, tx);
-        await upsertRows('users', users as unknown as Rows, tx);
-        await pruneOrphanedMembers(tx);
-      });
-    });
-  } finally {
-    groupWriteTrackers.delete(writtenDuringRefresh);
-  }
+          for (const groupId of groupIds.filter(isCurrent)) {
+            const groupMembers = members.filter((member) => member.group_id === groupId);
+            const memberIds = groupMembers.map((member) => member.id);
+            await tx.runAsync(
+              memberIds.length
+                ? `DELETE FROM group_members WHERE group_id = ? AND id NOT IN (${placeholders(memberIds.length)});`
+                : 'DELETE FROM group_members WHERE group_id = ?;',
+              [groupId, ...memberIds],
+            );
+          }
+
+          const ownRows = memberships.map(({ groups: _group, ...membership }) => membership);
+          await upsertRows(
+            'group_members',
+            [...members, ...ownRows].filter((member) => isCurrent(member.group_id)) as unknown as Rows,
+            tx,
+          );
+          await upsertRows('users', users as unknown as Rows, tx);
+          await pruneOrphanedMembers(tx);
+        });
+      }),
+    ),
+  );
 
   return getLocalGroups();
 }
 
 /**
  * Refreshes one group (group, members, profiles, meetups, members' selections for its festival).
- * Resolves `null` — after purging it locally — when the user is no longer a member.
+ * Resolves `null` — after purging it locally — when the user is no longer a member. If the group is
+ * left, renamed or changed by an admin action while the fetch is in flight, the fetched snapshot is
+ * older than the local state and nothing is written.
  */
 export async function refreshGroupDetail(groupId: string): Promise<GroupDetail | null> {
   const profile = requireCachedProfile();
   requireStoredSession();
 
   return withGroupGuard(groupId, () =>
-    withRefreshGuard(async (guard) => {
-      const client = getSupabase();
-      const group = unwrapResult(await client.from('groups').select(GROUP_COLUMNS).eq('id', groupId).maybeSingle()) as Group | null;
-      if (!group) {
-        await purgeGroupLocally(groupId);
-        return null;
-      }
-
-      // Every read is paged: PostgREST caps each response at `max_rows` without an error, and the merge
-      // below deletes local rows missing from these results (50 members' selections easily exceed it).
-      const members = await selectAllRows<GroupMemberRow>((options) =>
-        client.from('group_members').select(MEMBER_COLUMNS, options).eq('group_id', groupId).order('id', { ascending: true }),
-      );
-      const userIds = [...new Set(members.map((member) => member.user_id))];
-      const users = await fetchPublicUsers(userIds);
-      const meetups = await selectAllRows<LocalMeetup>((options) =>
-        client.from('meetups').select(MEETUP_COLUMNS, options).eq('group_id', groupId).order('id', { ascending: true }),
-      );
-      const selections = await selectAllRowsIn<UserSetSelectionRow>(userIds, (ids, options) =>
-        client
-          .from('user_set_selections')
-          .select(SELECTION_COLUMNS, options)
-          .eq('festival_id', group.festival_id)
-          .in('user_id', ids)
-          .order('id', { ascending: true }),
-      );
-
-      await withDbTransaction(async (tx) => {
-        if (guard.stale) {
-          return;
-        }
-        // Meetups with queue activity that may postdate the fetch keep their local state.
-        const protectedMeetupIds = await guard.protectedMeetupIds(tx);
-        noteGroupWritten(groupId);
-        await upsertRows('groups', [group as unknown as Record<string, unknown>], tx);
-
-        const memberIds = members.map((member) => member.id);
-        await tx.runAsync(
-          memberIds.length
-            ? `DELETE FROM group_members WHERE group_id = ? AND id NOT IN (${placeholders(memberIds.length)});`
-            : 'DELETE FROM group_members WHERE group_id = ?;',
-          [groupId, ...memberIds],
+    groupChanges.track((changedDuringRefresh) =>
+      withRefreshGuard(async (guard) => {
+        const client = getSupabase();
+        // The count tells PostgREST's "no such group" (count 0) apart from an empty reply from something
+        // else, which must not purge the crew.
+        const group = readOptionalRow<Group>(
+          await client.from('groups').select(GROUP_COLUMNS, { count: 'exact' }).eq('id', groupId).maybeSingle(),
         );
-        await upsertRows('group_members', members as unknown as Rows, tx);
-        await upsertRows('users', users as unknown as Rows, tx);
-
-        const remoteMeetupIds = new Set(meetups.map((meetup) => meetup.id));
-        const localMeetups = await tx.getAllAsync<{ id: string }>('SELECT id FROM meetups WHERE group_id = ?;', [groupId]);
-        for (const { id } of localMeetups) {
-          if (!remoteMeetupIds.has(id) && !protectedMeetupIds.has(id)) {
-            await tx.runAsync('DELETE FROM meetups WHERE id = ?;', [id]);
-          }
+        if (!group) {
+          await purgeGroupLocally(groupId);
+          return null;
         }
-        const syncedAt = new Date().toISOString();
-        await upsertRows(
-          'meetups',
-          meetups.filter((meetup) => !protectedMeetupIds.has(meetup.id)).map((meetup) => ({ ...meetup, pending_sync: 0, synced_at: syncedAt })),
-          tx,
+
+        // Every read is paged: PostgREST caps each response at `max_rows` without an error, and the merge
+        // below deletes local rows missing from these results (50 members' selections easily exceed it).
+        const members = await selectAllRows<GroupMemberRow>((options) =>
+          client.from('group_members').select(MEMBER_COLUMNS, options).eq('group_id', groupId).order('id', { ascending: true }),
+        );
+        const userIds = [...new Set(members.map((member) => member.user_id))];
+        const users = await fetchPublicUsers(userIds);
+        const meetups = await selectAllRows<LocalMeetup>((options) =>
+          client.from('meetups').select(MEETUP_COLUMNS, options).eq('group_id', groupId).order('id', { ascending: true }),
+        );
+        const selections = await selectAllRowsIn<UserSetSelectionRow>(userIds, (ids, options) =>
+          client
+            .from('user_set_selections')
+            .select(SELECTION_COLUMNS, options)
+            .eq('festival_id', group.festival_id)
+            .in('user_id', ids)
+            .order('id', { ascending: true }),
         );
 
-        for (const userId of userIds) {
-          const rows = selections.filter((selection) => selection.user_id === userId);
-          if (userId === profile.id) {
-            await mergeOwnSelections(tx, userId, group.festival_id, rows, await guard.protectedSelectionSetIds(tx, userId));
-          } else {
-            await replaceMemberSelections(tx, userId, group.festival_id, rows);
+        await withDbTransaction(async (tx) => {
+          if (guard.stale || changedDuringRefresh.has(groupId)) {
+            return;
           }
-        }
+          // Meetups with queue activity that may postdate the fetch keep their local state.
+          const protectedMeetupIds = await guard.protectedMeetupIds(tx);
+          groupWrites.note(groupId);
+          await upsertRows('groups', [group as unknown as Record<string, unknown>], tx);
 
-        await pruneOrphanedMembers(tx);
-      });
+          const memberIds = members.map((member) => member.id);
+          await tx.runAsync(
+            memberIds.length
+              ? `DELETE FROM group_members WHERE group_id = ? AND id NOT IN (${placeholders(memberIds.length)});`
+              : 'DELETE FROM group_members WHERE group_id = ?;',
+            [groupId, ...memberIds],
+          );
+          await upsertRows('group_members', members as unknown as Rows, tx);
+          await upsertRows('users', users as unknown as Rows, tx);
 
-      return getLocalGroupDetail(groupId);
-    }),
+          const remoteMeetupIds = new Set(meetups.map((meetup) => meetup.id));
+          const localMeetups = await tx.getAllAsync<{ id: string }>('SELECT id FROM meetups WHERE group_id = ?;', [groupId]);
+          for (const { id } of localMeetups) {
+            if (!remoteMeetupIds.has(id) && !protectedMeetupIds.has(id)) {
+              await tx.runAsync('DELETE FROM meetups WHERE id = ?;', [id]);
+            }
+          }
+          const syncedAt = new Date().toISOString();
+          await upsertRows(
+            'meetups',
+            meetups.filter((meetup) => !protectedMeetupIds.has(meetup.id)).map((meetup) => ({ ...meetup, pending_sync: 0, synced_at: syncedAt })),
+            tx,
+          );
+
+          for (const userId of userIds) {
+            const rows = selections.filter((selection) => selection.user_id === userId);
+            if (userId === profile.id) {
+              await mergeOwnSelections(tx, userId, group.festival_id, rows, await guard.protectedSelectionSetIds(tx, userId));
+            } else {
+              await replaceMemberSelections(tx, userId, group.festival_id, rows);
+            }
+          }
+
+          await pruneOrphanedMembers(tx);
+        });
+
+        return getLocalGroupDetail(groupId);
+      }),
+    ),
   );
 }
 
@@ -403,14 +417,13 @@ export async function refreshGroupDetail(groupId: string): Promise<GroupDetail |
 export async function createGroup(input: { name: string; festival_id: string }): Promise<CreatedGroup> {
   const name = validateGroupName(input.name);
   const profile = requireCachedProfile();
-  const rows = await callRpc('create_group', { p_name: name, p_festival_id: input.festival_id });
-  const created = rows?.[0];
+  const created = requireRpcRows(await callRpc('create_group', { p_name: name, p_festival_id: input.festival_id }))[0];
   if (!created) {
     throw toDataAccessError({ code: 'P0001', message: 'festival_not_found' }, 400);
   }
 
   const now = new Date().toISOString();
-  noteGroupWritten(created.group_id);
+  groupWrites.note(created.group_id);
   await withDbTransaction(async (tx) => {
     await upsertRows(
       'groups',
@@ -451,8 +464,7 @@ export async function joinGroup(inviteCode: string): Promise<JoinedGroup> {
   }
 
   requireCachedProfile();
-  const rows = await callRpc('join_group', { p_invite_code: code });
-  const joined = rows?.[0];
+  const joined = requireRpcRows(await callRpc('join_group', { p_invite_code: code }))[0];
   if (!joined) {
     throw new InviteNotFoundError();
   }
@@ -469,12 +481,14 @@ export async function joinGroup(inviteCode: string): Promise<JoinedGroup> {
 /** Leaves a crew (RPC `leave_group`) and removes it locally. */
 export async function leaveGroup(groupId: string): Promise<void> {
   await withGroupGuard(groupId, () => callRpc('leave_group', { p_group_id: groupId }));
+  groupChanges.note(groupId);
   await purgeGroupLocally(groupId);
 }
 
 /** Admin: removes a member (RPC `remove_group_member`). */
 export async function removeGroupMember(groupId: string, userId: string): Promise<void> {
   await withGroupGuard(groupId, () => callRpc('remove_group_member', { p_group_id: groupId, p_user_id: userId }));
+  groupChanges.note(groupId);
   await withDbTransaction(async (tx) => {
     await tx.runAsync('DELETE FROM group_members WHERE group_id = ? AND user_id = ?;', [groupId, userId]);
     await pruneOrphanedMembers(tx);
@@ -484,6 +498,7 @@ export async function removeGroupMember(groupId: string, userId: string): Promis
 /** Admin: replaces the invite code (RPC `rotate_invite_code`); resolves the new code. */
 export async function rotateInviteCode(groupId: string): Promise<string> {
   const code = await withGroupGuard(groupId, () => callRpc('rotate_invite_code', { p_group_id: groupId }));
+  groupChanges.note(groupId);
   const db = await getDb();
   await db.runAsync('UPDATE groups SET invite_code = ?, invite_code_rotated_at = ? WHERE id = ?;', [code, new Date().toISOString(), groupId]);
   return code;
@@ -499,6 +514,7 @@ export async function renameGroup(groupId: string, name: string): Promise<void> 
       throw toDataAccessError({ code: 'P0001', message: 'not_group_admin' }, 400);
     }
   });
+  groupChanges.note(groupId);
   const db = await getDb();
   await db.runAsync('UPDATE groups SET name = ? WHERE id = ?;', [validName, groupId]);
 }

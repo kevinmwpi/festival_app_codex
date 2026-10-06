@@ -46,7 +46,8 @@ $$;
 -- Restrictive guard: whatever other (e.g. dashboard-made) permissive policies
 -- exist, totems rows are only reachable by members of the group folder who
 -- have no block either way with the meetup's creator or the uploader (as for
--- meetups), and only the meetup's creator can write into a meetup folder.
+-- meetups), and only the meetup's creator can write into a meetup folder (at
+-- most 5 objects per folder; see private.can_upload_totem).
 create policy totems_guard on storage.objects
   as restrictive
   for all
@@ -91,6 +92,8 @@ create policy totems_insert_meetup_creator on storage.objects
     )
   );
 
+-- A photo under an unresolved report stays until a moderator acts (admin-tools
+-- uses the service role), so the uploader cannot destroy the evidence.
 create policy totems_delete_owner_or_admin on storage.objects
   for delete
   to authenticated
@@ -100,6 +103,7 @@ create policy totems_delete_owner_or_admin on storage.objects
       owner_id = (select auth.uid())::text
       or private.is_group_admin(private.try_uuid((storage.foldername(name))[1]))
     )
+    and not private.is_reported_totem(name)
   );
 
 -- No update policy: objects are immutable (upsert: false).

@@ -1,10 +1,10 @@
 import { getDb, replaceRowsForFestival, upsertRows, withDbTransaction, type LocalDatabase } from '@festival/sync-engine';
 
-import { withRefreshGuard } from './cache';
+import { createChangeTracker, withRefreshGuard } from './cache';
 import { getErrorCode } from './errors';
 import { createId } from './ids';
 import type { Artist, Festival, FestivalBundle, FestivalLineupRow, FestivalSet, LocalUserFestival, Stage } from './models';
-import { selectAllRows, selectAllRowsIn } from './paging';
+import { readOptionalRow, selectAllRows, selectAllRowsIn } from './paging';
 import { getCachedProfile, requireCachedProfile } from './profile';
 import { requireStoredSession } from './session';
 import { getSupabase, unwrapResult } from './supabase';
@@ -96,10 +96,11 @@ async function fetchArtists(artistIds: string[]): Promise<Artist[]> {
  */
 export async function fetchAndCacheFestival(festivalId: string): Promise<FestivalBundle | null> {
   const client = getSupabase();
-  const light = unwrapResult(await client.from('festivals').select('id, version').eq('id', festivalId).maybeSingle()) as {
-    id: string;
-    version: number;
-  } | null;
+  // `count` tells PostgREST's "not published" (count 0) apart from an empty reply from something else,
+  // which must not delete the cached festival.
+  const light = readOptionalRow<{ id: string; version: number }>(
+    await client.from('festivals').select('id, version', { count: 'exact' }).eq('id', festivalId).maybeSingle(),
+  );
 
   const db = await getDb();
   if (!light) {
@@ -114,7 +115,9 @@ export async function fetchAndCacheFestival(festivalId: string): Promise<Festiva
     return getLocalFestivalBundle(festivalId);
   }
 
-  const festival = unwrapResult(await client.from('festivals').select(FESTIVAL_COLUMNS).eq('id', festivalId).maybeSingle()) as Festival | null;
+  const festival = readOptionalRow<Festival>(
+    await client.from('festivals').select(FESTIVAL_COLUMNS, { count: 'exact' }).eq('id', festivalId).maybeSingle(),
+  );
   if (!festival) {
     await withDbTransaction((tx) => deleteFestivalsLocally(tx, [festivalId]));
     return null;
@@ -197,23 +200,41 @@ export async function getLocalUserFestivals(): Promise<LocalUserFestival[]> {
   );
 }
 
-/** Replaces the cached followed festivals with the server's list. */
+/** Festivals followed or unfollowed while a `refreshUserFestivals` is in flight (see `ChangeTracker`). */
+const userFestivalChanges = createChangeTracker();
+
+/**
+ * Replaces the cached followed festivals with the server's list. A festival followed or unfollowed
+ * while the fetch is in flight keeps its local state (the fetched list may predate it).
+ */
 export async function refreshUserFestivals(): Promise<LocalUserFestival[]> {
   const profile = requireCachedProfile();
-  await withRefreshGuard(async (guard) => {
-    const client = getSupabase();
-    const rows = await selectAllRows<LocalUserFestival>((options) =>
-      client.from('user_festivals').select(USER_FESTIVAL_COLUMNS, options).eq('user_id', profile.id).order('id', { ascending: true }),
-    );
+  await userFestivalChanges.track((changedDuringRefresh) =>
+    withRefreshGuard(async (guard) => {
+      const client = getSupabase();
+      const rows = await selectAllRows<LocalUserFestival>((options) =>
+        client.from('user_festivals').select(USER_FESTIVAL_COLUMNS, options).eq('user_id', profile.id).order('id', { ascending: true }),
+      );
 
-    await withDbTransaction(async (tx) => {
-      if (guard.stale) {
-        return;
-      }
-      await tx.runAsync('DELETE FROM user_festivals WHERE user_id = ?;', [profile.id]);
-      await upsertRows('user_festivals', rows as unknown as Array<Record<string, unknown>>, tx);
-    });
-  });
+      await withDbTransaction(async (tx) => {
+        if (guard.stale) {
+          return;
+        }
+        const kept = [...changedDuringRefresh];
+        await tx.runAsync(
+          kept.length
+            ? `DELETE FROM user_festivals WHERE user_id = ? AND festival_id NOT IN (${placeholders(kept.length)});`
+            : 'DELETE FROM user_festivals WHERE user_id = ?;',
+          [profile.id, ...kept],
+        );
+        await upsertRows(
+          'user_festivals',
+          rows.filter((row) => !changedDuringRefresh.has(row.festival_id)) as unknown as Array<Record<string, unknown>>,
+          tx,
+        );
+      });
+    }),
+  );
 
   return getLocalUserFestivals();
 }
@@ -233,6 +254,7 @@ export async function followFestival(festivalId: string): Promise<void> {
     unwrapResult({ data: null, error, status });
   }
 
+  userFestivalChanges.note(festivalId);
   const db = await getDb();
   const existing = await db.getFirstAsync<{ id: string }>('SELECT id FROM user_festivals WHERE user_id = ? AND festival_id = ?;', [
     profile.id,
@@ -248,6 +270,7 @@ export async function unfollowFestival(festivalId: string): Promise<void> {
   const profile = requireCachedProfile();
   requireStoredSession();
   unwrapResult(await getSupabase().from('user_festivals').delete().eq('user_id', profile.id).eq('festival_id', festivalId));
+  userFestivalChanges.note(festivalId);
   const db = await getDb();
   await db.runAsync('DELETE FROM user_festivals WHERE user_id = ? AND festival_id = ?;', [profile.id, festivalId]);
 }

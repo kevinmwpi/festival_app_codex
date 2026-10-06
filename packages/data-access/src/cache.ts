@@ -63,6 +63,41 @@ export async function withGroupGuard<T>(groupId: string, call: () => Promise<T>)
 }
 
 /**
+ * Tracks ids written to the cache outside a refresh (direct online writes, which update the cache as
+ * soon as the server accepts them) while refreshes are in flight. A refresh merges a snapshot that may
+ * predate such a write, so it leaves those ids' local state alone; the next refresh settles them.
+ */
+export interface ChangeTracker {
+  /** Call right before writing `id` locally, so every overlapping refresh keeps its local state. */
+  note(id: string): void;
+  /**
+   * Runs a refresh. `changed` holds the ids noted since it started and keeps growing until it ends,
+   * so read it inside the merge transaction.
+   */
+  track<T>(run: (changed: ReadonlySet<string>) => Promise<T>): Promise<T>;
+}
+
+export function createChangeTracker(): ChangeTracker {
+  const active = new Set<Set<string>>();
+  return {
+    note(id) {
+      for (const changed of active) {
+        changed.add(id);
+      }
+    },
+    async track(run) {
+      const changed = new Set<string>();
+      active.add(changed);
+      try {
+        return await run(changed);
+      } finally {
+        active.delete(changed);
+      }
+    },
+  };
+}
+
+/**
  * What a refresh needs to merge server rows into the cache without losing local changes that raced
  * with its network calls.
  */

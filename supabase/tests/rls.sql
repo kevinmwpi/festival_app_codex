@@ -10,7 +10,7 @@
 -- Run with: npm run db:test
 
 begin;
-select plan(280);
+select plan(297);
 
 -- ===========================================================================
 -- Identities
@@ -316,6 +316,7 @@ select is(
       'private.is_blocked_with(uuid)',
       'private.is_group_admin(uuid)',
       'private.is_group_member(uuid)',
+      'private.is_reported_totem(text)',
       'private.shares_festival_group_with(uuid, uuid)',
       'private.shares_group_with(uuid)',
       'private.try_uuid(text)'
@@ -341,6 +342,7 @@ select is(
       'private.is_blocked_with(uuid)',
       'private.is_group_admin(uuid)',
       'private.is_group_member(uuid)',
+      'private.is_reported_totem(text)',
       'private.shares_festival_group_with(uuid, uuid)',
       'private.shares_group_with(uuid)',
       'private.try_uuid(text)',
@@ -390,7 +392,8 @@ select is(
                        'public.group_members'::regclass, 'public.user_set_selections'::regclass)),
   array[
     'group_members_clear_location:0', 'groups_moderate_text:1', 'meetups_immutable_columns:4',
-    'meetups_moderate_text:2', 'meetups_touch_updated_at:0', 'user_set_selections_festival_consistency:2',
+    'meetups_insert_limits:0', 'meetups_moderate_text:2', 'meetups_touch_updated_at:0',
+    'user_set_selections_festival_consistency:2',
     'users_moderate_text:1'
   ],
   'A11 moderation/immutability triggers exist and are column-scoped'
@@ -960,6 +963,47 @@ select throws_ok(
   'P0001', 'invalid_input', 'G20 the creator cannot rewrite a meetup''s created_at'
 );
 
+-- Meetup flood limits (solo, only member of GS): 30 new meetups an hour, 100 per crew.
+select pg_temp.become('superuser');
+insert into public.rate_limit_events (key, action)
+select 'user:b0000000-0000-4000-8000-000000000009', 'meetup_create' from generate_series(1, 29);
+select pg_temp.become('solo');
+select lives_ok(
+  $$ insert into public.meetups (id, group_id, title, starts_at, created_by_user_id)
+     values ('e0000000-0000-4000-8000-000000000041', '90000000-0000-4000-8000-000000000005', 'Thirtieth', now(), 'b0000000-0000-4000-8000-000000000009') $$,
+  'G21 the 30th meetup in an hour is accepted (positive control)'
+);
+select throws_ok(
+  $$ insert into public.meetups (id, group_id, title, starts_at, created_by_user_id)
+     values ('e0000000-0000-4000-8000-000000000042', '90000000-0000-4000-8000-000000000005', 'Thirty-first', now(), 'b0000000-0000-4000-8000-000000000009') $$,
+  'P0001', 'rate_limited', 'G22 the 31st meetup in an hour is rate limited'
+);
+select lives_ok(
+  $$ insert into public.meetups (id, group_id, title, starts_at, created_by_user_id)
+     values ('e0000000-0000-4000-8000-000000000041', '90000000-0000-4000-8000-000000000005', 'Thirtieth again', now(), 'b0000000-0000-4000-8000-000000000009')
+     on conflict (id) do update set title = excluded.title $$,
+  'G23 a sync replay (upsert) of an existing meetup is not counted as a new one'
+);
+select pg_temp.become('superuser');
+delete from public.rate_limit_events where key = 'user:b0000000-0000-4000-8000-000000000009';
+insert into public.meetups (group_id, title, starts_at, created_by_user_id)
+select '90000000-0000-4000-8000-000000000005', 'Filler ' || n, now(), 'b0000000-0000-4000-8000-000000000009'
+from generate_series(1, 100 - (
+  select count(*)::int from public.meetups
+  where group_id = '90000000-0000-4000-8000-000000000005' and created_by_user_id = 'b0000000-0000-4000-8000-000000000009'
+)) n;
+select pg_temp.become('solo');
+select throws_ok(
+  $$ insert into public.meetups (id, group_id, title, starts_at, created_by_user_id)
+     values ('e0000000-0000-4000-8000-000000000042', '90000000-0000-4000-8000-000000000005', 'One too many', now(), 'b0000000-0000-4000-8000-000000000009') $$,
+  'P0001', 'rate_limited', 'G24 a member can have at most 100 meetups in one crew'
+);
+select pg_temp.become('superuser');
+delete from public.meetups
+where group_id = '90000000-0000-4000-8000-000000000005' and title like 'Filler %';
+delete from public.meetups where id = 'e0000000-0000-4000-8000-000000000041';
+delete from public.rate_limit_events where key = 'user:b0000000-0000-4000-8000-000000000009';
+
 -- ===========================================================================
 -- H. Location sharing RPCs
 -- ===========================================================================
@@ -1153,6 +1197,8 @@ update public.groups set invite_code = 'AAAAA2' where id = '90000000-0000-4000-8
 -- remove_group_member (+ after-delete trigger clears the location row)
 insert into public.location_shares (group_id, user_id, lat, lng)
 values ('90000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000014', 41, -87);
+insert into public.meetups (id, group_id, title, starts_at, created_by_user_id) values
+  ('e0000000-0000-4000-8000-000000000040', '90000000-0000-4000-8000-000000000001', 'Hank flood', now(), 'b0000000-0000-4000-8000-000000000014');
 select pg_temp.become('bob');
 select throws_ok(
   $$ select public.remove_group_member('90000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000014') $$,
@@ -1180,6 +1226,12 @@ select ok(
   (select invite_code <> 'AAAAA2' and invite_code_rotated_at = now()
    from public.groups where id = '90000000-0000-4000-8000-000000000001'),
   'I17a removing a member replaces the invite code every member could read'
+);
+select is(
+  array(select id::text from public.meetups
+        where id in ('e0000000-0000-4000-8000-000000000040', 'e0000000-0000-4000-8000-000000000007') order by id),
+  array['e0000000-0000-4000-8000-000000000007'],
+  'I17d removal deletes the removed member''s meetups in that crew; other members'' meetups remain'
 );
 select pg_temp.become('hank');
 select is(
@@ -1296,6 +1348,45 @@ select is(
   'I36 brute-forcing joined nothing'
 );
 
+-- Guessing spread over many accounts: a project-wide join_fail budget.
+create temp table rls_join_global on commit drop as
+select count(*)::int as before from public.rate_limit_events where key = 'join_group:global' and action = 'join_fail';
+select pg_temp.become('carol');
+select is((select count(*)::int from public.join_group('QQQQQ9')), 0,
+  'I37 below the global threshold a new account may guess (positive control)');
+select pg_temp.become('superuser');
+select is(
+  (select count(*)::int from public.rate_limit_events where key = 'join_group:global' and action = 'join_fail'),
+  (select before + 1 from rls_join_global),
+  'I38 every wrong code is also counted project-wide'
+);
+insert into public.rate_limit_events (key, action)
+select 'join_group:global', 'join_fail'
+from generate_series(1, 200 - (
+  select count(*)::int from public.rate_limit_events where key = 'join_group:global' and action = 'join_fail'
+));
+select pg_temp.become('carol');
+select throws_ok(
+  $$ select * from public.join_group('QQQQR2') $$,
+  'P0001', 'rate_limited', 'I39 with 200 wrong codes project-wide in the last hour, profiles younger than 7 days cannot guess'
+);
+select pg_temp.become('superuser');
+update public.users set created_at = now() - interval '30 days' where id = 'b0000000-0000-4000-8000-000000000003';
+select pg_temp.become('carol');
+select is(
+  (select count(*)::int from public.join_group('QQQQR3')) + (select count(*)::int from public.join_group('QQQQR4')),
+  0,
+  'I40 under global pressure an established profile still gets 3 failures an hour'
+);
+select throws_ok(
+  $$ select * from public.join_group('QQQQR5') $$,
+  'P0001', 'rate_limited', 'I41 under global pressure the 4th failure in an hour is rate limited'
+);
+select pg_temp.become('superuser');
+delete from public.rate_limit_events
+where action = 'join_fail' and key in ('join_group:global', 'user:b0000000-0000-4000-8000-000000000003');
+update public.users set created_at = now() where id = 'b0000000-0000-4000-8000-000000000003';
+
 -- ===========================================================================
 -- J. Blocks
 -- ===========================================================================
@@ -1347,6 +1438,15 @@ select is(
   1,
   'J7 the blocker sees her block'
 );
+select pg_temp.become('superuser');
+select is(
+  array(select target_type || '|' || reason || '|' || status || '|' || coalesce(target_snapshot, '') || '|' || coalesce(group_id::text, '')
+        from public.reports
+        where reporter_id = 'b0000000-0000-4000-8000-000000000001' and target_id = 'b0000000-0000-4000-8000-000000000002'
+          and target_type = 'block'),
+  array['block|other|open|Bob|90000000-0000-4000-8000-000000000001'],
+  'J7a blocking files one open block report for the developer (idempotent block, no duplicate)'
+);
 select pg_temp.become('bob');
 select is(
   (select count(*)::int from public.meetups where id = 'e0000000-0000-4000-8000-000000000001'),
@@ -1390,6 +1490,13 @@ select pg_temp.become('alice');
 select lives_ok(
   $$ select public.block_user('b0000000-0000-4000-8000-000000000003') $$,
   'J10 re-blocking is allowed when a block already exists (no shared group needed)'
+);
+select pg_temp.become('superuser');
+select is(
+  (select count(*)::int from public.reports
+    where reporter_id = 'b0000000-0000-4000-8000-000000000001' and target_id = 'b0000000-0000-4000-8000-000000000003'),
+  0,
+  'J11 re-blocking an existing block files no new report'
 );
 
 -- ===========================================================================
@@ -1452,6 +1559,7 @@ select is(
     from public.reports where reporter_id = 'b0000000-0000-4000-8000-000000000001' order by target_type
   ),
   array[
+    'block|Bob|90000000-0000-4000-8000-000000000001',
     'group|Group A renamed|90000000-0000-4000-8000-000000000001',
     'meetup|Bob meetup v2|90000000-0000-4000-8000-000000000001',
     'photo|90000000-0000-4000-8000-000000000001/e0000000-0000-4000-8000-000000000001/0b000000-0000-4000-8000-000000000001.jpg|90000000-0000-4000-8000-000000000001',
@@ -1525,6 +1633,22 @@ select throws_ok(
   '42501', null, 'L10 anon cannot upload totems'
 );
 
+-- At most 5 objects per meetup folder (0b..01 and 0b..11 are already there).
+select pg_temp.become('alice');
+select lives_ok(
+  $$ insert into storage.objects (bucket_id, name, owner, owner_id)
+     select 'totems', format('90000000-0000-4000-8000-000000000001/e0000000-0000-4000-8000-000000000001/0b000000-0000-4000-8000-0000000000%s.jpg', n),
+            'a0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000001'
+     from generate_series(31, 33) n $$,
+  'L10a uploads up to 5 objects per meetup folder are accepted (positive control)'
+);
+select throws_ok(
+  $$ insert into storage.objects (bucket_id, name, owner, owner_id)
+     values ('totems', '90000000-0000-4000-8000-000000000001/e0000000-0000-4000-8000-000000000001/0b000000-0000-4000-8000-000000000034.jpg',
+             'a0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000001') $$,
+  '42501', null, 'L10b a 6th object in one meetup folder is rejected'
+);
+
 -- A photo owned by bob (GA member) for the admin-deletes case (L15).
 select pg_temp.become('superuser');
 insert into storage.objects (bucket_id, name, owner, owner_id) values
@@ -1570,6 +1694,33 @@ with d as (
   returning 1
 )
 select is(count(*)::int, 1, 'L15 a group admin can delete another member''s photo in her group') from d;
+-- K11 reported alice's photo 0b..01: neither its owner nor the crew admin (both alice) can delete it.
+with d as (
+  delete from storage.objects
+  where bucket_id = 'totems'
+    and name = '90000000-0000-4000-8000-000000000001/e0000000-0000-4000-8000-000000000001/0b000000-0000-4000-8000-000000000001.jpg'
+  returning 1
+)
+select is(count(*)::int, 0, 'L15a a photo under an open report cannot be deleted by its owner or the crew admin') from d;
+with d as (
+  delete from storage.objects
+  where bucket_id = 'totems'
+    and name = '90000000-0000-4000-8000-000000000001/e0000000-0000-4000-8000-000000000001/0b000000-0000-4000-8000-000000000031.jpg'
+  returning 1
+)
+select is(count(*)::int, 1, 'L15b an unreported photo in the same folder can be deleted (positive control)') from d;
+select pg_temp.become('superuser');
+update public.reports set status = 'dismissed'
+where target_type = 'photo' and target_id = 'e0000000-0000-4000-8000-000000000001';
+select pg_temp.become('alice');
+select set_config('storage.allow_delete_query', 'true', true);
+with d as (
+  delete from storage.objects
+  where bucket_id = 'totems'
+    and name = '90000000-0000-4000-8000-000000000001/e0000000-0000-4000-8000-000000000001/0b000000-0000-4000-8000-000000000001.jpg'
+  returning 1
+)
+select is(count(*)::int, 1, 'L15c once the report is resolved the photo can be deleted again') from d;
 select set_config('storage.allow_delete_query', 'false', true);
 select pg_temp.become('superuser');
 select ok(

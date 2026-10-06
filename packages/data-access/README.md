@@ -24,14 +24,22 @@ write queue). Everything here is plain async functions; React Query hooks live i
   an error, and refreshes delete local rows the server did not return, so every unbounded read is
   paged (`range` + exact count, ordered by primary key) and `in(…)` filters are chunked. If the data
   changes mid-read repeatedly, the refresh throws `DataAccessError` `result_changed` (status 503)
-  instead of merging a partial result.
+  instead of merging a partial result. A reply that is not PostgREST's (supabase-js reports an empty
+  2xx/204 or an empty 404 as success with `data` and `count` null) is never read as "no rows": a page
+  without a JSON array and a count, a single-row read (`maybeSingle`, also counted) without a count, or
+  a table RPC (`get_my_profile`, `create_group`, `join_group`, `upsert_my_profile`) without an array
+  throws `DataAccessError` with `status: 0` (shown as offline, retryable) and the cache is untouched.
+- **Direct online writes win over in-flight refreshes.** Leaving a crew, removing a member, renaming,
+  rotating the invite code, following and unfollowing update the cache as soon as the server accepts
+  them. A `listMyGroups`, `refreshGroupDetail` or `refreshUserFestivals` that was already in flight
+  leaves those groups / festivals as they are locally; the next refresh settles them.
 
 ## Setup (MOBILE-A, `src/providers`)
 
 | Export | Signature | Notes |
 |---|---|---|
 | `supabaseConfigError` | `string \| null` | Non-null when `EXPO_PUBLIC_SUPABASE_URL` or `EXPO_PUBLIC_SUPABASE_ANON_KEY` (alias `EXPO_PUBLIC_SUPABASE_KEY`) is missing/invalid. Show the config-error screen; no client exists and every network call throws `ConfigError`. |
-| `configureDataSync()` | `() => void` | Call once at app start. Wires the sync engine to Supabase (`createSupabaseSyncTransport()`) with the stored-session pre-check and the local-owner gate: nothing is sent unless the stored session's user is `app_meta.local_owner_auth_user_id` (so a kept queue is never sent with another account's session before `ensureLocalOwner` runs — flush again after it). A response that cannot be PostgREST's (a 4xx without an error code, such as an HTML proxy/WAF page, or an unexpected body on a write) is reported as a connectivity failure (`status: 0`): the write stays queued, never dropped or marked synced. |
+| `configureDataSync()` | `() => void` | Call once at app start. Wires the sync engine to Supabase (`createSupabaseSyncTransport()`) with the stored-session pre-check and the local-owner gate: nothing is sent unless the stored session's user is `app_meta.local_owner_auth_user_id` (so a kept queue is never sent with another account's session before `ensureLocalOwner` runs — flush again after it). Every write selects the affected ids, so PostgREST always answers with a JSON array. A response that cannot be PostgREST's (a 4xx without an error code, such as an HTML proxy/WAF page, or any non-array reply, including an empty 2xx/204 or an empty 404) is reported as a connectivity failure (`status: 0`): the write stays queued, never dropped or marked synced. |
 | `setAuthAutoRefresh(active)` | `(boolean) => void` | Call with `true` on AppState `active`, `false` on `background`. |
 | `subscribeToAuthChanges(handler)` | `((event, session) => void) => () => void` | Returns an unsubscribe. No-op without config. Call `ensureLocalOwner(getStoredSession().authUserId)` once at launch (before anything is enqueued) and on `SIGNED_IN` call `ensureLocalOwner(session.user.id)` — an expired stored token is recovered with `TOKEN_REFRESHED`/`INITIAL_SESSION`, never `SIGNED_IN`; on `TOKEN_REFRESHED`/`SIGNED_IN` call `flush()`; on `SIGNED_OUT` run the `session_lost` flow. `signOut()`/`deleteAccount()` themselves usually emit `SIGNED_OUT`, so make the orchestrator re-entrancy safe. The subscription follows client replacement (see `signOut()`): `INITIAL_SESSION` is delivered once, and events from a retired client are never delivered. |
 | `getSupabase()` | `() => SupabaseClient<Database>` | Escape hatch; throws `ConfigError` without config. Prefer the functions below. |
@@ -71,7 +79,7 @@ Warn before a voluntary sign-out when `getPendingCount() > 0` (sync-engine).
 |---|---|---|
 | `getCachedProfile()` | `() => CachedProfile \| null` | Sync MMKV read. `null` unless a stored session exists **and** the cached `auth_user_id` matches it. `CachedProfile = { id, display_name, avatar_type, avatar_value, auth_user_id }` (`id` is `public.users.id`). |
 | `requireCachedProfile()` | `() => CachedProfile` | Throws `TransientAuthError` (no session) or `ProfileRequiredError` (`code: 'profile_required'`). |
-| `getMyProfile()` | `() => Promise<CachedProfile \| null>` | Online RPC `get_my_profile`; refreshes (or clears) the cache. `null` → route to profile setup. |
+| `getMyProfile()` | `() => Promise<CachedProfile \| null>` | Online RPC `get_my_profile`; refreshes the cache, or clears it only when the RPC returns an empty array. `null` → route to profile setup. A non-array reply throws (`status: 0`) and keeps the cache. |
 | `saveMyProfile(input)` | `({ display_name, avatar_type, avatar_value }) => Promise<CachedProfile>` | Validates (name 1–40 chars trimmed, avatar type `initials`/`emoji`/`color`, value ≤ 100) → RPC `upsert_my_profile` → cache. Server may raise P0001 `content_not_allowed`. |
 | `validateProfileInput`, `AVATAR_TYPES`, `DISPLAY_NAME_MAX_LENGTH` | | For form validation. |
 
@@ -87,7 +95,7 @@ Warn before a voluntary sign-out when `getPendingCount() > 0` (sync-engine).
 | `hasCachedFestivalBundle(id)` | `(string) => Promise<boolean>` | |
 | `getLocalFestivalLineup(id)` | `(string) => Promise<FestivalLineupRow[]>` | Sets joined with artist/stage names. |
 | `getLocalUserFestivals()` | `() => Promise<LocalUserFestival[]>` | Followed festivals (cache). |
-| `refreshUserFestivals()` | `() => Promise<LocalUserFestival[]>` | Online; replaces the cache. |
+| `refreshUserFestivals()` | `() => Promise<LocalUserFestival[]>` | Online; replaces the cache, except festivals followed or unfollowed while it was in flight (they keep their local state). |
 | `followFestival(id)` / `unfollowFestival(id)` | `(string) => Promise<void>` | Online writes (not queued); already-following is not an error. |
 | `toggleUserFestival(id)` | `(string) => Promise<boolean>` | `true` when now followed. |
 
@@ -111,9 +119,9 @@ Format every time with `@festival/domain` helpers and `festival.timezone`.
 | Export | Signature | Behaviour |
 |---|---|---|
 | `getLocalGroups()` | `() => Promise<GroupSummary[]>` | `Group & { my_role, member_count }`, newest first. |
-| `listMyGroups()` | `() => Promise<GroupSummary[]>` | Online. **Replaces** the user's memberships locally: memberships/groups not returned are deleted with their members and meetups. |
+| `listMyGroups()` | `() => Promise<GroupSummary[]>` | Online. **Replaces** the user's memberships locally: memberships/groups not returned are deleted with their members and meetups. Groups created, joined, left or changed locally while it was in flight keep their local state. |
 | `getLocalGroupDetail(id)` | `(string) => Promise<GroupDetail \| null>` | `{ group, my_role, members, meetups }`. Each member: `{ ...GroupMemberRow, user: PublicUser \| null, is_blocked }` — render blocked members as "Blocked user" with Unblock. Meetups exclude blocked creators. |
-| `refreshGroupDetail(id)` | `(string) => Promise<GroupDetail \| null>` | Online refresh of group, members, profiles, meetups and members' selections. Meetups and own selections with queue activity before or during the fetch keep their local state (same rule as `refreshUserSelections`). `null` (purged locally) when the user is no longer a member. |
+| `refreshGroupDetail(id)` | `(string) => Promise<GroupDetail \| null>` | Online refresh of group, members, profiles, meetups and members' selections. Meetups and own selections with queue activity before or during the fetch keep their local state (same rule as `refreshUserSelections`). `null` (purged locally) when the user is no longer a member. Writes nothing when the group was left or changed locally (member removed, renamed, invite rotated) while the fetch was in flight. |
 | `createGroup({ name, festival_id })` | `=> Promise<CreatedGroup>` | RPC `create_group` → `{ group_id, name, festival_id, invite_code }`. Name 1–60. P0001 `festival_not_found`, `rate_limited`, `content_not_allowed`. |
 | `joinGroup(code)` | `(string) => Promise<JoinedGroup>` | Code normalised (uppercase, letters/digits only). Zero rows → `InviteNotFoundError`. P0001 `group_full`, `rate_limited`. → `{ group_id, group_name, festival_id, member_count }`. |
 | `leaveGroup(id)` | `(string) => Promise<void>` | RPC; purges locally. |
