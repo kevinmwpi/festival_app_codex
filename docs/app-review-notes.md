@@ -24,7 +24,7 @@ DEMO ACCOUNT
 Sign-in uses a one-time email code. For review, use:
 - Email: __DEMO_LOGIN_EMAIL__
 - Code: __DEMO_LOGIN_CODE__ (8 digits)
-Enter the email, tap "Enter Festival", type the code and tap "Verify" (ignore any emailed code). Tick
+Enter the email, tap "Email me a code", type the code and tap "Verify" (ignore any emailed code). Tick
 "I agree to the Terms of Use and Privacy Policy" and tap "Continue". The account is in "Festie Demo Crew"
 for the fictional festival "Festie Demo Fest" (marked "Sample") with three demo members, a meetup with a
 totem photo and live demo locations. If you leave the crew or block a demo member, sign out (Settings,
@@ -34,24 +34,23 @@ you delete the account, signing in again recreates it.
 USER-GENERATED CONTENT (Guideline 1.2)
 Users must accept our Terms of Use (zero tolerance for objectionable content and abusive users) before
 seeing any crew content. Names, crew names and meetup text pass a disallowed-word filter.
-- Open the "Group" tab, then "Festie Demo Crew".
+- Open the "Crews" tab, then "Festie Demo Crew".
 - Report or block a person: tap a member (e.g. Maya) under Members, then "Report Maya" (pick a reason,
   tap "Send report") or "Block Maya" (confirm "Block"). A blocked member's meetups, picks and location
-  disappear; unblock in the same menu or in Settings, "Blocked users".
+  disappear at once and we are notified; unblock in the same menu or in Settings, "Blocked users".
 - Report a meetup or photo: on Jordan's meetup tap "⋯", then "Report meetup" or "Report photo".
 - Report the crew: scroll down, tap "Report this crew". ("Leave crew" is below it; the location steps
   need the crew, so try it last.)
 - Admins also get "Remove from crew" on another member and "Remove meetup" on another member's
   meetup. The demo crew's admin is demo member Maya, so these need a second account: create a crew
-  ("Create" on the Group tab), join it with its invite code from another email and add a meetup there.
+  ("Create" on the Crews tab), join it with its invite code from another email and add a meetup there.
 Reports are reviewed within 24 hours; offending content is removed and offending users are banned.
 
 LOCATION SHARING
 Foreground only; there is no background location. The Map shows the crews of the selected festival, so
 on the "Fests" tab tap "Festie Demo Fest", then open "Map" with "Festie Demo Crew" selected: the demo
-members appear near the stages. Tap "Share location" ("Share my location" in the list view if the map is
-unavailable), pick a duration (1, 4 or 8 hours, or "Until I stop", at most 24 hours) and tap
-"Start sharing"; iOS then asks for permission ("While Using the App"). Only that crew sees your position,
+members appear near the stages. Tap "Share location", pick a duration (1, 4 or 8 hours, or "Until I
+stop", at most 24 hours) and tap "Start sharing"; iOS then asks for permission ("While Using the App"). Only that crew sees your position,
 for at most 15 minutes after the last update, then it is deleted. To stop, tap "Sharing location", then
 "Stop sharing my location", or use Settings, "Stop sharing location".
 

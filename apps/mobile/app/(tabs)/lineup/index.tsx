@@ -19,6 +19,7 @@ import { ArtistMonogram } from '@/src/components/ArtistMonogram';
 import { FestivalDisclaimer, TimeZoneHint } from '@/src/components/FestivalNotes';
 import { ScreenHeader } from '@/src/components/ScreenHeader';
 import { FestivalBundleState, LoadingState, NoFestivalState, StaleDataNote } from '@/src/components/StateViews';
+import { formatWeekdayDayLabel } from '@/src/hooks/festival-time-labels';
 import { useFestivalClock, type FestivalClock } from '@/src/hooks/use-festival';
 import { useLineup, type LineupRow } from '@/src/hooks/use-lineup';
 import { useSetSelection } from '@/src/hooks/use-set-selection';
@@ -205,7 +206,7 @@ export default function LineupScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.filterRow}>
             {[ALL, ...days].map((day) => {
               const active = dayFilter === day;
-              const label = day === ALL ? 'All' : clock.date(day, { weekday: 'short', day: 'numeric' });
+              const label = day === ALL ? 'All' : formatWeekdayDayLabel(day, clock.timeZone);
               const a11y = day === ALL ? 'All days' : clock.date(day, { weekday: 'long', month: 'long', day: 'numeric' });
               return (
                 <Pressable

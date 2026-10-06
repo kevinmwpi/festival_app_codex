@@ -19,7 +19,7 @@ Need help with Festie? Email __SUPPORT_EMAIL__ and include your app version (Set
 
 ## Crews and meetups
 
-- Create a crew from the Group tab and share the invite. Friends join with the 6-character code or the invite link.
+- Create a crew from the Crews tab and share the invite. Friends join with the 6-character code or the invite link.
 - Crew admins can get a new invite code (the old one stops working) and remove members.
 - Your picks, meetups and changes made offline sync automatically when you reconnect.
 

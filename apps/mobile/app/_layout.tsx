@@ -51,7 +51,7 @@ function RootShell() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <OfflineBanner visible={isOffline} />
+      <OfflineBanner visible={isOffline} label="Offline — showing what's saved on this device" />
       <View style={styles.content}>
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
           <Stack.Screen name="index" />

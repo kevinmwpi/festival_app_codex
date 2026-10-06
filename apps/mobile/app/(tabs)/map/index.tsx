@@ -52,7 +52,7 @@ import { useGroups } from '@/src/hooks/use-groups';
 import { formatAgo, useNow } from '@/src/hooks/use-now';
 import { OFFLINE_MAP_STYLE, useOfflinePack, type OfflinePackState } from '@/src/hooks/use-offline-pack';
 import { useUserKey } from '@/src/hooks/use-session';
-import { visibleFriendLocations } from '@/src/location/friend-visibility';
+import { visibleFriendLocations, withDeviceClockTimes, type DeviceTimed } from '@/src/location/friend-visibility';
 import { cancelCrewReminders } from '@/src/notifications/crew-reminders';
 import { restoreMeetupReminders } from '@/src/notifications/restore-reminders';
 import { STOP_NOT_CONFIRMED_MESSAGE, useLocationSharing } from '@/src/location/LocationSharingProvider';
@@ -60,7 +60,7 @@ import { useAppStore } from '@/src/state/app-store';
 
 const FRIEND_POLL_MS = 30_000;
 const NO_MEETUPS: LocalMeetup[] = [];
-const NO_FRIENDS: FriendLocation[] = [];
+const NO_FRIENDS: Array<DeviceTimed<FriendLocation>> = [];
 
 /* ─── Data ──────────────────────────────────────────────── */
 
@@ -130,7 +130,10 @@ function useFriendLocations(groupId: string | null) {
     queryKey: queryKeys.friendLocations(userKey, groupId ?? 'none'),
     queryFn: async () => {
       try {
-        return await getGroupLocations(groupId!);
+        const rows = await getGroupLocations(groupId!);
+        // Ages on the device clock, so a phone set fast or slow neither hides fresh positions nor
+        // keeps old ones (see friend-visibility.ts).
+        return withDeviceClockTimes(rows, Date.now());
       } catch (error) {
         if (isAppErrorCode(error, 'not_group_member')) {
           // data-access purged the crew locally; drop its reminders and refresh the crew lists.
@@ -202,7 +205,7 @@ function FriendPin({ friend, ago, accent }: { friend: FriendLocation; ago: strin
   return (
     <View style={styles.friendPin} accessible accessibilityLabel={`${friend.display_name}, last seen ${ago}`}>
       <View style={[styles.friendRing, { borderColor: accent }]}>
-        <Avatar name={friend.display_name} avatarType={friend.avatar_type} avatarValue={friend.avatar_value} colorKey={friend.user_id} size={34} />
+        <Avatar name={friend.display_name} avatarType={friend.avatar_type} avatarValue={friend.avatar_value} size={34} />
       </View>
       <View style={styles.friendLabel}>
         <Text style={styles.friendLabelText} numberOfLines={1}>
@@ -289,7 +292,7 @@ function FallbackLists({
 }: {
   bundle: FestivalBundle;
   meetups: LocalMeetup[];
-  friends: FriendLocation[];
+  friends: Array<DeviceTimed<FriendLocation>>;
   clock: FestivalClock;
   now: number;
   group: GroupSummary | null;
@@ -364,10 +367,10 @@ function FallbackLists({
           ) : (
             friends.map((friend) => (
               <View key={friend.user_id} style={styles.listRow}>
-                <Avatar name={friend.display_name} avatarType={friend.avatar_type} avatarValue={friend.avatar_value} colorKey={friend.user_id} />
+                <Avatar name={friend.display_name} avatarType={friend.avatar_type} avatarValue={friend.avatar_value} />
                 <View style={styles.listText}>
                   <Text style={styles.listTitle}>{friend.display_name}</Text>
-                  <Text style={styles.listSub}>Last seen {formatAgo(friend.recorded_at, now)}</Text>
+                  <Text style={styles.listSub}>Last seen {formatAgo(friend.seen_at, now)}</Text>
                 </View>
               </View>
             ))
@@ -636,7 +639,7 @@ export default function MapScreen() {
 
         {friends.map((friend) => (
           <Mapbox.MarkerView key={`friend-${friend.user_id}`} coordinate={[friend.lng, friend.lat]} anchor={{ x: 0.5, y: 0.5 }} allowOverlap>
-            <FriendPin friend={friend} ago={formatAgo(friend.recorded_at, now)} accent={solidAccent} />
+            <FriendPin friend={friend} ago={formatAgo(friend.seen_at, now)} accent={solidAccent} />
           </Mapbox.MarkerView>
         ))}
       </Mapbox.MapView>

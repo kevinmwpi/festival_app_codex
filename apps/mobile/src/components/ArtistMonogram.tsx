@@ -11,6 +11,8 @@ import { initialsOf, pastelFor } from './palette';
 export function ArtistMonogram({ name, colorKey, size = 112, radius = 32 }: { name: string; colorKey?: string; size?: number; radius?: number }) {
   return (
     <View
+      // Decorative: hidden from VoiceOver (accessibilityElementsHidden) and TalkBack (importantForAccessibility).
+      accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       accessible={false}
       style={[styles.tile, { width: size, height: size, borderRadius: radius, backgroundColor: pastelFor(colorKey ?? name) }]}

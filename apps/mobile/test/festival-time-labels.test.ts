@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatFestivalDayLabel, formatTimeFromDay, isAfterMidnight } from '../src/hooks/festival-time-labels';
+import { formatFestivalDayLabel, formatTimeFromDay, formatWeekdayDayLabel, isAfterMidnight } from '../src/hooks/festival-time-labels';
 
 const TZ = 'Europe/Berlin';
 // Friday 2027-07-02 and the night after it, in CEST (UTC+2).
@@ -25,5 +25,11 @@ describe('times relative to a day', () => {
     expect(formatTimeFromDay(SAT_2PM, FRI_9PM, TZ)).toBe('Sat 2:00 PM');
     expect(formatTimeFromDay(SAT_1AM, Date.parse(SAT_2PM), TZ)).toBe('Fri night 1:00 AM');
     expect(formatTimeFromDay(SAT_2PM, Date.parse('2027-07-03T08:00:00Z'), TZ)).toBe('2:00 PM');
+  });
+});
+
+describe('formatWeekdayDayLabel', () => {
+  it('puts the weekday first, like every other day label in the app', () => {
+    expect(formatWeekdayDayLabel('2027-04-10', 'America/Los_Angeles')).toBe('Sat 10');
   });
 });

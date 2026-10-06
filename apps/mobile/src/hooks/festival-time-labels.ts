@@ -28,6 +28,14 @@ export function formatFestivalDayLabel(iso: string, timeZone: string, options: I
 }
 
 /**
+ * Compact day-pill label with the weekday first, e.g. `Sat 10` — the order used everywhere else in the
+ * app. (`{ weekday: 'short', day: 'numeric' }` in one Intl call yields `10 Sat` in en-US.)
+ */
+export function formatWeekdayDayLabel(value: string, timeZone: string): string {
+  return `${formatFestivalDate(value, timeZone, SHORT_WEEKDAY)} ${formatFestivalDate(value, timeZone, { day: 'numeric' })}`;
+}
+
+/**
  * `2:00 PM` when `iso` is on the same festival day as `reference` (now, or another item's start);
  * otherwise `Sat 2:00 PM` (`Fri night 1:00 AM` after midnight), so a time never reads as "today" when
  * it is not.

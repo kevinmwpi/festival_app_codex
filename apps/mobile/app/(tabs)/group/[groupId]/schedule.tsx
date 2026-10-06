@@ -1,13 +1,13 @@
 import type { CombinedSelectionRow } from '@festival/data-access';
 import { festivalDayKey, listFestivalDays } from '@festival/domain';
-import { Badge, Chip, colors, EmptyState, layout, radii, SecondaryButton, SegmentedControl, spacing } from '@festival/ui';
+import { Badge, Chip, colors, EmptyState, layout, radii, SegmentedControl, spacing, useOfflineStatus } from '@festival/ui';
 import { useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { TimeZoneHint } from '@/src/components/FestivalNotes';
 import { SubScreenHeader } from '@/src/components/ScreenHeader';
-import { ErrorState, LoadingState, StaleDataNote } from '@/src/components/StateViews';
+import { ErrorState, FestivalBundleState, LoadingState, StaleDataNote } from '@/src/components/StateViews';
 import { useFestivalBundle, useFestivalClock, type FestivalClock } from '@/src/hooks/use-festival';
 import { useCombinedSelections, useGroupDetail } from '@/src/hooks/use-groups';
 
@@ -15,6 +15,19 @@ type ScheduleView = 'overlap' | 'per-person' | 'divergence';
 
 const ALL = 'all';
 const NO_ROWS: CombinedSelectionRow[] = [];
+
+/** Member names as wrapping pills (a single-line badge would cut the list off). */
+function NamePills({ names }: { names: string[] }) {
+  return (
+    <View style={styles.namesPills}>
+      {names.map((name, index) => (
+        <View key={`${name}-${index}`} style={styles.namePill}>
+          <Text style={styles.namePillText}>{name}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 function SetRow({
   artistName,
@@ -49,6 +62,7 @@ export default function CombinedScheduleScreen() {
   const groupId = (Array.isArray(params.groupId) ? params.groupId[0] : params.groupId) ?? '';
   const [view, setView] = React.useState<ScheduleView>('overlap');
   const [day, setDay] = React.useState<string>(ALL);
+  const isOffline = useOfflineStatus();
 
   const detail = useGroupDetail(groupId);
   const group = detail.data?.group ?? null;
@@ -157,7 +171,12 @@ export default function CombinedScheduleScreen() {
               endTime={entry.row.end_time}
               clock={clock}
               accent={colors.success}
-              footer={<Badge label={`${entry.userIds.size} going · ${entry.names.join(', ')}`} tone="success" />}
+              footer={
+                <>
+                  <Badge label={`${entry.userIds.size} going`} tone="success" />
+                  <NamePills names={entry.names} />
+                </>
+              }
             />
           ))}
         </View>
@@ -195,13 +214,7 @@ export default function CombinedScheduleScreen() {
               clock={clock}
               footer={
                 <>
-                  <View style={styles.namesPills}>
-                    {entry.names.map((name, index) => (
-                      <View key={`${name}-${index}`} style={styles.namePill}>
-                        <Text style={styles.namePillText}>{name}</Text>
-                      </View>
-                    ))}
-                  </View>
+                  <NamePills names={entry.names} />
                   {meetup ? (
                     <View style={styles.meetupHint}>
                       <Text style={styles.meetupHintText}>
@@ -260,13 +273,16 @@ export default function CombinedScheduleScreen() {
 
           {festival ? (
             content
-          ) : bundle.isLoading || bundle.isRefreshing ? (
-            <LoadingState label="Downloading the festival…" />
           ) : (
-            <EmptyState
-              title="Festival not downloaded"
-              description="Connect to the internet once to download this crew's festival and see set times."
-              action={<SecondaryButton label="Try again" onPress={() => void bundle.refetch()} />}
+            // Downloading, offline, failed or no longer published — each says what is actually wrong.
+            <FestivalBundleState
+              hasBundle={false}
+              isLoading={bundle.isLoading}
+              isRefreshing={bundle.isRefreshing}
+              hasRefreshed={bundle.hasRefreshed}
+              refreshError={bundle.refreshError}
+              isOffline={isOffline}
+              onRetry={() => void bundle.refetch()}
             />
           )}
           <StaleDataNote error={detail.refreshError} />

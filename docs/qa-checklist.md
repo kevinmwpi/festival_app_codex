@@ -35,14 +35,14 @@ Admin commands: [`festival-data.md`](./festival-data.md).
 
 ## 2. Email sign-in, profile, terms
 
-- [ ] Enter email A, tap "Enter Festival": the code email arrives within a minute from your custom
+- [ ] Enter email A, tap "Email me a code": the code email arrives within a minute from your custom
       sender, shows an 8-digit code prominently and contains no link or button.
 - [ ] The code screen shows 8 boxes; typing all 8 digits submits automatically; pasting the code from
       the email (or the iOS keyboard suggestion) works.
 - [ ] A wrong code shows an error and lets you retry; "Resend code" is disabled for 60 seconds, then
       sends a new code; "Use a different email" returns to the email screen.
 - [ ] "I already have a code" is shown only after a send error: tap "Use a different email", keep (or
-      re-enter) the same email and tap "Enter Festival" again within 60 seconds of the last code. An
+      re-enter) the same email and tap "Email me a code" again within 60 seconds of the last code. An
       error ("Too many codes requested…") appears with an "I already have a code" link. The link opens
       the code screen ("Enter the 8-digit code we emailed to …") without sending a new email, the last
       code still signs in, and "Resend code" is available straight away. Before a send has failed the
@@ -61,7 +61,7 @@ Admin commands: [`festival-data.md`](./festival-data.md).
 
 ## 3. Demo login (App Review path)
 
-- [ ] On a signed-out device enter `DEMO_LOGIN_EMAIL`, tap "Enter Festival", type `DEMO_LOGIN_CODE`, tap
+- [ ] On a signed-out device enter `DEMO_LOGIN_EMAIL`, tap "Email me a code", type `DEMO_LOGIN_CODE`, tap
       "Verify": signed in, terms screen shown, then the app with "Festie Demo Fest" (badge "Sample",
       sorted last) followed and "Festie Demo Crew" listed with three demo members, Jordan's meetup with
       a totem photo and demo members on the map near the stages.
@@ -202,8 +202,8 @@ Admin commands: [`festival-data.md`](./festival-data.md).
       return to the app: the Map control shows "Location access off" (its sheet offers "Open Settings"),
       Settings shows "No access" with a way to open iOS Settings, and nothing is sent until access is back.
 - [ ] **Allow Once expiry:** grant "Allow Once", start sharing, then leave the app long enough for iOS to
-      revoke the one-time grant (or relaunch it): the card, the Map sheet and Settings offer "Allow location"
-      (not only "Open Settings"); tapping it shows the iOS prompt and sharing resumes after allowing.
+      revoke the one-time grant (or relaunch it): the card, the Map sheet and Settings offer "Turn location
+      back on" (not only "Open Settings"); tapping it shows the iOS prompt and sharing resumes after allowing.
 - [ ] Airplane mode while sharing: no crash; sharing resumes when back online.
 - [ ] Stop sharing in airplane mode: sharing stops on the phone and a toast says the server could not be
       reached and the last position expires within 15 minutes.
@@ -224,6 +224,9 @@ Admin commands: [`festival-data.md`](./festival-data.md).
       a travel router with a portal page) and open Festie before logging in to the portal: the app stays
       signed in and shows cached data (it does not return to sign-in). After accepting the portal, it
       syncs. Unsynced changes are never lost.
+- [ ] Unit-covered: an empty 200/204 or empty 404 from a middlebox never empties crews, picks, the
+      festival list or the profile, and never marks a queued write synced
+      (`packages/data-access/test/empty-reply.test.ts`, `transport.test.ts`).
 - [ ] Sign out with unsynced changes shows the "Unsynced changes" warning.
 
 ## 13. Settings and account deletion

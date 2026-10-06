@@ -108,5 +108,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  signOutRow: { alignItems: 'center', gap: spacing.sm },
+  // TextLink is 20pt tall with 12pt hitSlop above and below: 24pt apart, the touch areas don't overlap.
+  signOutRow: { alignItems: 'center', gap: spacing.xl },
 });

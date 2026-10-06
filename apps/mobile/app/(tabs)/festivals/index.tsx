@@ -226,7 +226,6 @@ export default function FestivalsScreen() {
                 name={profile?.display_name}
                 avatarType={profile?.avatar_type}
                 avatarValue={profile?.avatar_value}
-                colorKey={profile?.id}
                 size={38}
               />
             }

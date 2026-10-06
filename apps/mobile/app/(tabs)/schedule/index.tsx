@@ -37,6 +37,12 @@ import { useAppStore } from '@/src/state/app-store';
 
 const HOUR_HEIGHT = 96;
 const MIN_BLOCK_HEIGHT = 52;
+/**
+ * Block heights follow the clock, not the text, so block text stops growing at 1.25× (the artist and
+ * stage lines then still fit the 36pt a minimum-height block has inside its padding). The block's
+ * accessibility label carries the full text at any size.
+ */
+const BLOCK_MAX_FONT_SCALE = 1.25;
 const MIN_WINDOW_MINUTES = 4 * 60;
 const TIME_GUTTER_WIDTH = 48;
 const NO_ROWS: ScheduleRow[] = [];
@@ -154,14 +160,14 @@ function TimelineBlock({ block, clock, onPress }: { block: PositionedBlock; cloc
         pressed && { opacity: 0.8 },
       ]}
     >
-      <Text style={styles.blockArtist} numberOfLines={1}>
+      <Text style={styles.blockArtist} numberOfLines={1} maxFontSizeMultiplier={BLOCK_MAX_FONT_SCALE}>
         {block.row.artist_name}
       </Text>
-      <Text style={styles.blockStage} numberOfLines={1}>
+      <Text style={styles.blockStage} numberOfLines={1} maxFontSizeMultiplier={BLOCK_MAX_FONT_SCALE}>
         {block.row.stage_name}
       </Text>
       {block.height >= 80 ? (
-        <Text style={styles.blockTime} numberOfLines={1}>
+        <Text style={styles.blockTime} numberOfLines={1} maxFontSizeMultiplier={BLOCK_MAX_FONT_SCALE}>
           {time}
         </Text>
       ) : null}

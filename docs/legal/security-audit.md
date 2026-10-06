@@ -35,7 +35,7 @@ project). Re-scan before each release:
 | Group integrity: atomic create, 6-character invite codes from a 32-character alphabet, exact-match join, 50-member cap, admin-only rotate/remove (removing a member also replaces the invite code, so the removed member cannot rejoin with it), admin hand-off under row locks | `create_group`, `join_group`, `rotate_invite_code`, `remove_group_member`, `leave_group` | rls.sql I; concurrency races in `supabase/tests/local/race-*.sql` |
 | Immutable meetup ownership and crew; picks must match their set's festival | Column-scoped triggers | rls.sql F, G |
 | Disallowed-word filter on names, crew names, meetup title/notes (insert and change only, never on cascades) | Triggers + `private.contains_disallowed_text`, list in `public.moderation_terms` (009) | rls.sql D, G; `apps/admin-tools/test/terms.test.ts` |
-| Rate limits: crew creation 10/day, reports 20/day, 11th wrong invite in an hour refused, demo login 20/h per IP and 30/h global | `private.check_rate_limit` (advisory lock per key) | rls.sql I, K, M; `supabase/functions/demo-login/handler_test.ts` |
+| Rate limits: crew creation 10/day, reports 20/day, meetups 30/h per user and 100 per user per crew (`meetups_insert_limits`, profile-JWT inserts only), invite guessing: 11th wrong code per account in an hour refused, and once 200 wrong codes land project-wide in the last hour (`join_group:global`, counted without a lock) profiles younger than 7 days cannot guess and older ones get 3 failures an hour; demo login 20/h per IP and 30/h global. Residual risk: 6-character codes (32^6) never expire; 8 characters or a TTL on `invite_code_rotated_at` is a v1.1 option (needs mobile input and contract changes) | `private.check_rate_limit` (advisory lock per key) | rls.sql I (I37–I41), G21–G24, K, M; `supabase/functions/demo-login/handler_test.ts` |
 | Only published festivals visible; catalog read-only | RLS on festivals/stages/sets; draft-by-default; `festivals_published_requires_source` | rls.sql B |
 | Migrations safe on a dirty hosted database and idempotent | 006–009 | `npm run db:test` (dirty fixture, re-apply of 007–009, partial-history scenarios) |
 | No `storage.*` DDL/DML in migrations except the isolated 008 | `scripts/db-test.sh` guard | `npm run db:test` |
@@ -45,7 +45,7 @@ project). Re-scan before each release:
 | Control | Implementation | Tests |
 |---|---|---|
 | Private `totems` bucket, 5 MiB, `image/jpeg` only | 008 | rls.sql L |
-| Restrictive guard: read only as a member of the folder's crew who has no block in either direction with the meetup's creator or the uploader (`private.can_view_totem`); upload only for your own meetup in that crew (`private.can_upload_totem`); delete by owner or crew admin; no updates; `upsert: false` | 008 policies | rls.sql L, J6a, J8a, J8b |
+| Restrictive guard: read only as a member of the folder's crew who has no block in either direction with the meetup's creator or the uploader (`private.can_view_totem`); upload only for your own meetup in that crew, at most 5 objects per meetup folder (`private.can_upload_totem`); delete by owner or crew admin unless an open or reviewed photo report points at the object (`private.is_reported_totem`, so evidence survives until moderation); no updates; `upsert: false` | 008 policies | rls.sql L (L10a, L10b, L15a–L15c), J6a, J8a, J8b |
 | Reads only via 1-hour signed URLs | `getTotemSignedUrl` in `packages/data-access/src/media.ts` | `packages/data-access/test/meetups-totems.test.ts` |
 | Metadata stripped before upload (EXIF via piexif plus XMP/IPTC/comment segments) | `stripJpegMetadata` | `packages/data-access/test/groups-schedule.test.ts` |
 | Storage schema not exposed through the API | `[api] schemas = ["public", "graphql_public"]` in `supabase/config.toml` (applied with `supabase config push`) | Manual check, runbook §2.8 |
@@ -68,7 +68,10 @@ project). Re-scan before each release:
   under `[auth.hook.custom_access_token]`) refuses every token requested with a password (rls.sql M13–M15;
   the hook and confirmations are enabled on hosted per runbook §2.8). At most one code email
   per address per 60 seconds (`[auth.email] max_frequency`, verified on the hosted project in runbook
-  §2.8) and 200 emails per hour project-wide (`email_sent`).
+  §2.8) and 200 emails per hour project-wide (`email_sent`). That budget is shared by the whole project:
+  until sign-in sends a CAPTCHA token (a Turnstile `[auth.captcha]` block is ready, commented out, in
+  `supabase/config.toml`), one client rotating addresses can use it up and stop code emails for everyone
+  for the rest of the hour. Known gap; runbook §2.7 and §9 cover sizing and detection.
 - Refresh-token rotation on; access tokens expire after 3600 s. A ban takes effect at once even for
   tokens already issued: `private.is_banned()` makes `current_app_user_id()` null and `require_profile`
   raise `not_authenticated` while `auth.users.banned_until` is in the future (rls.sql P2–P5).

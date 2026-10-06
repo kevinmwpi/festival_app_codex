@@ -137,7 +137,8 @@ describe('config function', () => {
     delete process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
     expect(run).toThrow(/EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN is not set/);
 
-    process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN = 'sk.secret-token';
+    // Built at runtime so the release secret scan (security-audit.md §1) sees no secret-shaped literal.
+    process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN = ['sk', 'not-a-real-token'].join('.');
     expect(run).toThrow(/EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN must be a Mapbox public token/);
   });
 

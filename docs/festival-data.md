@@ -220,7 +220,10 @@ Users report profiles, groups, meetups and photos in the app (reasons: spam, har
 sexual, violence, impersonation, other) and are told "we'll review this within 24 hours". Reports
 are only writable through the `report_content` RPC (rate limited to 20 per user per day) and store
 a snapshot of the reported text at report time. Users can also block each other (blocked users'
-meetups, picks and locations disappear for both) and group admins can remove members.
+meetups, picks and locations disappear for both) and group admins can remove members (which also
+deletes the removed member's meetups in that crew). Every new block also files an open report with
+target `block` (snapshot = the blocked user's display name, one per blocker and blocked user, not
+counted against the reporter's daily budget), so blocks show up in `reports:list` too.
 
 **Daily review**
 
@@ -233,10 +236,18 @@ Each entry shows the target, the snapshot, details and the reporter. Then act:
 
 - `npm run admin -- reports:remove-content <report_id> --dry-run` then without `--dry-run`:
   - `meetup` → deletes the meetup and its totem photo;
-  - `photo` → deletes the photo from storage and clears `meetups.totem_path`;
+  - `photo` → deletes the **reported** photo (the report's snapshot path) from storage, even if the
+    meetup is gone or now shows another photo, and clears `meetups.totem_path` only if it still points
+    at that photo. If the meetup now shows a different, unreviewed photo, the plan prints a `WARNING`
+    line (also with `--dry-run`) and leaves it alone. Users cannot delete a photo while an open or
+    reviewed report points at it, and `storage:sweep-orphans` keeps it, so the evidence survives until
+    you act;
   - `group` → renames the group to "My crew";
   - `user` → resets the display name to "Festie user" and the avatar to initials;
-  - then every open/reviewed report about the same target is marked `actioned`.
+  - `block` → nothing to remove; it only marks the block notice `actioned` (use `users:ban` if the
+    blocked user broke the Terms);
+  - then every open/reviewed report about the same target (for a photo: with the same snapshot path)
+    is marked `actioned`.
   Storage is removed before rows, so a failed run can be retried safely.
 - `npm run admin -- users:ban <user_id> [--dry-run]` (profile id or auth user id) for repeat or
   severe abuse: bans the auth user for 100 years (`ban_duration: 876000h`; sign-in and token refresh
@@ -245,7 +256,7 @@ Each entry shows the target, the snapshot, details and the reporter. Then act:
   their group memberships and location rows with the same admin hand-off rules as leaving a group,
   gives every crew they were in a new invite code, deletes their meetups and returns every photo path
   to remove (their uploads, their meetups' photos and those of crews that became empty); the command
-  removes those files and marks reports about them `actioned`. If storage removal fails, run it again
+  removes those files and marks `user` and `block` reports about them `actioned`. If storage removal fails, run it again
   (each step is idempotent). Their profile stays for the record.
 - No action needed: set the report's `status` to `dismissed` (or `reviewed`) in the table editor.
 

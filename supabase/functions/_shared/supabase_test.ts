@@ -8,21 +8,21 @@ function envOf(vars: Record<string, string>): (name: string) => string | undefin
 
 Deno.test('resolveServiceKey prefers the default entry of SUPABASE_SECRET_KEYS', () => {
   const env = envOf({
-    SUPABASE_SECRET_KEYS: JSON.stringify({ default: 'sb_secret_new', other: 'sb_secret_other' }),
+    SUPABASE_SECRET_KEYS: JSON.stringify({ default: 'test-secret-key-new', other: 'test-secret-key-other' }),
     SUPABASE_SERVICE_ROLE_KEY: 'legacy.jwt.value',
   });
-  assertEquals(resolveServiceKey(env), 'sb_secret_new');
+  assertEquals(resolveServiceKey(env), 'test-secret-key-new');
 });
 
 Deno.test('resolveServiceKey works when only the new secret keys are injected (legacy keys disabled)', () => {
-  const env = envOf({ SUPABASE_SECRET_KEYS: '{"default":"sb_secret_only"}' });
-  assertEquals(resolveServiceKey(env), 'sb_secret_only');
+  const env = envOf({ SUPABASE_SECRET_KEYS: '{"default":"test-secret-key-only"}' });
+  assertEquals(resolveServiceKey(env), 'test-secret-key-only');
 });
 
 Deno.test('resolveServiceKey falls back to the legacy SUPABASE_SERVICE_ROLE_KEY', () => {
   assertEquals(resolveServiceKey(envOf({ SUPABASE_SERVICE_ROLE_KEY: 'legacy.jwt.value' })), 'legacy.jwt.value');
   // Present but unusable secret-key maps fall back too.
-  const unusable = ['', 'not json', '[]', 'null', '{}', '{"default":""}', '{"default":42}', '{"named":"sb_secret_x"}'];
+  const unusable = ['', 'not json', '[]', 'null', '{}', '{"default":""}', '{"default":42}', '{"named":"test-secret-key-x"}'];
   for (const raw of unusable) {
     assertEquals(
       resolveServiceKey(envOf({ SUPABASE_SECRET_KEYS: raw, SUPABASE_SERVICE_ROLE_KEY: 'legacy.jwt.value' })),
@@ -39,7 +39,7 @@ Deno.test('resolveServiceKey returns null when no key is available', () => {
 
 Deno.test('createServiceClient builds a client from either key and throws without one', () => {
   const url = 'https://example.supabase.co';
-  const secretKeys = '{"default":"sb_secret_x"}';
+  const secretKeys = '{"default":"test-secret-key-x"}';
   createServiceClient(envOf({ SUPABASE_URL: url, SUPABASE_SECRET_KEYS: secretKeys }));
   createServiceClient(envOf({ SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: 'legacy.jwt.value' }));
   assertThrows(() => createServiceClient(envOf({ SUPABASE_URL: url })), Error, 'must be set');

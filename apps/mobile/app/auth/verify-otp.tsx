@@ -301,7 +301,8 @@ const styles = StyleSheet.create({
   },
   links: {
     alignItems: 'center',
-    gap: spacing.md,
+    // TextLink is 20pt tall with 12pt hitSlop above and below: 24pt apart, the touch areas don't overlap.
+    gap: spacing.xl,
     marginTop: spacing.xs,
   },
   helper: {

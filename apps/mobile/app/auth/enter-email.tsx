@@ -91,7 +91,7 @@ export default function EnterEmailScreen() {
             <PrimaryButton
               disabled={!looksValid}
               loading={loading}
-              label="Enter Festival"
+              label="Email me a code"
               onPress={() => void handleSubmit()}
               accentColor={AUTH_ACCENT}
             />

@@ -31,7 +31,7 @@ const TAB_CONFIG: Record<string, { icon: IoniconName; iconFocused: IoniconName; 
   festivals: { icon: 'flag-outline',          iconFocused: 'flag',           label: 'Fests'    },
   lineup:    { icon: 'musical-notes-outline', iconFocused: 'musical-notes',  label: 'Lineup'   },
   schedule:  { icon: 'calendar-outline',      iconFocused: 'calendar',       label: 'Schedule' },
-  group:     { icon: 'people-outline',        iconFocused: 'people',         label: 'Group'    },
+  group:     { icon: 'people-outline',        iconFocused: 'people',         label: 'Crews'    },
   map:       { icon: 'map-outline',           iconFocused: 'map',            label: 'Map'      },
 };
 
@@ -92,7 +92,7 @@ export default function TabLayout() {
       <Tabs.Screen name="festivals" options={{ title: 'Fests',    tabBarIcon: ({ focused }) => <TabIcon name="festivals" focused={focused} /> }} />
       <Tabs.Screen name="lineup"    options={{ title: 'Lineup',   tabBarIcon: ({ focused }) => <TabIcon name="lineup"    focused={focused} /> }} />
       <Tabs.Screen name="schedule"  options={{ title: 'Schedule', tabBarIcon: ({ focused }) => <TabIcon name="schedule"  focused={focused} /> }} />
-      <Tabs.Screen name="group"     options={{ title: 'Group',    tabBarIcon: ({ focused }) => <TabIcon name="group"     focused={focused} /> }} />
+      <Tabs.Screen name="group"     options={{ title: 'Crews',    tabBarIcon: ({ focused }) => <TabIcon name="group"     focused={focused} /> }} />
       <Tabs.Screen name="map"       options={{ title: 'Map',      tabBarIcon: ({ focused }) => <TabIcon name="map"       focused={focused} /> }} />
       <Tabs.Screen name="index" options={{ href: null }} />
     </Tabs>

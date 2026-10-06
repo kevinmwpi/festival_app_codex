@@ -48,8 +48,17 @@ export function invalidateGroupQueries(queryClient: QueryClient): Promise<void> 
   ]).then(() => undefined);
 }
 
-/** After a block/unblock: the blocked user's meetups, picks and positions disappear everywhere. */
-export function invalidateAfterBlockChange(queryClient: QueryClient): Promise<void> {
+/**
+ * After a block/unblock: the blocked user's meetups, picks and positions disappear everywhere. Pass
+ * `blockedUserId` after a block: their cached position is removed at once, since the map's refetch
+ * needs the network (and while it is in flight the cached rows would still render).
+ */
+export function invalidateAfterBlockChange(queryClient: QueryClient, blockedUserId?: string): Promise<void> {
+  if (blockedUserId) {
+    queryClient.setQueriesData<ReadonlyArray<{ user_id: string }>>({ queryKey: ['friend-locations'] }, (rows) =>
+      rows?.filter((row) => row.user_id !== blockedUserId),
+    );
+  }
   return Promise.all([
     invalidateGroupQueries(queryClient),
     invalidateSelectionQueries(queryClient),

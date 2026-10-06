@@ -310,7 +310,7 @@ const CONTENT: Block[] = [
       },
       {
         "kind": "text",
-        "text": " We store who you have blocked. The person you block is not told."
+        "text": " We store who you have blocked. The person you block is not told. Blocking someone also sends us a moderation notice, stored like a report, with their display name at that moment and a crew you share, so we can check whether they broke our Terms of Use."
       }
     ]
   },
@@ -760,7 +760,7 @@ const CONTENT: Block[] = [
       },
       {
         "kind": "text",
-        "text": " they stay visible to that crew until a crew admin removes them or you delete your account."
+        "text": " they stay visible to that crew until a crew admin removes them or you delete your account. If a crew admin removes you from a crew, your meetups in that crew are deleted."
       }
     ]
   },
@@ -786,7 +786,7 @@ const CONTENT: Block[] = [
       },
       {
         "kind": "text",
-        "text": " deleted when you replace them or delete the meetup. Photo files left behind, for example by a deleted crew or an interrupted upload, are removed by routine cleanup within about a week."
+        "text": " deleted when you replace them or delete the meetup, except a photo someone has reported: it is kept until we finish reviewing the report, and then deleted if it is no longer used (deleting your account still deletes it straight away). Photo files left behind, for example by a deleted crew or an interrupted upload, are removed by routine cleanup within about a week."
       }
     ]
   },
@@ -795,7 +795,7 @@ const CONTENT: Block[] = [
     "spans": [
       {
         "kind": "bold",
-        "text": "Reports:"
+        "text": "Reports and block notices:"
       },
       {
         "kind": "text",

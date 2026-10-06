@@ -76,7 +76,6 @@ function MemberRow({
         name={member.user?.display_name}
         avatarType={member.user?.avatar_type}
         avatarValue={member.user?.avatar_value}
-        colorKey={member.user_id}
         muted={member.is_blocked}
       />
       <View style={styles.memberInfo}>
@@ -307,7 +306,7 @@ export default function GroupDetailScreen() {
               setBusyMemberId(member.user_id);
               void runCrewAction(async () => {
                 await blockUser(member.user_id);
-                await invalidateAfterBlockChange(queryClient);
+                await invalidateAfterBlockChange(queryClient, member.user_id);
                 showToast(`${name} is blocked.`);
               }).finally(() => setBusyMemberId(null));
             },

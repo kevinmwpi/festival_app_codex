@@ -13,12 +13,11 @@ export function ScreenHeader({ crumbs, right }: { crumbs: Array<string | null | 
   return (
     <View style={styles.header}>
       <View style={styles.titleRow}>
-        <Text style={styles.wordmark} accessibilityRole="header">
-          Festie
-        </Text>
+        {/* Brand only: the breadcrumb below is the screen's heading. */}
+        <Text style={styles.wordmark}>Festie</Text>
         {right ? <View style={styles.right}>{right}</View> : null}
       </View>
-      <View style={styles.breadcrumb} accessible accessibilityLabel={parts.join(', ')}>
+      <View style={styles.breadcrumb} accessible accessibilityRole="header" accessibilityLabel={parts.join(', ')}>
         {parts.map((crumb, index) => (
           <React.Fragment key={`${crumb}-${index}`}>
             {index > 0 ? <Text style={styles.separator}>›</Text> : null}

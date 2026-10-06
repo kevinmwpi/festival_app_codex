@@ -58,7 +58,7 @@ Festie is a festival planning app operated by __LEGAL_NAME__ ("Festie", "we", "u
 ### Reports and blocks
 
 - **Reports.** When you report a person, crew, meetup or photo, we store the reason you chose, any details you add (up to 500 characters), what you reported, a copy of the reported text at that moment (for example a name or meetup title) and that the report came from your account. The person you report is not told who reported them.
-- **Blocks.** We store who you have blocked. The person you block is not told.
+- **Blocks.** We store who you have blocked. The person you block is not told. Blocking someone also sends us a moderation notice, stored like a report, with their display name at that moment and a crew you share, so we can check whether they broke our Terms of Use.
 
 ### Technical information
 
@@ -127,10 +127,10 @@ We disclose information to authorities only if the law requires it or where nece
 - **Live location:** visible to your crew for at most 15 minutes after the last update, then deleted. Turning sharing off (while online), leaving the crew or being removed deletes it immediately.
 - **Rate-limit records:** about a day after they are created.
 - **Account, profile, picks, followed festivals, crews, meetups, photos and blocks:** until you delete them or delete your account.
-- **Meetups in a crew you leave:** they stay visible to that crew until a crew admin removes them or you delete your account.
+- **Meetups in a crew you leave:** they stay visible to that crew until a crew admin removes them or you delete your account. If a crew admin removes you from a crew, your meetups in that crew are deleted.
 - **Crews:** deleted automatically, with their meetups, when the last member leaves. Their photos are deleted with them when the last member deletes their account, and otherwise by routine cleanup within about a week.
-- **Totem photos:** deleted when you replace them or delete the meetup. Photo files left behind, for example by a deleted crew or an interrupted upload, are removed by routine cleanup within about a week.
-- **Reports:** kept as a moderation record. If you delete your account, reports you sent are kept without your name. Reports about you or your content keep the copy of the reported text taken at the time.
+- **Totem photos:** deleted when you replace them or delete the meetup, except a photo someone has reported: it is kept until we finish reviewing the report, and then deleted if it is no longer used (deleting your account still deletes it straight away). Photo files left behind, for example by a deleted crew or an interrupted upload, are removed by routine cleanup within about a week.
+- **Reports and block notices:** kept as a moderation record. If you delete your account, reports you sent are kept without your name. Reports about you or your content keep the copy of the reported text taken at the time.
 - **Banned accounts:** if we ban an account for breaking our Terms of Use, we remove it from every crew and delete its meetups, totem photos and shared location. We keep its profile, sign-in account and email address, and any other content it posted that we have not removed, as a record of the ban and to stop it signing in again.
 - **Sign-in logs:** at most 90 days, then deleted automatically, including after you delete your account. The record of a sign-in session (its IP address and device information) is kept while the session can be used, and deleted when you sign out on that device while online or delete your account.
 - **Logs and backups:** our hosting provider keeps other operational logs, such as server request logs, for at most 90 days, and database backups for a limited period. Deleted information can remain in backups until they expire.

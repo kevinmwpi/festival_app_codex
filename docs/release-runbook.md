@@ -129,8 +129,13 @@ run locally (§1.2, §8.1).
      the anon key (by rotating the JWT secret, or by moving to the new API keys and disabling the legacy
      ones). That invalidates the anon key in every existing build, which is why it happens before §5.
      Put the new secret key in `.env` and use the new anon / publishable key in §5.1.
-   Edge functions receive the current `SUPABASE_SERVICE_ROLE_KEY` from Supabase automatically; nothing
-   to update there.
+   Edge functions need no change for either route: Supabase injects the new secret keys as
+   `SUPABASE_SECRET_KEYS` (a JSON map; the functions use its `default` entry) and the legacy key as
+   `SUPABASE_SERVICE_ROLE_KEY`, and `supabase/functions/_shared/supabase.ts` prefers the secret key and
+   falls back to the legacy one. Prefer the new-keys route: create a secret key for `.env` and use the
+   **publishable** key as `EXPO_PUBLIC_SUPABASE_ANON_KEY` in §5.1. After disabling the legacy keys,
+   redeploy the functions (§2.10), re-run the §2.10 demo-login smoke test and run one real Settings →
+   Delete account on a throwaway account.
 3. Check that no other place (CI secrets, old `.env` files, notes) still holds the old key.
 
 ### 2.4 Link and inspect the migration history
@@ -208,6 +213,11 @@ limited, so App Review and real users would never receive a code. Configure your
    username, password. Save.
 5. After §2.8, request a code for an address outside your Supabase team from a development or preview
    build and check that it arrives in the inbox, not spam.
+6. Size the SMTP plan for the expected peak of sign-ins. `email_sent = 200` (§2.8) is one budget for
+   the whole project per hour, not per user: until sign-in sends a CAPTCHA token (the `[auth.captcha]`
+   block in `supabase/config.toml` stays commented out until the app does), one client rotating
+   addresses can use it up and block every sign-in for the rest of the hour (a known gap,
+   [`legal/security-audit.md`](./legal/security-audit.md)).
 
 ### 2.8 Push the auth/API configuration
 
@@ -404,7 +414,8 @@ Totem photos of deleted crews become orphans; remove them 24 hours later with
    npx supabase secrets list      # shows the names (digests only)
    ```
 
-   `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided to functions by Supabase automatically.
+   `SUPABASE_URL` and the server key (`SUPABASE_SECRET_KEYS`, or the legacy `SUPABASE_SERVICE_ROLE_KEY`;
+   see §2.3) are provided to functions by Supabase automatically.
    Unsetting either demo secret (or an invalid code) turns demo login off: the function then answers 404.
 
 3. Deploy both functions (`verify_jwt` comes from `supabase/config.toml`: on for `delete-account`, off for
@@ -540,7 +551,9 @@ seed as draft → check against the source → publish). Then spot-check its tim
 
 `npm run admin -- storage:sweep-orphans --dry-run`, review, then run it without `--dry-run`. It deletes
 totem photos that no meetup references and that are older than 24 hours (photos left behind when an app
-was killed mid-replace, by deleted crews, or by §2.9). Run it weekly and 24 hours after §2.9.
+was killed mid-replace, by deleted crews, or by §2.9). It keeps photos that an open or reviewed photo
+report points at, even if the uploader replaced them or deleted the meetup, until the report is resolved
+(§8.1). Run it weekly and 24 hours after §2.9.
 
 ### 3.3 Demo content before every App Review submission
 
@@ -620,7 +633,7 @@ them while EAS CLI resolves the config.
 | `EXPO_PUBLIC_PRIVACY_POLICY_URL` | yes | `__PRIVACY_POLICY_URL__`, https (hosted `privacy.html`, §4) |
 | `EXPO_PUBLIC_SUPPORT_URL` | yes | `__SUPPORT_URL__`, https (hosted `support.html`, §4) |
 | `EXPO_PUBLIC_TERMS_URL` | no | Hosted `terms.html`; without it the app shows the in-app Terms screen |
-| `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` | no, but needed for the map | Mapbox **public** token (`pk.…`); `sk.` tokens are rejected. Without it the app shows the list fallback |
+| `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` | yes (preview/production builds refuse to start without a `pk.` token) | Mapbox **public** token (`pk.…`); `sk.` tokens are rejected |
 
 ```sh
 cd apps/mobile
@@ -836,6 +849,8 @@ Legal text is not legal advice; have it reviewed if you can.
 - [ ] If the legal text changed materially since a build that testers accepted, `TERMS_VERSION` in
       `apps/mobile/src/config/app-info.ts` was bumped so everyone agrees again.
 - [ ] EAS environment variables set for production; the production build succeeded (§5.1–5.3).
+- [ ] `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` (`pk.…`) set for the preview and production EAS environments;
+      the Map tab renders the map, not the list fallback (§5.2).
 - [ ] **First TestFlight upload has no ITMS-91053**; Info.plist checked; no local-network prompt; privacy
       manifests reconciled with [`app-store-privacy.md`](./app-store-privacy.md); **Mapbox sends no
       telemetry beyond billing events**, and a user's opt-in from the map's (i) menu is reset at the next
@@ -862,7 +877,11 @@ write with `--dry-run` first.
 
 - **Every day:** `npm run admin -- reports:list` and act on each open report within 24 hours
   (`reports:remove-content <report_id>`, `users:ban <user_id>`, or dismiss in the table editor), as
-  described in [`festival-data.md`](./festival-data.md) section 6.
+  described in [`festival-data.md`](./festival-data.md) section 6. Every new block also appears as a
+  report with target `block`: close it with `reports:remove-content <id>` (it only marks it actioned) or
+  `users:ban`. `reports:remove-content` on a photo report deletes the reported photo, not the meetup's
+  current one, and prints a `WARNING` when they differ. Users cannot delete a reported photo, so it
+  stays until you act.
 - **Weekly:** `npm run admin -- storage:sweep-orphans --dry-run`, then without `--dry-run` (§3.2). The
   privacy policy promises that photo files of deleted crews and meetups are removed "within about a
   week", so do not skip it.
@@ -1012,6 +1031,9 @@ deletion script against an unreachable URL to check that it loads from the repos
 ## 9. After release
 
 - Daily: moderation queue (§8.1). Weekly: orphaned-photo sweep (§3.2). Data requests within 30 days (§8.2).
+- Daily, and whenever someone says the code email never came: Supabase dashboard → Logs → Auth, search
+  for `email rate limit exceeded`. Hits mean the project-wide `email_sent` budget ran out (§2.7 step 6);
+  raise it with the SMTP plan or ship the CAPTCHA.
 - Keep festival schedules current from their sources ([`festival-data.md`](./festival-data.md) section 4).
 - Before every new submission: repeat §3.3 and the relevant [`qa-checklist.md`](./qa-checklist.md)
   sections.
