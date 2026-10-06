@@ -69,7 +69,7 @@ Festie is a festival planning app operated by __LEGAL_NAME__ ("Festie", "we", "u
 
 ### On your phone
 
-- To work offline at a festival, Festie keeps your sign-in session, a copy of your schedule, crews and meetups, changes waiting to sync, your reminders and your settings in the app's private storage on your phone, which iOS protects with its standard data protection. Signing out or deleting your account removes your account data from the phone; deleting the app removes everything.
+- To work offline at a festival, Festie keeps your sign-in session, a copy of your schedule, crews and meetups, changes waiting to sync, your reminders and your settings in the app's private storage on your phone, which iOS protects with its standard data protection. Signing out or deleting your account in the app removes your account data from the phone. If you are signed out without doing it yourself (for example, your sign-in expires or you deleted your account on another device), Festie keeps that copy, including changes not yet synced, so nothing is lost: it cannot be viewed while you are signed out, and it is removed when you sign in again and then sign out, when a different account (including a new one after a deletion) signs in on the phone, or when you delete the app. Deleting the app removes everything.
 - Set and meetup reminders are scheduled on your phone as local notifications. We do not use push notification servers.
 
 ## 2. What we do not collect
@@ -101,7 +101,7 @@ If you are in the European Economic Area or the United Kingdom, we rely on these
 
 ### Your crews
 
-Members of a crew see your display name and avatar, your picks for that crew's festival, the meetups and totem photos you post in that crew and, while you share it with that crew, your location. If you block someone, or they block you, neither of you sees the other's location, meetups or picks.
+Members of a crew see your display name and avatar, your picks for that crew's festival, the meetups and totem photos you post in that crew and, while you share it with that crew, your location. If you block someone, or they block you, neither of you sees the other's location, meetups (including their totem photos) or picks.
 
 ### Us
 
@@ -131,7 +131,7 @@ We disclose information to authorities only if the law requires it or where nece
 - **Crews:** deleted automatically, with their meetups, when the last member leaves. Their photos are deleted with them when the last member deletes their account, and otherwise by routine cleanup within about a week.
 - **Totem photos:** deleted when you replace them or delete the meetup. Photo files left behind, for example by a deleted crew or an interrupted upload, are removed by routine cleanup within about a week.
 - **Reports:** kept as a moderation record. If you delete your account, reports you sent are kept without your name. Reports about you or your content keep the copy of the reported text taken at the time.
-- **Banned accounts:** if we ban an account for breaking our Terms of Use, we keep its profile, sign-in account and email address, and the content it posted that we have not removed, as a record of the ban and to stop it signing in again.
+- **Banned accounts:** if we ban an account for breaking our Terms of Use, we remove it from every crew and delete its meetups, totem photos and shared location. We keep its profile, sign-in account and email address, and any other content it posted that we have not removed, as a record of the ban and to stop it signing in again.
 - **Sign-in logs:** at most 90 days, then deleted automatically, including after you delete your account. The record of a sign-in session (its IP address and device information) is kept while the session can be used, and deleted when you sign out on that device while online or delete your account.
 - **Logs and backups:** our hosting provider keeps other operational logs, such as server request logs, for at most 90 days, and database backups for a limited period. Deleted information can remain in backups until they expire.
 

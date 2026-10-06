@@ -203,12 +203,13 @@ export default function VerifyOtpScreen() {
               </Text>
             ) : (
               <TextLink
+                align="center"
                 label={resending ? 'Sending…' : 'Resend code'}
                 accessibilityLabel={`Resend code to ${email}`}
                 onPress={() => void handleResend()}
               />
             )}
-            <TextLink label="Use a different email" onPress={handleChangeEmail} />
+            <TextLink align="center" label="Use a different email" onPress={handleChangeEmail} />
           </View>
         </View>
       </ScrollView>

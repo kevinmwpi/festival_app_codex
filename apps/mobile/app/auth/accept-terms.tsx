@@ -5,7 +5,7 @@
  * here until they agree; the app's tabs stay closed until then.
  */
 import { colors, InlineMessage, PrimaryButton, radii, spacing, TextLink, typography } from '@festival/ui';
-import { Redirect } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -81,7 +81,12 @@ export default function AcceptTermsScreen() {
         <InlineMessage message={error} />
         <PrimaryButton label="Continue" disabled={!agreed || signingOut} onPress={handleContinue} />
         <View style={styles.signOutRow}>
-          <TextLink label={signingOut ? 'Signing out…' : 'Sign out'} onPress={signingOut ? () => undefined : handleSignOut} />
+          <TextLink align="center" label={signingOut ? 'Signing out…' : 'Sign out'} onPress={signingOut ? () => undefined : handleSignOut} />
+          <TextLink
+            align="center"
+            label="Delete my account"
+            onPress={signingOut ? () => undefined : () => router.push('/auth/delete-account')}
+          />
         </View>
       </View>
     </ScrollView>
@@ -126,5 +131,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: spacing.xl,
   },
-  signOutRow: { alignItems: 'center' },
+  signOutRow: { alignItems: 'center', gap: spacing.sm },
 });

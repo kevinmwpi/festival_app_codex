@@ -65,6 +65,8 @@ function RootShell() {
           <Stack.Protected guard={hasSession}>
             <Stack.Screen name="auth/profile-setup" options={{ gestureEnabled: false }} />
             <Stack.Screen name="auth/accept-terms" options={{ gestureEnabled: false }} />
+            {/* Deleting the account must not depend on agreeing to the terms (App Review 5.1.1(v)). */}
+            <Stack.Screen name="auth/delete-account" />
           </Stack.Protected>
           {/* Crew content opens only after this account explicitly agreed to the terms (§5.2, App
               Review 1.2) — on profile setup, or once on `auth/accept-terms` for existing accounts. */}
@@ -105,6 +107,7 @@ function ConfigErrorScreen({ detail }: { detail: string }) {
           {__DEV__ ? <Text style={styles.configDetail}>{detail}</Text> : null}
           {SUPPORT_EMAIL ? (
             <TextLink
+              align="center"
               label="Contact support"
               accessibilityLabel={`Contact support at ${SUPPORT_EMAIL}`}
               onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}`).catch(() => undefined)}

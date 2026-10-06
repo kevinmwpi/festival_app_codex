@@ -15,6 +15,7 @@ import { useMemo } from 'react';
 
 import { useAppStore } from '@/src/state/app-store';
 
+import { formatFestivalDayLabel, formatTimeFromDay } from './festival-time-labels';
 import { queryKeys } from './query-keys';
 import { useCacheFirstQuery } from './use-cache-first-query';
 
@@ -52,6 +53,16 @@ export interface FestivalClock {
   range: (startIso: string, endIso: string) => string;
   /** Formats a day key / date-only string / timestamp as a festival date. */
   date: (value: string, options?: Intl.DateTimeFormatOptions) => string;
+  /**
+   * The festival day a set or meetup belongs to (days run 06:00–06:00), matching the day tabs:
+   * `Fri`, or `Fri night` for a 1:00 AM set listed under Friday. Default options: short weekday.
+   */
+  day: (iso: string, options?: Intl.DateTimeFormatOptions) => string;
+  /**
+   * `2:00 PM` when `iso` is on the same festival day as `reference` (epoch ms such as now, or another
+   * timestamp), else prefixed with its festival day: `Sat 2:00 PM`.
+   */
+  timeFrom: (iso: string, reference: string | number) => string;
 }
 
 /**
@@ -86,6 +97,8 @@ export function useFestivalClock(
       time: (iso: string) => formatFestivalTime(iso, timeZone),
       range: (startIso: string, endIso: string) => formatFestivalTimeRange(startIso, endIso, timeZone),
       date: (value: string, options?: Intl.DateTimeFormatOptions) => formatFestivalDate(value, timeZone, options),
+      day: (iso: string, options?: Intl.DateTimeFormatOptions) => formatFestivalDayLabel(iso, timeZone, options),
+      timeFrom: (iso: string, reference: string | number) => formatTimeFromDay(iso, reference, timeZone),
     };
   }, [endDate, startDate, timeZone]);
 }

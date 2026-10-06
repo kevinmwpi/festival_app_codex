@@ -45,6 +45,7 @@ import { useGroupDetail, useGroups } from '@/src/hooks/use-groups';
 import { useNow } from '@/src/hooks/use-now';
 import { useAddTotemPhoto } from '@/src/hooks/use-totem-photo';
 import { stopLocationSharingForGroup } from '@/src/location/LocationSharingProvider';
+import { cancelCrewReminders } from '@/src/notifications/crew-reminders';
 import { useAppStore } from '@/src/state/app-store';
 
 /** Meetups that started more than this long ago move under "Earlier". */
@@ -212,7 +213,12 @@ export default function GroupDetailScreen() {
   const upcoming = meetups.filter((meetup) => new Date(meetup.starts_at).getTime() >= now - MEETUP_GRACE_MS);
   const earlier = meetups.filter((meetup) => new Date(meetup.starts_at).getTime() < now - MEETUP_GRACE_MS).reverse();
 
-  // Keep meetup reminders in step (deleted meetups lose theirs; moved ones are rescheduled).
+  // Keep meetup reminders in step (deleted meetups lose theirs; moved ones are rescheduled). A crew that
+  // is gone from this device (removed, deleted, left elsewhere) loses all of them.
+  const crewGone = detail.data === null && !detail.isLoading;
+  React.useEffect(() => {
+    if (crewGone) void cancelCrewReminders(groupId);
+  }, [crewGone, groupId]);
   React.useEffect(() => {
     if (!festival || !detail.data) return;
     void syncMeetupReminders(
@@ -234,6 +240,7 @@ export default function GroupDetailScreen() {
   /** A crew call failed with not_group_member: data-access already purged it locally. */
   const handleRemovedFromCrew = React.useCallback(async () => {
     await stopLocationSharingForGroup(groupId);
+    await cancelCrewReminders(groupId);
     await invalidateGroupQueries(queryClient);
     if (selectedGroupId === groupId) setSelectedGroupId(null);
     showToast("You're no longer a member of this crew.");
@@ -439,9 +446,7 @@ export default function GroupDetailScreen() {
               try {
                 await stopLocationSharingForGroup(groupId);
                 await leaveGroup(groupId);
-                if (festival) {
-                  await syncMeetupReminders([], { timeZone: festival.timezone, groupId });
-                }
+                await cancelCrewReminders(groupId);
                 if (selectedGroupId === groupId) setSelectedGroupId(null);
                 await invalidateGroupQueries(queryClient);
                 showToast(`You left ${group.name}.`);
@@ -460,7 +465,7 @@ export default function GroupDetailScreen() {
         },
       ],
     );
-  }, [festival, group, groupId, handleRemovedFromCrew, queryClient, selectedGroupId, setSelectedGroupId]);
+  }, [group, groupId, handleRemovedFromCrew, queryClient, selectedGroupId, setSelectedGroupId]);
 
   /* Render */
 

@@ -96,6 +96,19 @@ export class DataAccessError extends Error {
   }
 }
 
+/**
+ * A reply that cannot have come from PostgREST, such as an empty 2xx/204 or an empty 404, which
+ * supabase-js reports as success with `data` and `count` null. Something between the app and Supabase
+ * (a proxy, WAF or captive network) answered, so it is reported like a connectivity failure (status 0,
+ * retryable) and never read as "no rows".
+ */
+export function unexpectedResponseError(status?: number | null): DataAccessError {
+  return new DataAccessError('Unexpected response from the server.', {
+    status: 0,
+    details: typeof status === 'number' && status > 0 ? `HTTP ${status}` : null,
+  });
+}
+
 /** App-level database error codes raised as `P0001` (§ Global conventions). */
 export type AppErrorCode =
   | 'not_authenticated'

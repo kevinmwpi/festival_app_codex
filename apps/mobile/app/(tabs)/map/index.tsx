@@ -24,6 +24,7 @@ import {
   IconButton,
   layout,
   radii,
+  showToast,
   spacing,
   useOfflineStatus,
 } from '@festival/ui';
@@ -33,7 +34,8 @@ import { onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/src/components/Avatar';
 import { ActionSheet, type SheetAction } from '@/src/components/BottomSheet';
@@ -50,7 +52,9 @@ import { useGroups } from '@/src/hooks/use-groups';
 import { formatAgo, useNow } from '@/src/hooks/use-now';
 import { OFFLINE_MAP_STYLE, useOfflinePack, type OfflinePackState } from '@/src/hooks/use-offline-pack';
 import { useUserKey } from '@/src/hooks/use-session';
-import { useLocationSharing } from '@/src/location/LocationSharingProvider';
+import { visibleFriendLocations } from '@/src/location/friend-visibility';
+import { cancelCrewReminders } from '@/src/notifications/crew-reminders';
+import { STOP_NOT_CONFIRMED_MESSAGE, useLocationSharing } from '@/src/location/LocationSharingProvider';
 import { useAppStore } from '@/src/state/app-store';
 
 const FRIEND_POLL_MS = 30_000;
@@ -72,22 +76,41 @@ function useMapGroup(festivalId: string | null) {
   return { groups: festivalGroups, allGroups: groups.data ?? [], group, select: setSelectedGroupId };
 }
 
-/** Whether foreground location is already granted (never prompts). Re-checked on focus. */
-function useLocationGranted(): boolean {
+/**
+ * Whether foreground location is granted (never prompts), so the own-location dot shows only with
+ * access (§5.6). Re-checked on focus, when the app returns to the foreground (a change in iOS Settings,
+ * an expired "Allow Once") and when the sharing status changes (a grant from the sharing sheet).
+ */
+function useLocationGranted(sharingStatus: string): boolean {
   const [granted, setGranted] = React.useState(false);
+  const latestCheck = React.useRef(0);
+  const check = React.useCallback(() => {
+    const id = ++latestCheck.current;
+    void Location.getForegroundPermissionsAsync()
+      .then((permission) => {
+        if (id === latestCheck.current) setGranted(permission.granted);
+      })
+      .catch(() => undefined);
+  }, []);
+
   useFocusEffect(
     React.useCallback(() => {
-      let active = true;
-      void Location.getForegroundPermissionsAsync()
-        .then((permission) => {
-          if (active) setGranted(permission.granted);
-        })
-        .catch(() => undefined);
+      check();
       return () => {
-        active = false;
+        // Ignore a check still in flight when the screen loses focus.
+        latestCheck.current += 1;
       };
-    }, []),
+    }, [check]),
   );
+  React.useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') check();
+    });
+    return () => subscription.remove();
+  }, [check]);
+  React.useEffect(() => {
+    check();
+  }, [check, sharingStatus]);
   return granted;
 }
 
@@ -109,7 +132,8 @@ function useFriendLocations(groupId: string | null) {
         return await getGroupLocations(groupId!);
       } catch (error) {
         if (isAppErrorCode(error, 'not_group_member')) {
-          // data-access purged the crew locally; refresh the crew lists.
+          // data-access purged the crew locally; drop its reminders and refresh the crew lists.
+          await cancelCrewReminders(groupId!);
           await invalidateGroupQueries(queryClient);
           return [];
         }
@@ -289,7 +313,7 @@ function FallbackLists({
                 <Text style={styles.listTitle}>{stage.name}</Text>
                 <Text style={styles.listSub}>
                   {next
-                    ? `Next: ${artistsById.get(next.artist_id) ?? 'TBA'} · ${clock.date(next.start_time, { weekday: 'short' })} ${clock.time(next.start_time)}`
+                    ? `Next: ${artistsById.get(next.artist_id) ?? 'TBA'} · ${clock.day(next.start_time)} ${clock.time(next.start_time)}`
                     : 'No more sets'}
                 </Text>
               </View>
@@ -359,13 +383,16 @@ export default function MapScreen() {
   const isOffline = useOfflineStatus();
   const now = useNow(30_000);
   const sharing = useLocationSharing();
-  const locationGranted = useLocationGranted();
+  const locationGranted = useLocationGranted(sharing.status);
+  const insets = useSafeAreaInsets();
 
   const { groups, allGroups, group, select } = useMapGroup(festivalId);
   const meetupsQuery = useMeetups(group?.id ?? null);
   const friendsQuery = useFriendLocations(group?.id ?? null);
   const meetups = meetupsQuery.data ?? NO_MEETUPS;
-  const friends = friendsQuery.data ?? NO_FRIENDS;
+  // The last poll stays cached offline or after an error: never show a position past its 15 minutes.
+  const friendsData = friendsQuery.data ?? NO_FRIENDS;
+  const friends = React.useMemo(() => visibleFriendLocations(friendsData, now), [friendsData, now]);
 
   const camera = festival ? getFestivalCamera(festival) : null;
   const showMap = isMapboxConfigured() && camera !== null;
@@ -475,7 +502,7 @@ export default function MapScreen() {
       const coordinate = getStageCoordinate(stage);
       if (!coordinate) return null;
       const next = getNextStageSet(stage.id, bundle.data!.sets, new Date(now));
-      const nextLabel = next ? `${artistsById.get(next.artist_id) ?? 'Next'} · ${clock.time(next.start_time)}` : null;
+      const nextLabel = next ? `${artistsById.get(next.artist_id) ?? 'Next'} · ${clock.timeFrom(next.start_time, now)}` : null;
       return { id: stage.id, name: stage.name, coordinate, nextLabel };
     })
     .filter((pin): pin is { id: string; name: string; coordinate: LngLat; nextLabel: string | null } => pin !== null);
@@ -545,9 +572,20 @@ export default function MapScreen() {
     controlsSheet === 'sharing'
       ? [
           ...(sharing.status === 'permission_denied'
-            ? [{ label: 'Open Settings', onPress: () => void Linking.openSettings() }]
+            ? [
+                sharing.canAskAgain
+                  ? { label: 'Allow location', onPress: () => void sharing.requestAccess() }
+                  : { label: 'Open Settings', onPress: () => void Linking.openSettings() },
+              ]
             : []),
-          { label: 'Stop sharing my location', destructive: true, onPress: () => void sharing.stop() },
+          {
+            label: 'Stop sharing my location',
+            destructive: true,
+            onPress: () =>
+              void sharing.stop().then((removed) => {
+                if (!removed) showToast(STOP_NOT_CONFIRMED_MESSAGE, 'error');
+              }),
+          },
         ]
       : controlsSheet === 'offline'
         ? offlineSheetActions
@@ -555,12 +593,14 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
+      {/* The root safe area insets the bottom of every screen; the map alone bleeds into the home
+          indicator area so no strip of background shows under the floating tab bar. */}
       <Mapbox.MapView
-        style={styles.map}
+        style={[styles.map, { bottom: -insets.bottom }]}
         styleURL={OFFLINE_MAP_STYLE}
         scaleBarEnabled={false}
-        logoPosition={{ bottom: layout.tabBarClearance + 4, left: 12 }}
-        attributionPosition={{ bottom: layout.tabBarClearance + 4, right: 12 }}
+        logoPosition={{ bottom: layout.tabBarClearance + insets.bottom + 4, left: 12 }}
+        attributionPosition={{ bottom: layout.tabBarClearance + insets.bottom + 4, right: 12 }}
       >
         <Mapbox.Camera
           ref={cameraRef}
@@ -580,7 +620,7 @@ export default function MapScreen() {
 
         {meetupPins.map((pin) => (
           <Mapbox.MarkerView key={`meetup-${pin.meetup.id}`} coordinate={pin.coordinate} anchor={{ x: 0.5, y: 1 }} allowOverlap>
-            <MeetupPin title={pin.meetup.title} time={clock.time(pin.meetup.starts_at)} />
+            <MeetupPin title={pin.meetup.title} time={clock.timeFrom(pin.meetup.starts_at, now)} />
           </Mapbox.MarkerView>
         ))}
 
@@ -683,7 +723,7 @@ export default function MapScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  map: { flex: 1 },
+  map: { left: 0, position: 'absolute', right: 0, top: 0 },
   statePad: { padding: spacing.lg },
   scroll: { flex: 1 },
   scrollContent: { gap: spacing.md, paddingBottom: layout.tabBarClearance, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },

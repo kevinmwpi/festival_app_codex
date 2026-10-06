@@ -39,7 +39,7 @@ Festival data
 Moderation
   reports:list [--status open|reviewed|actioned|dismissed|all] [--limit <n>] [--json]
   reports:remove-content <report_id> [--dry-run]   Delete the reported meetup/photo (or reset name) + mark actioned
-  users:ban <user_id> [--dry-run]                  Ban, remove memberships/locations, mark reports actioned
+  users:ban <user_id> [--dry-run]                  Ban, remove memberships/locations/content, new invite codes
   moderation:list-terms
   moderation:add-terms <term...> [--dry-run]
   moderation:remove-terms <term...> [--dry-run]
@@ -263,7 +263,7 @@ async function usersBan(args: string[]): Promise<void> {
     return;
   }
   const { removedObjects } = await banUser(client, target);
-  log(`Banned. Removed ${removedObjects} orphaned photo(s).`);
+  log(`Banned. Removed ${removedObjects} photo(s).`);
 }
 
 async function moderationListTerms(args: string[]): Promise<void> {

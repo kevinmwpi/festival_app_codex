@@ -37,7 +37,7 @@ function SetRow({
     <View style={[styles.setRow, accent ? { borderLeftColor: accent, borderLeftWidth: 3 } : null]}>
       <Text style={styles.artistName}>{artistName}</Text>
       <Text style={styles.setMeta}>
-        {`${stageName} · ${clock.date(startTime, { weekday: 'short' })} ${clock.range(startTime, endTime)}`.toUpperCase()}
+        {`${stageName} · ${clock.day(startTime)} ${clock.range(startTime, endTime)}`.toUpperCase()}
       </Text>
       {footer}
     </View>
@@ -205,7 +205,7 @@ export default function CombinedScheduleScreen() {
                   {meetup ? (
                     <View style={styles.meetupHint}>
                       <Text style={styles.meetupHintText}>
-                        📍 Next meetup: {meetup.title} at {clock.time(meetup.starts_at)}
+                        📍 Next meetup: {meetup.title} at {clock.timeFrom(meetup.starts_at, entry.row.start_time)}
                       </Text>
                     </View>
                   ) : null}

@@ -9,7 +9,16 @@
  * can read them while resolving this config) for the matching EAS environment; see
  * docs/release-runbook.md §5.1. Development builds and local runs never throw: the app shows its
  * configuration-error screen instead.
+ *
+ * The same builds also refuse to ship what App Review rejects outright (guidelines 2.1, 2.3.8, 5.1.1):
+ * the create-expo-app template icon or splash artwork, an app icon that is not a 1024×1024 PNG without
+ * alpha, and in-app Terms of Use / Privacy Policy screens that still contain `__PLACEHOLDER__` tokens
+ * (fill docs/legal/values.json and run `node docs/legal/generate.mjs --release`, runbook §4).
  */
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 const RELEASE_PROFILES = new Set(['preview', 'production']);
@@ -39,12 +48,32 @@ const RELEASE_REQUIREMENTS: Requirement[] = [
   { names: ['EXPO_PUBLIC_SUPPORT_URL'], check: isHttpsUrl, expectation: 'an https URL' },
 ];
 
+/** MD5 of the create-expo-app template images (SDK 52–55), keyed by their path in this project. */
+export const TEMPLATE_ARTWORK_MD5: Readonly<Record<string, string>> = {
+  'assets/images/icon.png': 'cb975bba2216ce10a60e6c0ffe9941a2',
+  'assets/images/splash-icon.png': '97dae5a0e62ad8551d8a31897b425e63',
+  'assets/images/android-icon-foreground.png': '72e71a9c846c6aa4ae32476641a00e18',
+  'assets/images/android-icon-background.png': '2d65569cc0e2afdcea0af9f9902d4173',
+  'assets/images/android-icon-monochrome.png': '1e097dab989759fc0b69440092ca22cd',
+  'assets/images/favicon.png': 'd9f444efbdfbe7931aa93beada07318a',
+};
+
+/** Bundled legal screens generated from docs/legal/*.md (docs/legal/generate.mjs). */
+export const BUNDLED_LEGAL_SCREENS = ['app/legal/terms-of-use.tsx', 'app/legal/privacy-policy.tsx'] as const;
+
+/** Same token syntax as docs/legal/generate.mjs. */
+const PLACEHOLDER = /__[A-Z][A-Z0-9_]*__/g;
+/** A template variable filled at runtime from EXPO_PUBLIC_SUPPORT_EMAIL, not a placeholder. */
+const RUNTIME_TOKENS = new Set(['__SUPPORT_EMAIL__']);
+
+const PNG_SIGNATURE = '89504e470d0a1a0a';
+
 function readEnv(name: string): string {
   return (process.env[name] ?? '').trim();
 }
 
 /** Human-readable problems with the release configuration; empty when everything is set. */
-function releaseConfigProblems(): string[] {
+export function releaseConfigProblems(): string[] {
   const problems: string[] = [];
   for (const requirement of RELEASE_REQUIREMENTS) {
     const label = requirement.names.join(' (or ') + (requirement.names.length > 1 ? ')' : '');
@@ -58,17 +87,102 @@ function releaseConfigProblems(): string[] {
   return problems;
 }
 
-export default ({ config }: ConfigContext): ExpoConfig => {
+/** Whether an ancillary chunk of `type` appears before the image data (where tRNS must be). */
+function pngHasChunkBeforeImageData(png: Uint8Array, type: string): boolean {
+  const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+  let offset = 8;
+  while (offset + 8 <= png.length) {
+    const length = view.getUint32(offset);
+    const chunk = String.fromCharCode(...png.subarray(offset + 4, offset + 8));
+    if (chunk === type) return true;
+    if (chunk === 'IDAT' || chunk === 'IEND') return false;
+    offset += 12 + length;
+  }
+  return false;
+}
+
+/** Template artwork still in place, and an App Store icon that is not a 1024×1024 PNG without alpha. */
+export function releaseArtworkProblems(
+  projectRoot: string,
+  iconPath = 'assets/images/icon.png',
+  templates: Readonly<Record<string, string>> = TEMPLATE_ARTWORK_MD5,
+): string[] {
+  const problems: string[] = [];
+  for (const [path, templateHash] of Object.entries(templates)) {
+    const file = join(projectRoot, path);
+    if (existsSync(file) && createHash('md5').update(readFileSync(file)).digest('hex') === templateHash) {
+      problems.push(`${path} is still the Expo template artwork; replace it with Festie artwork`);
+    }
+  }
+
+  const iconFile = join(projectRoot, iconPath.replace(/^\.\//, ''));
+  if (!existsSync(iconFile)) {
+    problems.push(`${iconPath} (the app icon) does not exist`);
+    return problems;
+  }
+  const png = readFileSync(iconFile);
+  // IHDR is always the first chunk: width (16–19), height (20–23), colour type (25).
+  if (png.length < 33 || png.subarray(0, 8).toString('hex') !== PNG_SIGNATURE) {
+    problems.push(`${iconPath} must be a PNG`);
+    return problems;
+  }
+  const width = png.readUInt32BE(16);
+  const height = png.readUInt32BE(20);
+  const colourType = png[25];
+  if (width !== 1024 || height !== 1024) {
+    problems.push(`${iconPath} must be 1024×1024 (it is ${width}×${height})`);
+  }
+  // 4 = grey + alpha, 6 = RGBA; a tRNS chunk adds transparency to the other types.
+  if (colourType === 4 || colourType === 6 || pngHasChunkBeforeImageData(png, 'tRNS')) {
+    problems.push(`${iconPath} must not have an alpha channel (App Store icons are opaque)`);
+  }
+  return problems;
+}
+
+/** `__PLACEHOLDER__` tokens left in the bundled legal screens (the runtime support-email token excepted). */
+export function legalPlaceholderProblems(projectRoot: string): string[] {
+  const problems: string[] = [];
+  for (const path of BUNDLED_LEGAL_SCREENS) {
+    const file = join(projectRoot, path);
+    if (!existsSync(file)) {
+      problems.push(`${path} is missing; run node docs/legal/generate.mjs`);
+      continue;
+    }
+    const tokens = [...new Set(readFileSync(file, 'utf8').match(PLACEHOLDER) ?? [])].filter((token) => !RUNTIME_TOKENS.has(token));
+    if (tokens.length > 0) {
+      problems.push(`${path} still contains ${tokens.sort().join(', ')}`);
+    }
+  }
+  return problems;
+}
+
+export default ({ config, projectRoot }: ConfigContext): ExpoConfig => {
   const profile = process.env.EAS_BUILD_PROFILE;
   if (profile && RELEASE_PROFILES.has(profile)) {
-    const problems = releaseConfigProblems();
-    if (problems.length > 0) {
-      throw new Error(
-        `Festie "${profile}" builds need their public runtime configuration:\n` +
-          problems.map((problem) => `  - ${problem}`).join('\n') +
-          `\nSet these as EAS environment variables for the "${profile}" environment ` +
-          '(see docs/release-runbook.md §5.1).',
-      );
+    const configProblems = releaseConfigProblems();
+    const contentProblems = [
+      ...releaseArtworkProblems(projectRoot, config.icon ?? undefined),
+      ...legalPlaceholderProblems(projectRoot),
+    ];
+    if (configProblems.length > 0 || contentProblems.length > 0) {
+      const sections: string[] = [];
+      if (configProblems.length > 0) {
+        sections.push(
+          `Festie "${profile}" builds need their public runtime configuration:\n` +
+            configProblems.map((problem) => `  - ${problem}`).join('\n') +
+            `\nSet these as EAS environment variables for the "${profile}" environment ` +
+            '(see docs/release-runbook.md §5.1).',
+        );
+      }
+      if (contentProblems.length > 0) {
+        sections.push(
+          `Festie "${profile}" builds can't ship placeholder content App Review rejects:\n` +
+            contentProblems.map((problem) => `  - ${problem}`).join('\n') +
+            '\nFill docs/legal/values.json and run `node docs/legal/generate.mjs --release` (docs/release-runbook.md §4), ' +
+            'and replace any template artwork in apps/mobile/assets/images/.',
+        );
+      }
+      throw new Error(sections.join('\n\n'));
     }
   }
 

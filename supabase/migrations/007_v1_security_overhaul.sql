@@ -1688,6 +1688,59 @@ begin
 end
 $$;
 
+-- admin-tools users:ban, after the auth user is banned. Everything
+-- prepare_account_deletion does (memberships with admin hand-off, empty crews,
+-- location rows), plus: every crew the user belonged to gets a new invite code
+-- (the banned person, or a friend's account, knows the old ones), and the
+-- user's meetups are deleted so their posts and photos leave every crew
+-- (reports keep their target_snapshot). Returns every photo path to remove:
+-- the user's uploads, their meetups' photos and those of crews that became
+-- empty. Idempotent: a re-run still returns the user's remaining uploads.
+create or replace function public.prepare_account_ban(p_auth_user_id uuid)
+returns table (storage_path text)
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+#variable_conflict use_column
+declare
+  v_profile_id uuid;
+  v_groups uuid[] := '{}';
+  v_group_id uuid;
+  v_paths text[];
+begin
+  if p_auth_user_id is null then
+    raise exception using errcode = 'P0001', message = 'invalid_input';
+  end if;
+
+  select u.id into v_profile_id from public.users u where u.auth_user_id = p_auth_user_id;
+
+  if v_profile_id is not null then
+    select coalesce(array_agg(m.group_id order by m.group_id), '{}') into v_groups
+    from public.group_members m
+    where m.user_id = v_profile_id;
+  end if;
+
+  -- Takes the group row locks (in id order) and keeps them until commit.
+  select coalesce(array_agg(d.storage_path), '{}') into v_paths
+  from public.prepare_account_deletion(p_auth_user_id) d;
+
+  foreach v_group_id in array v_groups loop
+    perform 1 from public.groups g where g.id = v_group_id for update;
+    if found then
+      perform private.replace_invite_code(v_group_id);
+    end if;
+  end loop;
+
+  if v_profile_id is not null then
+    delete from public.meetups mt where mt.created_by_user_id = v_profile_id;
+  end if;
+
+  return query select unnest(v_paths);
+end
+$$;
+
 create or replace function public.prepare_demo_account(p_auth_user_id uuid)
 returns void
 language plpgsql
@@ -2070,6 +2123,7 @@ to authenticated;
 -- Service role only.
 grant execute on function
   public.prepare_account_deletion(uuid),
+  public.prepare_account_ban(uuid),
   public.prepare_demo_account(uuid),
   public.purge_stale_locations(),
   public.purge_rate_limit_events(),

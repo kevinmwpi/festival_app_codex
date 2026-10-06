@@ -77,24 +77,30 @@ after creation; Mapbox tile requests sent directly by the device) is used only t
 requests and is not used to identify or profile users, so it is not declared as a data type. It is
 disclosed in the privacy policy.
 
-### Mapbox telemetry: unconfirmed on iOS until checked
+### Mapbox telemetry: off, re-checked on every release build
 
-These answers assume the Mapbox SDK sends no telemetry beyond its billing events. The app asks for that
-with `Mapbox.setTelemetryEnabled(false)` (`apps/mobile/src/providers/app-providers.tsx`), but on iOS
-`@rnmapbox/maps` 10.3.0 implements the call only by writing the legacy `MGLMapboxMetricsEnabled` user
-default (`node_modules/@rnmapbox/maps/ios/RNMBX/RNMBXModule.swift`; Android calls the SDK's telemetry API),
-and it has not been verified that Mapbox Maps SDK 11.18.2 still reads that key. If it does not, Mapbox's
-location and usage telemetry stays on and this page understates collection. Treat "telemetry off" as
-**unconfirmed** until the traffic check in [`release-runbook.md`](./release-runbook.md) §5.4 step 4 has
-passed on the build you submit. If it fails and the SDK's own opt-out cannot be wired in, add what Mapbox
-collects (at least a Location type with the Analytics purpose, not linked, no tracking) to the table above,
-and update the privacy policy and [`legal/data-compliance.md`](./legal/data-compliance.md) before
-answering App Privacy.
+These answers assume the Mapbox SDK sends no telemetry beyond its billing events. The app turns the
+optional telemetry off with `Mapbox.setTelemetryEnabled(false)` at startup
+(`apps/mobile/src/providers/app-providers.tsx`). On iOS `@rnmapbox/maps` 10.3.0 implements that by writing
+the `MGLMapboxMetricsEnabled` user default (`node_modules/@rnmapbox/maps/ios/RNMBX/RNMBXModule.swift`;
+Android calls the SDK's telemetry API). Mapbox Maps SDK 11.18.2, the version `app.json` pins, still honours
+that key: its `EventsManager` registers it with a default of `true`, observes it with
+`[.initial, .new]` and passes every value to `TelemetryUtils.setEventsCollectionStateForEnableCollection`
+([`EventsManager.swift` at v11.18.2](https://github.com/mapbox/mapbox-maps-ios/blob/v11.18.2/Sources/MapboxMaps/Foundation/Events/EventsManager.swift)). The SDK keeps sending its turnstile and map-load (billing)
+events with the per-install id after the opt-out ([mapbox-maps-ios#1964](https://github.com/mapbox/mapbox-maps-ios/issues/1964)); they are declared as
+Device ID above.
+
+This rests on the SDK source, not on observed traffic, so the traffic check in
+[`release-runbook.md`](./release-runbook.md) §5.4 step 4 still has to pass on the build you submit. Read
+`EventsManager.swift` again whenever `RNMapboxMapsVersion` or `@rnmapbox/maps` changes. If the check fails
+and the SDK's own opt-out cannot be wired in, add what Mapbox collects (at least a Location type with the
+Analytics purpose, not linked, no tracking) to the table above, and update the privacy policy and
+[`legal/data-compliance.md`](./legal/data-compliance.md) before answering App Privacy.
 
 ### Third-party SDK privacy manifests
 
 The App Privacy answers must also cover data collected by SDKs. Festie's native SDKs with a network
-component are Mapbox Maps (telemetry opt-out requested, unconfirmed on iOS, see above; its map-load
+component are Mapbox Maps (telemetry off, see above; its turnstile and map-load
 billing events with the per-install id are still sent, Device ID above), `expo-updates` (Device ID above) and Supabase JS (talks only to
 our own project). After the first production build is processed, check the email from App Store Connect
 for ITMS-91053 (missing privacy manifest reasons) and other warnings, and fix them before submission.

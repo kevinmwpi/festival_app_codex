@@ -141,7 +141,7 @@ export default function BrowseScheduleScreen() {
                       <View style={styles.rowText}>
                         <Text style={styles.artist}>{row.artist_name}</Text>
                         <Text style={styles.meta}>
-                          {row.stage_name} · {clock.date(row.start_time, { weekday: 'short' })} {clock.range(row.start_time, row.end_time)}
+                          {row.stage_name} · {clock.day(row.start_time)} {clock.range(row.start_time, row.end_time)}
                         </Text>
                         {row.is_conflicting ? <Badge label="Conflict" tone="warning" /> : null}
                       </View>

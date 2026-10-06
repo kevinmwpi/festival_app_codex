@@ -12,17 +12,25 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
+import { cancelCrewReminders, cancelRemindersOutsideCrews } from '@/src/notifications/crew-reminders';
+
 import { queryKeys } from './query-keys';
 import { useCacheFirstQuery } from './use-cache-first-query';
 import { useUserKey } from './use-session';
 
-/** The user's crews (cache first; `listMyGroups` replaces the local memberships when online). */
+/**
+ * The user's crews (cache first; `listMyGroups` replaces the local memberships when online). Meetup
+ * reminders of crews the refresh dropped (left elsewhere, removed, crew deleted) are cancelled.
+ */
 export function useGroups() {
   const userKey = useUserKey();
   return useCacheFirstQuery<GroupSummary[]>({
     queryKey: queryKeys.groups(userKey),
     readLocal: getLocalGroups,
-    refresh: listMyGroups,
+    refresh: async () => {
+      const groups = await listMyGroups();
+      await cancelRemindersOutsideCrews(groups.map((group) => group.id));
+    },
   });
 }
 
@@ -37,7 +45,11 @@ export function useGroupDetail(groupId: string) {
     queryKey: queryKeys.groupDetail(userKey, groupId),
     readLocal: () => getLocalGroupDetail(groupId),
     refresh: async () => {
-      await refreshGroupDetail(groupId);
+      const detail = await refreshGroupDetail(groupId);
+      if (detail === null) {
+        // No longer a member (crew purged locally): its meetup reminders must not fire.
+        await cancelCrewReminders(groupId);
+      }
       // The same refresh rewrites the crew's picks: re-read the cache-only combined schedule too.
       await queryClient.invalidateQueries({ queryKey: ['group-schedule', userKey, groupId] });
     },

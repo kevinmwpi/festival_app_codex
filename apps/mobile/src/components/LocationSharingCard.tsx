@@ -1,9 +1,9 @@
-import { colors, radii, SecondaryButton, spacing } from '@festival/ui';
+import { colors, radii, SecondaryButton, showToast, spacing } from '@festival/ui';
 import React from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 
 import { formatAgo, useNow } from '@/src/hooks/use-now';
-import { useLocationSharing } from '@/src/location/LocationSharingProvider';
+import { STOP_NOT_CONFIRMED_MESSAGE, useLocationSharing } from '@/src/location/LocationSharingProvider';
 
 import { LocationSharingSheet } from './LocationSharingSheet';
 
@@ -43,7 +43,9 @@ export function LocationSharingCard({
   if (isThisGroup) {
     if (sharing.status === 'permission_denied') {
       title = 'Location access is off';
-      detail = "Festie can't read your location, so your crew can't see you. Turn on location access in Settings.";
+      detail = sharing.canAskAgain
+        ? "Festie can't read your location, so your crew can't see you. Allow location access to keep sharing."
+        : "Festie can't read your location, so your crew can't see you. Turn on location access in Settings.";
     } else {
       title = sharing.status === 'paused' ? 'Sharing paused' : 'Sharing your location';
       const ends = sharing.expiresAt ? `Ends in ${formatRemaining(sharing.expiresAt, now)}` : '';
@@ -61,9 +63,21 @@ export function LocationSharingCard({
   const stop = React.useCallback(async () => {
     setStopping(true);
     try {
-      await sharing.stop();
+      if (!(await sharing.stop())) {
+        showToast(STOP_NOT_CONFIRMED_MESSAGE, 'error');
+      }
     } finally {
       setStopping(false);
+    }
+  }, [sharing]);
+
+  const [requesting, setRequesting] = React.useState(false);
+  const allowLocation = React.useCallback(async () => {
+    setRequesting(true);
+    try {
+      await sharing.requestAccess();
+    } finally {
+      setRequesting(false);
     }
   }, [sharing]);
 
@@ -81,7 +95,11 @@ export function LocationSharingCard({
       {isThisGroup ? (
         <View style={styles.actions}>
           {sharing.status === 'permission_denied' ? (
-            <SecondaryButton label="Open Settings" onPress={() => void Linking.openSettings()} />
+            sharing.canAskAgain ? (
+              <SecondaryButton label="Allow location" onPress={() => void allowLocation()} loading={requesting} />
+            ) : (
+              <SecondaryButton label="Open Settings" onPress={() => void Linking.openSettings()} />
+            )
           ) : null}
           <SecondaryButton label="Stop sharing" onPress={() => void stop()} loading={stopping} />
         </View>

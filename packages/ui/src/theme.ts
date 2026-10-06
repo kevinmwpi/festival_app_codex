@@ -58,6 +58,11 @@ export const colors = {
 
   /** Input bg tint */
   inputBg: '#F0F4FF',
+  /**
+   * Text-field outline (WCAG 1.4.11 non-text contrast): 3.90:1 on white cards and sheets, ≥ 3.3:1 on
+   * `background`, `inputBg` and the pastel festival tints.
+   */
+  inputBorder: '#7D8378',
 
   /** Shadows */
   shadow: 'rgba(0, 0, 0, 0.06)',

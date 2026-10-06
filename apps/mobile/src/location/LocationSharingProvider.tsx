@@ -7,16 +7,21 @@
  *   while sharing, the permission is granted and the app is active. AppState `background` pauses it
  *   (`inactive` — Control Centre, the app switcher, a permission dialog — changes nothing); `active`
  *   resumes it. Nothing runs in the background and no background permission is ever requested.
- * - Heartbeat every 120 s while sharing re-sends the last fix (or the OS's last known position), so a
- *   stationary user stays visible; sends are throttled client-side to one per 15 s (the latest fix is
- *   sent when the window opens).
+ * - Heartbeat every 120 s while sharing re-sends the last fix of this foreground run (or the OS's last
+ *   known position when it is at most 2 minutes old), so a stationary user stays visible; nothing is sent
+ *   without a fresh fix, and a fix from before the app went to the background is never re-sent. Sends are
+ *   throttled client-side to one per 15 s (the latest fix is sent when the window opens).
  * - Every `active` checks expiry first: an expired session is stopped on the server and cleared before
  *   anything resumes. A timer also stops it at `expiresAt` while the app is open.
  * - Stops on: the user, expiry, `not_group_member` (left/removed — the server already deleted the row),
  *   leaving the crew (`stopLocationSharingForGroup`), sign-out (`stopLocationSharingNow`) and a lost
  *   session (the provider watches the stored session and tears down locally as soon as it is gone).
  * - Status is truthful: `sharing` only while the watcher can run, `paused` in the background,
- *   `permission_denied` when location access or Location Services were turned off mid-session.
+ *   `permission_denied` when location access or Location Services were turned off mid-session (or an
+ *   iOS "Allow Once" grant expired — then `canAskAgain` is true and `requestAccess()` asks again).
+ * - Stopping waits briefly for a position send already on the wire, then deletes the server row, so a
+ *   late `share_location` cannot put the row back; a send that still lands after the delete triggers
+ *   one more delete. `stop()` reports whether the server row is gone.
  */
 import {
   getErrorCode,
@@ -61,6 +66,8 @@ export const SHARING_DURATION_OPTIONS: readonly SharingDurationOption[] = [
 const HEARTBEAT_MS = 120_000;
 const THROTTLE_MS = 15_000;
 const STOP_TIMEOUT_MS = 3_000;
+/** How long `stop()` waits for a position send already in flight before deleting the row. */
+const IN_FLIGHT_WAIT_MS = 1_500;
 /** A last-known fix older than this is not sent as the "current" position. */
 const MAX_LAST_KNOWN_AGE_MS = 2 * 60_000;
 
@@ -100,6 +107,11 @@ export interface LocationSharingSnapshot {
   lastSentAt: number | null;
   /** Epoch ms of the last failed send (offline, timeout), cleared by the next success. */
   lastErrorAt: number | null;
+  /**
+   * With `permission_denied`: `true` when the OS can still show the permission prompt (e.g. an iOS
+   * "Allow Once" grant expired), so `requestAccess()` can fix it; `false` when only Settings can.
+   */
+  canAskAgain: boolean;
 }
 
 export interface LocationSharingState extends LocationSharingSnapshot {
@@ -110,8 +122,17 @@ export interface LocationSharingState extends LocationSharingSnapshot {
    *   `not_group_member` / auth errors from the first send.
    */
   start: (groupId: string, durationMs: number) => Promise<void>;
-  /** Stops sharing (user action). Never throws. */
-  stop: () => Promise<void>;
+  /**
+   * Stops sharing (user action). Sharing stops on this phone at once. Resolves `true` when the server
+   * row is gone too, `false` when the delete could not be confirmed (offline, timeout) — the last
+   * position then stays visible to the crew until it expires (at most 15 minutes). Never throws.
+   */
+  stop: () => Promise<boolean>;
+  /**
+   * After `permission_denied` with `canAskAgain`: shows the OS permission prompt and resumes sharing
+   * when access is granted. Resolves whether sharing could resume. Never throws.
+   */
+  requestAccess: () => Promise<boolean>;
 }
 
 interface PersistedSession {
@@ -145,6 +166,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | undefined>
   });
 }
 
+/** `true` when `promise` fulfils within `ms`; `false` when it rejects or takes longer. Never rejects. */
+function settlesWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
+  return withTimeout(
+    promise.then(() => true),
+    ms,
+  ).then((value) => value === true);
+}
+
 function toCoords(location: Location.LocationObject): LocationCoords {
   return {
     latitude: location.coords.latitude,
@@ -162,6 +191,7 @@ const OFF_SNAPSHOT: LocationSharingSnapshot = {
   untilStopped: false,
   lastSentAt: null,
   lastErrorAt: null,
+  canAskAgain: false,
 };
 
 /* ─── Controller (module singleton) ─────────────────────── */
@@ -172,6 +202,7 @@ class LocationSharingController {
   private session: PersistedSession | null = null;
   private appActive = AppState.currentState !== 'background';
   private permissionDenied = false;
+  private permissionCanAskAgain = false;
 
   private watcher: Location.LocationSubscription | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -184,6 +215,10 @@ class LocationSharingController {
   private lastErrorAt: number | null = null;
   private sending = false;
   private resendAfterFlight = false;
+  /** `share_location` calls on the wire; each resolves (never rejects) once its request settles. */
+  private inFlightShares = new Set<Promise<void>>();
+  /** Sessions whose server row `stop()` deleted; a send of theirs that lands later is deleted again. */
+  private deletedSessions = new WeakSet<PersistedSession>();
   /** Bumped on every start/stop/pause; async work from an older generation is discarded. */
   private generation = 0;
 
@@ -282,6 +317,7 @@ class LocationSharingController {
         untilStopped: session.untilStopped,
         lastSentAt: this.lastSentAt,
         lastErrorAt: this.lastErrorAt,
+        canAskAgain: this.permissionDenied && this.permissionCanAskAgain,
       };
     }
     const previous = this.snapshot;
@@ -314,6 +350,7 @@ class LocationSharingController {
         this.appStateSubscription?.remove();
         this.appStateSubscription = null;
         this.teardownRuntime();
+        this.lastFix = null;
       }
     };
   }
@@ -324,6 +361,8 @@ class LocationSharingController {
       this.appActive = false;
       this.generation += 1;
       this.teardownRuntime();
+      // A fix from before the pause no longer says where the user is; resume waits for a fresh one.
+      this.lastFix = null;
       this.publish();
     } else if (state === 'active') {
       this.appActive = true;
@@ -384,10 +423,12 @@ class LocationSharingController {
     }
     if (!access.ok) {
       this.permissionDenied = true;
+      this.permissionCanAskAgain = access.canAskAgain;
       this.publish();
       return;
     }
     this.permissionDenied = false;
+    this.permissionCanAskAgain = false;
     this.publish();
 
     this.heartbeatTimer = setInterval(() => void this.heartbeat(), HEARTBEAT_MS);
@@ -412,6 +453,7 @@ class LocationSharingController {
       // Location became unavailable between the check and the watch (e.g. services switched off).
       if (generation === this.generation) {
         this.permissionDenied = true;
+        this.permissionCanAskAgain = false;
         this.publish();
       }
       return;
@@ -447,12 +489,15 @@ class LocationSharingController {
       return;
     }
     if (!this.lastFix) {
-      const lastKnown = await Location.getLastKnownPositionAsync().catch(() => null);
-      if (lastKnown) {
+      // Only a recent OS fix stands in for the current position (the server stamps it "now"); with
+      // none, nothing is sent and the crew sees the last real position age out.
+      const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: MAX_LAST_KNOWN_AGE_MS }).catch(() => null);
+      if (lastKnown && !this.lastFix && this.session && this.appActive) {
         this.lastFix = toCoords(lastKnown);
       }
     }
-    // A heartbeat re-sends the same fix so the server's 15-minute visibility window stays open.
+    // A heartbeat re-sends this foreground run's fix (the watcher only reports moves of 25 m or more)
+    // so the server's 15-minute visibility window stays open for a stationary user.
     void this.send();
   }
 
@@ -473,6 +518,33 @@ class LocationSharingController {
     } catch {
       return { ok: false, reason: 'permission', canAskAgain: false };
     }
+  }
+
+  /**
+   * `shareLocation` for `session`, tracked so `stop()` can wait for it. When it may have written the row
+   * after `stop()` deleted it (and no newer session for that crew wants the row), the row is deleted
+   * again.
+   */
+  private shareTracked(session: PersistedSession, fix: LocationCoords): Promise<void> {
+    const request = shareLocation(session.groupId, fix);
+    const settled = request.then(
+      () => true,
+      // A refused send wrote nothing; anything else (timeout, lost response) may have.
+      (error: unknown) => !isAppErrorCode(error, 'not_group_member') && getErrorCode(error) !== 'session_missing',
+    );
+    const tracked = settled.then((mayHaveWritten) => {
+      this.inFlightShares.delete(tracked);
+      if (
+        mayHaveWritten &&
+        this.deletedSessions.has(session) &&
+        this.session?.groupId !== session.groupId &&
+        getStoredSession() !== null
+      ) {
+        void settlesWithin(stopSharingLocation(session.groupId), STOP_TIMEOUT_MS);
+      }
+    });
+    this.inFlightShares.add(tracked);
+    return request;
   }
 
   /** Sends the latest fix, respecting the 15 s client throttle. Resolves `true` when the server accepted it. */
@@ -505,7 +577,7 @@ class LocationSharingController {
     this.sending = true;
     this.lastAttemptAt = Date.now();
     try {
-      await shareLocation(session.groupId, fix);
+      await this.shareTracked(session, fix);
       if (this.session === session) {
         this.lastSentAt = Date.now();
         this.lastErrorAt = null;
@@ -556,6 +628,7 @@ class LocationSharingController {
     const duration = Math.min(Math.max(durationMs, 60_000), MAX_SHARING_DURATION_MS);
     this.session = { v: 1, groupId, startedAt: now, expiresAt: now + duration, untilStopped, owner: stored.authUserId };
     this.permissionDenied = false;
+    this.permissionCanAskAgain = false;
     this.lastSentAt = null;
     this.lastErrorAt = null;
     this.lastFix = null;
@@ -572,10 +645,16 @@ class LocationSharingController {
     if (current) {
       this.lastFix = toCoords(current);
       try {
-        await shareLocation(groupId, this.lastFix);
+        await this.shareTracked(session, this.lastFix);
+        if (this.session !== session) {
+          return;
+        }
         this.lastAttemptAt = Date.now();
         this.lastSentAt = Date.now();
       } catch (error) {
+        if (this.session !== session) {
+          return;
+        }
         if (isAppErrorCode(error, 'not_group_member') || getErrorCode(error) === 'session_missing') {
           await this.stop(isAppErrorCode(error, 'not_group_member') ? 'removed' : 'session_lost');
           throw error;
@@ -595,6 +674,7 @@ class LocationSharingController {
     this.teardownRuntime();
     this.session = null;
     this.permissionDenied = false;
+    this.permissionCanAskAgain = false;
     this.lastFix = null;
     this.lastSentAt = null;
     this.lastErrorAt = null;
@@ -604,16 +684,56 @@ class LocationSharingController {
     this.publish();
   }
 
-  /** Stops sharing: local teardown first (instant), then the server row, bounded by 3 s. Never throws. */
-  stop = async (reason: StopReason = 'user'): Promise<void> => {
+  /**
+   * Stops sharing: local teardown first (instant), then — after a position send already in flight has
+   * landed (at most 1.5 s) — the server row, bounded by 3 s. Resolves `true` when the row is gone (or
+   * there was none), `false` when the delete was not confirmed or could not be sent. Never throws.
+   */
+  stop = async (reason: StopReason = 'user'): Promise<boolean> => {
     this.ensureLoaded();
-    const groupId = this.session?.groupId ?? null;
+    const session = this.session;
     this.clearLocal();
-    // After `removed`/`left` the server already deleted the row; without a session the call cannot run.
-    if (!groupId || reason === 'removed' || reason === 'session_lost' || getStoredSession() === null) {
-      return;
+    if (!session || reason === 'removed') {
+      // Nothing was shared, or the server already deleted the row (left/removed).
+      return true;
     }
-    await withTimeout(stopSharingLocation(groupId), STOP_TIMEOUT_MS);
+    if (reason === 'session_lost' || getStoredSession() === null) {
+      // Without a session the call cannot run; the row expires on its own.
+      return false;
+    }
+    if (this.inFlightShares.size > 0) {
+      // A share that reached the server after the delete would put the row back with a fresh timestamp.
+      await withTimeout(Promise.all([...this.inFlightShares]), IN_FLIGHT_WAIT_MS);
+    }
+    if (getStoredSession() === null) {
+      return false;
+    }
+    this.deletedSessions.add(session);
+    return settlesWithin(stopSharingLocation(session.groupId), STOP_TIMEOUT_MS);
+  };
+
+  /** Asks for location access again after it lapsed mid-session, then resumes. Never throws. */
+  requestAccess = async (): Promise<boolean> => {
+    this.ensureLoaded();
+    const session = this.session;
+    if (!session) {
+      return false;
+    }
+    const access = await this.checkAccess(true);
+    if (this.session !== session) {
+      return false;
+    }
+    if (!access.ok) {
+      this.permissionDenied = true;
+      this.permissionCanAskAgain = access.canAskAgain;
+      this.publish();
+      return false;
+    }
+    this.permissionDenied = false;
+    this.permissionCanAskAgain = false;
+    this.publish();
+    await this.resume();
+    return this.session === session && !this.permissionDenied;
   };
 
   /**
@@ -638,6 +758,9 @@ class LocationSharingController {
 
 const controller = new LocationSharingController();
 
+/** @internal The singleton, for unit tests only (test/location-sharing.test.ts). */
+export const locationSharingControllerForTests = controller;
+
 /* ─── React bindings ────────────────────────────────────── */
 
 const LocationSharingContext = createContext<LocationSharingState | null>(null);
@@ -649,6 +772,7 @@ function useControllerState(): LocationSharingState {
       ...snapshot,
       start: controller.start,
       stop: () => controller.stop('user'),
+      requestAccess: controller.requestAccess,
     }),
     [snapshot],
   );
@@ -666,7 +790,7 @@ export function LocationSharingProvider({ children }: React.PropsWithChildren) {
   return <LocationSharingContext.Provider value={value}>{children}</LocationSharingContext.Provider>;
 }
 
-/** `{ status, groupId, expiresAt, …, start(groupId, durationMs), stop() }` (§5.6). */
+/** `{ status, groupId, expiresAt, …, start(groupId, durationMs), stop(), requestAccess() }` (§5.6). */
 export function useLocationSharing(): LocationSharingState {
   const fromContext = useContext(LocationSharingContext);
   const direct = useControllerState();
@@ -675,14 +799,18 @@ export function useLocationSharing(): LocationSharingState {
 
 /**
  * Stops any active sharing immediately: watcher and timers stop and the persisted session is cleared
- * synchronously, then the server row is deleted (bounded by 3 s). Idempotent; never throws; safe
- * without a session or network. Used by `performSignOut`.
+ * synchronously, then the server row is deleted (after an in-flight send lands; bounded by 4.5 s in
+ * all). Idempotent; never throws; safe without a session or network. Used by `performSignOut`.
  */
 export async function stopLocationSharingNow(): Promise<void> {
-  await withTimeout(controller.stop('sign_out'), STOP_TIMEOUT_MS);
+  await withTimeout(controller.stop('sign_out'), IN_FLIGHT_WAIT_MS + STOP_TIMEOUT_MS);
 }
 
 /** Stops sharing if it is with `groupId` (call before leaving a crew). Never throws. */
 export async function stopLocationSharingForGroup(groupId: string): Promise<void> {
-  await withTimeout(controller.stopForGroup(groupId, 'left'), STOP_TIMEOUT_MS);
+  await withTimeout(controller.stopForGroup(groupId, 'left'), IN_FLIGHT_WAIT_MS + STOP_TIMEOUT_MS);
 }
+
+/** Message for a `stop()` that resolved `false`: sharing stopped here, the server copy expires on its own. */
+export const STOP_NOT_CONFIRMED_MESSAGE =
+  "Couldn't reach the server. Sharing stopped on this phone; your last position expires within 15 minutes.";

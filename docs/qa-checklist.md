@@ -51,6 +51,8 @@ Admin commands: [`festival-data.md`](./festival-data.md).
 - [ ] Kill and relaunch: lands on the Fests tab without asking for a code again.
 - [ ] Sign in with the same account on device B (existing profile, new device): the "accept terms" screen
       appears once before any crew content; its "Sign out" link works.
+- [ ] On the "accept terms" screen and on profile setup, "Delete my account" opens account deletion
+      without agreeing to the terms; deleting there returns to sign-in (App Review 5.1.1(v)).
 
 ## 3. Demo login (App Review path)
 
@@ -62,6 +64,8 @@ Admin commands: [`festival-data.md`](./festival-data.md).
 - [ ] Block a demo member, sign out, sign in again with the demo code: the block is gone and the member
       is back on the map (the next reviewer must see the same state).
 - [ ] Delete the demo account (§13), then sign in again with the demo code: works and the crew is back.
+- [ ] Stay signed in to the demo account for 30 minutes or more (or come back later without signing out):
+      the demo members are still on the map, and Jordan's meetup is still upcoming, not under "Earlier".
 
 ## 4. Deep links and invites
 
@@ -102,7 +106,9 @@ Admin commands: [`festival-data.md`](./festival-data.md).
 - [ ] With device A in a different time zone, all set times match the official schedule in the
       **festival's** local time and the hint reads "Times shown in festival local time (…)".
 - [ ] **1 AM day bucketing:** a set starting at 00:30 or 01:00 festival time appears at the end of the
-      **previous** festival day's timeline (festival days start at 06:00), not as a separate day.
+      **previous** festival day's timeline (festival days start at 06:00), not as a separate day, and is
+      labelled with that festival day plus "night" wherever a day is shown (Lineup, schedule browser, crew
+      schedule, the set's action sheet, the map's "Next" list), e.g. "Fri night 1:00 AM".
 - [ ] **DST:** on staging only, move the demo festival across a daylight-saving change and seed it:
       `npm run admin -- festival:shift-dates seed-data/demo-festival.json --start 2026-10-31 --out /tmp/dst.json`
       then `npm run admin -- demo:seed --file /tmp/dst.json` (the demo festival is in America/New_York;
@@ -151,9 +157,13 @@ Admin commands: [`festival-data.md`](./festival-data.md).
       Reporting the same thing twice does not error.
 - [ ] Block B from A (confirm "Block"): on A, B's meetups, picks and location disappear and B shows as
       "Blocked user" with Unblock; on B, A's location, meetups and picks disappear. B is not notified.
+- [ ] Blocking also hides totem photos: with B blocked, A sees no photo on a meetup B created or a photo B
+      uploaded (and vice versa).
 - [ ] Unblock from Settings → Blocked users brings B's content back.
 - [ ] Admin A removes B ("Remove from crew", confirm): B loses the crew, its meetups and members'
-      locations; if B was sharing with that crew, B's sharing stops.
+      locations; if B was sharing with that crew, B's sharing stops; B's meetup reminders for that crew
+      are cancelled. The crew's invite code changes (A's invite card shows the new one), and B cannot
+      rejoin with the old code.
 - [ ] `npm run admin -- reports:remove-content <report_id>` on the photo report: the photo disappears on
       both devices after refresh; the report is marked actioned.
 - [ ] The report-notification email (runbook §2.12) arrives for a new report and contains only the
@@ -178,8 +188,22 @@ Admin commands: [`festival-data.md`](./festival-data.md).
 - [ ] Stop from the map ("Sharing location" → "Stop sharing my location") and from Settings ("Stop
       sharing location"): A disappears on B at B's next poll.
 - [ ] Sign out, leaving the crew and being removed all stop sharing.
-- [ ] Deny location permission: the status shows "No access" with a way to open Settings; nothing is sent.
+- [ ] **Deny at the first prompt:** fresh install, tap "Share location", "Start sharing", then "Don't
+      Allow": no sharing session starts, so the status stays "Off" (not "No access") in Settings and on
+      the Map, and nothing is sent. The app explains instead: the "Location access is off" alert with
+      "Open Settings" (iOS reports it cannot ask again after a denial), or an inline error in the sheet
+      if it still can. Tapping "Start sharing" again shows the alert; iOS does not prompt again.
+- [ ] **Revoke while sharing:** while A is sharing, turn off Festie's location access in iOS Settings and
+      return to the app: the Map control shows "Location access off" (its sheet offers "Open Settings"),
+      Settings shows "No access" with a way to open iOS Settings, and nothing is sent until access is back.
+- [ ] **Allow Once expiry:** grant "Allow Once", start sharing, then leave the app long enough for iOS to
+      revoke the one-time grant (or relaunch it): the card, the Map sheet and Settings offer "Allow location"
+      (not only "Open Settings"); tapping it shows the iOS prompt and sharing resumes after allowing.
 - [ ] Airplane mode while sharing: no crash; sharing resumes when back online.
+- [ ] Stop sharing in airplane mode: sharing stops on the phone and a toast says the server could not be
+      reached and the last position expires within 15 minutes.
+- [ ] On B, put the phone in airplane mode with A visible on the map: A's pin (and list entry) disappears
+      once A's last position is more than 15 minutes old, even though B cannot poll.
 - [ ] In the Supabase table editor, `location_shares` contains no row older than 15 minutes (a few
       minutes' lag before the purge job runs is acceptable; the app never shows them).
 
@@ -221,13 +245,18 @@ Admin commands: [`festival-data.md`](./festival-data.md).
       blank or fake map.
 - [ ] **Mapbox telemetry off:** with the phone behind an HTTPS-inspecting proxy, the map on screen and
       your own dot showing for 10 minutes, `events.mapbox.com` receives at most the billing events
-      (turnstile / map load) and no location, gesture or performance events. Procedure and what to do if
-      it fails: [`release-runbook.md`](./release-runbook.md) §5.4 step 4. Record the result in the
-      sign-off.
+      (turnstile / map load, which continue after the opt-out) and no location, gesture or performance
+      events. The SDK source says the opt-out works on 11.18.2; this check confirms the build. Procedure
+      and what to do if it fails: [`release-runbook.md`](./release-runbook.md) §5.4 step 4. Record the
+      result in the sign-off.
 
 ## 15. Accessibility and appearance
 
 - [ ] VoiceOver reads every icon button (settings, ⋯, map controls) with a meaningful label.
+- [ ] VoiceOver on the Fests list: each festival card and its Follow / Unfollow toggle are separate
+      elements, and the toggle can be focused and activated.
+- [ ] The tab bar's icons and labels are centred vertically in the pill on a Face ID iPhone and on an
+      iPhone SE, with no extra strip below the pill; on the Map, the map reaches the bottom edge.
 - [ ] Largest Dynamic Type: no clipped buttons on sign-in, Settings and Delete account.
 - [ ] Text on pastel festival accents stays readable; links use the blue link colour.
 

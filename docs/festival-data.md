@@ -119,7 +119,8 @@ of `demo-festival.json`; a unit test keeps the two identical).
 ## 3. Sourcing rules (read before entering a real festival)
 
 Festie is an independent app, not affiliated with or endorsed by any festival, organizer or artist,
-and the app says so on every festival screen. Data must keep it that way:
+and the app says so (`FESTIVAL_DISCLAIMER` on the Fests list, Lineup and the schedule browser, a line in
+Settings, and Terms §8). Data must keep it that way:
 
 1. **Facts only.** Enter what the organizer has publicly announced: festival name, dates, venue,
    stage names, artist names and set times. Copy no descriptions, bios, editorial text or ticket info.
@@ -194,8 +195,13 @@ The reviewer signs in through the `demo-login` edge function (`DEMO_LOGIN_EMAIL`
 `DEMO_LOGIN_CODE`, see the release runbook). On every successful demo login,
 `public.prepare_demo_account` (service role) recreates the reviewer's profile if needed, re-joins
 them to "Festie Demo Crew", makes them follow the demo festival and places the fake members on the
-map again with a fresh timestamp (location rows expire after 15 minutes). The reviewer can delete
-the demo account in Settings and log in again with the same code.
+map again with a fresh timestamp. The demo crew then stays current however long the reviewer keeps
+the app open: `private.refresh_demo_crew` re-stamps the fake members' location rows (which otherwise
+expire after 15 minutes) and moves their meetups that have started or start within 30 minutes to the
+start of the current hour plus 2 hours. It runs on every demo login, whenever `get_group_locations` is called for the
+demo crew (the map polls it) and every 5 minutes from the pg_cron job `refresh-demo-crew`; it is a no-op
+for every other crew. The reviewer can delete the demo account in Settings and log in again with the
+same code.
 
 The demo crew is recognised by its creator, never by name alone: it is the "Festie Demo Crew" on a
 published `is_demo` festival created by a profile whose auth user has `app_metadata.festie_demo =
@@ -233,11 +239,14 @@ Each entry shows the target, the snapshot, details and the reporter. Then act:
   - then every open/reviewed report about the same target is marked `actioned`.
   Storage is removed before rows, so a failed run can be retried safely.
 - `npm run admin -- users:ban <user_id> [--dry-run]` (profile id or auth user id) for repeat or
-  severe abuse: bans the auth user for 100 years (`ban_duration: 876000h`, sign-in and token refresh
-  fail; an existing access token expires within an hour), removes all their group memberships and
-  location rows with the same admin hand-off rules as leaving a group, deletes photos orphaned by
-  groups that became empty, and marks reports about them `actioned`. Their profile stays for the
-  record.
+  severe abuse: bans the auth user for 100 years (`ban_duration: 876000h`; sign-in and token refresh
+  fail, and an access token already issued reads nothing from then on because the database treats a
+  banned caller as having no profile, `private.is_banned`). Then `prepare_account_ban` removes all
+  their group memberships and location rows with the same admin hand-off rules as leaving a group,
+  gives every crew they were in a new invite code, deletes their meetups and returns every photo path
+  to remove (their uploads, their meetups' photos and those of crews that became empty); the command
+  removes those files and marks reports about them `actioned`. If storage removal fails, run it again
+  (each step is idempotent). Their profile stays for the record.
 - No action needed: set the report's `status` to `dismissed` (or `reviewed`) in the table editor.
 
 **Disallowed words.** Display names, group names and meetup titles/notes are checked on insert and

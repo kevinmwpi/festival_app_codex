@@ -17,6 +17,16 @@ type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
  */
 const UNFOCUSED_TAB_INK = 'rgba(44, 51, 39, 0.85)';
 
+/** The floating pill's height; the icon + label stack is centred in it. */
+const TAB_BAR_HEIGHT = 80;
+/**
+ * Box React Navigation gives each tab icon. Its default (31×28) is sized for a bare glyph; ours stacks a
+ * 26 pt glyph, a gap and a label (≈ 41 pt, 1.1× when focused), which would overflow it and the pill.
+ */
+const TAB_ICON_BOX_HEIGHT = 52;
+/** The root `SafeAreaView` (app/_layout.tsx) already insets every screen, so the bar must not add more. */
+const NO_INSETS = { top: 0, right: 0, bottom: 0, left: 0 };
+
 const TAB_CONFIG: Record<string, { icon: IoniconName; iconFocused: IoniconName; label: string }> = {
   festivals: { icon: 'flag-outline',          iconFocused: 'flag',           label: 'Fests'    },
   lineup:    { icon: 'musical-notes-outline', iconFocused: 'musical-notes',  label: 'Lineup'   },
@@ -51,14 +61,20 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      safeAreaInsets={NO_INSETS}
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
+        // Centre each tab (React Navigation top-aligns them) in the full height of the pill.
+        tabBarItemStyle: { justifyContent: 'center', paddingVertical: 0 },
+        tabBarIconStyle: { width: '100%', height: TAB_ICON_BOX_HEIGHT },
         tabBarStyle: {
           backgroundColor: accent,
           borderTopWidth: 0,
           borderRadius: 32,
-          height: 80,
+          height: TAB_BAR_HEIGHT,
+          paddingTop: 0,
+          paddingBottom: 0,
           marginHorizontal: 20,
           marginBottom: 24,
           position: 'absolute',
@@ -87,6 +103,7 @@ const styles = StyleSheet.create({
   iconContainer: {
     alignItems: 'center',
     gap: 4,
+    justifyContent: 'center',
   },
   iconContainerFocused: {
     transform: [{ scale: 1.1 }],

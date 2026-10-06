@@ -100,6 +100,7 @@ export default function IndexScreen() {
           <PrimaryButton label="Try again" onPress={resolve} disabled={signingOut} />
           <View style={styles.linkRow}>
             <TextLink
+              align="center"
               label={signingOut ? 'Signing out…' : 'Use a different email'}
               onPress={signingOut ? () => undefined : handleUseAnotherAccount}
             />

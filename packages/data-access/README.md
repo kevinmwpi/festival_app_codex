@@ -48,12 +48,22 @@ write queue). Everything here is plain async functions; React Query hooks live i
 | `ensureLocalOwner(authUserId)` | `(string) => Promise<void>` | If `app_meta.local_owner_auth_user_id` differs (or is unset), wipes local user data, the signed-URL cache and a foreign profile cache, then records the owner. Idempotent and single-flight: concurrent calls for the same user share one in-flight promise; a call for another user waits for it, so the latest call decides the owner. |
 | `signOut()` | `() => Promise<void>` | `auth.signOut({ scope: 'local' })` (failure ignored, waits at most `SIGN_OUT_SERVER_TIMEOUT_MS` = 5 s) → `clearLocalSession()`. Never throws for network reasons. When the server call times out, the Supabase client is retired: the stalled call can no longer read or write the persisted session or emit events, and the next sign-in runs on a fresh client. |
 | `deleteAccount()` | `() => Promise<void>` | `functions.invoke('delete-account', { method: 'POST' })`; must return `{ deleted: true }` or it throws `DataAccessError` (`status` 5xx/401, or `code: 'delete_not_confirmed'`) and **nothing local is touched**. On success: local sign-out + `clearLocalSession()`. Throws `TransientAuthError` without a session. |
-| `clearLocalSession()` | `() => Promise<void>` | Local wipe only (§4.1 steps 2–4), in order: remove MMKV session → `clearLocalUserData()` → clear MMKV `profile-cache` and the signed-URL cache → clear `local_owner_auth_user_id`. Use for `performSignOut('session_lost')`. |
+| `clearLocalSession()` | `() => Promise<void>` | Local wipe only (§4.1 steps 2–4), in order: remove MMKV session → `clearLocalUserData()` → clear MMKV `profile-cache` and the signed-URL cache → clear `local_owner_auth_user_id`. Use for a voluntary sign-out wipe (inside `signOut()`/`deleteAccount()`, and when a `sign_out` follows a `session_lost`). `performSignOut('session_lost')` does **not** call it while the stored session is gone: it keeps SQLite, the offline queue and the profile cache for the same account and clears only the signed-URL cache (see below). |
 
-`performSignOut` order (MOBILE-A) stays: `stopLocationSharingNow()` → `cancelAllReminders()` →
-`signOut()`/`deleteAccount()`/`clearLocalSession()` → `queryClient.clear()` → `resetAppStore()` →
-`router.replace('/auth/enter-email')`. Warn before a voluntary sign-out when
-`getPendingCount() > 0` (sync-engine).
+`performSignOut` order (MOBILE-A, `apps/mobile/src/providers/session-actions.ts`; v1-architecture §5.1):
+
+- `sign_out`: `stopLocationSharingNow()` → `cancelAllReminders()` → `signOut()` → `queryClient.clear()` →
+  `resetAppStore()` → `router.replace('/auth/enter-email')`.
+- `delete_account`: `deleteAccount()` **first** (a failure while still signed in rejects and touches nothing)
+  → `stopLocationSharingNow()` → `cancelAllReminders()` → the same cache/store/route steps.
+- `session_lost` (involuntary `SIGNED_OUT`): `stopLocationSharingNow()` (local half only) →
+  `cancelAllReminders()` → clear the signed-URL cache only, **keeping** the SQLite cache, the offline queue
+  and the MMKV profile cache under the same local owner (if a stored session is somehow still present,
+  `clearLocalSession()` runs instead) → the same cache/store/route steps. The same account signing back in
+  flushes its queue; a different account is isolated by `ensureLocalOwner`, which wipes first. A
+  `sign_out` requested afterwards while still signed out runs `clearLocalSession()`.
+
+Warn before a voluntary sign-out when `getPendingCount() > 0` (sync-engine).
 
 ## Profile
 

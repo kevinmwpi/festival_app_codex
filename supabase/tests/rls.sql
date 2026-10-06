@@ -10,7 +10,7 @@
 -- Run with: npm run db:test
 
 begin;
-select plan(254);
+select plan(280);
 
 -- ===========================================================================
 -- Identities
@@ -27,6 +27,7 @@ select plan(254);
 --   18 lou / 19 max / 20 ned    (GT: lou + max admins)
 --   21 rev    (demo reviewer, auth only)
 --   22 demo1 / 23 demo2         (Festie Demo Crew)
+--   24 troll  (GP member, gets banned; fixture created in section P)
 create function pg_temp.become(p_who text)
 returns void
 language plpgsql
@@ -57,7 +58,7 @@ begin
 
   v_n := array_position(
     array['alice','bob','carol','dave','erin','frank','zed','yan','solo','newbie','joiner','grace',
-          'nopro','hank','ivy','jack','kim','lou','max','ned','rev','demo1','demo2'],
+          'nopro','hank','ivy','jack','kim','lou','max','ned','rev','demo1','demo2','troll'],
     p_who
   );
   if v_n is null then
@@ -309,6 +310,7 @@ select is(
   array(
     select x from unnest(array[
       'private.can_upload_totem(uuid, uuid)',
+      'private.can_view_totem(uuid, uuid, text)',
       'private.contains_disallowed_text(text)',
       'private.current_app_user_id()',
       'private.is_blocked_with(uuid)',
@@ -333,6 +335,7 @@ select is(
   array(
     select x from unnest(array[
       'private.can_upload_totem(uuid, uuid)',
+      'private.can_view_totem(uuid, uuid, text)',
       'private.contains_disallowed_text(text)',
       'private.current_app_user_id()',
       'private.is_blocked_with(uuid)',
@@ -361,6 +364,7 @@ select is(
 
 select ok(
   has_function_privilege('service_role', 'public.prepare_account_deletion(uuid)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.prepare_account_ban(uuid)', 'EXECUTE')
   and has_function_privilege('service_role', 'public.prepare_demo_account(uuid)', 'EXECUTE')
   and has_function_privilege('service_role', 'public.purge_stale_locations()', 'EXECUTE')
   and has_function_privilege('service_role', 'public.purge_rate_limit_events()', 'EXECUTE')
@@ -1619,6 +1623,31 @@ select ok(
   'M12 recent rate limit events are kept'
 );
 
+-- Custom access token hook: GoTrue's email provider accepts passwords on
+-- /signup and /token whatever the app does, so password tokens are refused.
+select pg_temp.become('supabase_auth_admin');
+select ok(
+  (select h -> 'error' ->> 'http_code' = '403' and not h ? 'claims'
+   from public.custom_access_token_hook(
+     '{"user_id":"a0000000-0000-4000-8000-000000000001","authentication_method":"password","claims":{"sub":"a0000000-0000-4000-8000-000000000001","role":"authenticated"}}'
+   ) h),
+  'M13 the access token hook refuses a token requested with a password'
+);
+select is(
+  public.custom_access_token_hook(
+    '{"user_id":"a0000000-0000-4000-8000-000000000001","authentication_method":"otp","claims":{"sub":"a0000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}}'
+  ),
+  '{"claims":{"sub":"a0000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}}'::jsonb,
+  'M14 the access token hook passes emailed-code sign-ins through unchanged (control)'
+);
+select is(
+  public.custom_access_token_hook(
+    '{"user_id":"a0000000-0000-4000-8000-000000000001","authentication_method":"token_refresh","claims":{"sub":"a0000000-0000-4000-8000-000000000001"}}'
+  ) -> 'claims' ->> 'sub',
+  'a0000000-0000-4000-8000-000000000001',
+  'M15 the access token hook passes token refreshes through'
+);
+
 -- ===========================================================================
 -- N. Demo account (App Review)
 -- ===========================================================================
@@ -1885,6 +1914,110 @@ select is(
   + (select count(*)::int from public.group_members where user_id = 'b0000000-0000-4000-8000-000000000005'),
   0,
   'O13 blocks, location rows and memberships of the deleted user are gone'
+);
+
+
+-- ===========================================================================
+-- P. Bans (admin-tools users:ban -> prepare_account_ban)
+-- ===========================================================================
+-- troll is in carol's crew GP with a meetup + photo; carol shares her location.
+select pg_temp.become('superuser');
+insert into auth.users (id, email) values ('a0000000-0000-4000-8000-000000000024', 'troll@example.com');
+insert into public.users (id, auth_user_id, email, display_name)
+values ('b0000000-0000-4000-8000-000000000024', 'a0000000-0000-4000-8000-000000000024', 'troll@example.com', 'Troll');
+insert into public.groups (id, festival_id, name, created_by_user_id, invite_code) values
+  ('90000000-0000-4000-8000-00000000000a', 'f0000000-0000-4000-8000-000000000001', 'Group P', 'b0000000-0000-4000-8000-000000000003', 'PPPPP2');
+insert into public.group_members (group_id, user_id, role, joined_at) values
+  ('90000000-0000-4000-8000-00000000000a', 'b0000000-0000-4000-8000-000000000003', 'admin', now() - interval '2 days'),
+  ('90000000-0000-4000-8000-00000000000a', 'b0000000-0000-4000-8000-000000000024', 'member', now() - interval '1 day');
+insert into public.meetups (id, group_id, title, starts_at, created_by_user_id, totem_path) values
+  ('e0000000-0000-4000-8000-000000000030', '90000000-0000-4000-8000-00000000000a', 'Troll meetup', now() + interval '1 day', 'b0000000-0000-4000-8000-000000000024',
+   '90000000-0000-4000-8000-00000000000a/e0000000-0000-4000-8000-000000000030/0b000000-0000-4000-8000-000000000030.jpg'),
+  ('e0000000-0000-4000-8000-000000000031', '90000000-0000-4000-8000-00000000000a', 'Carol meetup', now() + interval '1 day', 'b0000000-0000-4000-8000-000000000003', null);
+insert into storage.objects (bucket_id, name, owner, owner_id) values
+  ('totems', '90000000-0000-4000-8000-00000000000a/e0000000-0000-4000-8000-000000000030/0b000000-0000-4000-8000-000000000030.jpg',
+   'a0000000-0000-4000-8000-000000000024', 'a0000000-0000-4000-8000-000000000024');
+insert into public.location_shares (group_id, user_id, lat, lng, recorded_at) values
+  ('90000000-0000-4000-8000-00000000000a', 'b0000000-0000-4000-8000-000000000003', 44.0, -90.0, now() - interval '1 minute'),
+  ('90000000-0000-4000-8000-00000000000a', 'b0000000-0000-4000-8000-000000000024', 44.1, -90.1, now() - interval '1 minute');
+
+select pg_temp.become('troll');
+select is(
+  (select count(*)::int from public.get_group_locations('90000000-0000-4000-8000-00000000000a'))::text
+    || ':' || (select count(*)::int from public.meetups where group_id = '90000000-0000-4000-8000-00000000000a')::text
+    || ':' || (select count(*)::int from storage.objects where name like '90000000-0000-4000-8000-00000000000a/%')::text,
+  '1:2:1',
+  'P1 before the ban, troll sees the crew''s locations, meetups and photos (control)'
+);
+
+-- users:ban sets banned_until; troll's access token stays valid until it expires.
+select pg_temp.become('superuser');
+update auth.users set banned_until = now() + interval '876000 hours'
+where id = 'a0000000-0000-4000-8000-000000000024';
+select pg_temp.become('troll');
+select throws_ok(
+  $$ select * from public.get_group_locations('90000000-0000-4000-8000-00000000000a') $$,
+  'P0001', 'not_authenticated', 'P2 a banned user''s still-valid token cannot read crew locations'
+);
+select is(
+  (select count(*)::int from public.location_shares)::text
+    || ':' || (select count(*)::int from public.meetups)::text
+    || ':' || (select count(*)::int from public.group_members)::text
+    || ':' || (select count(*)::int from public.groups)::text
+    || ':' || (select count(*)::int from storage.objects where bucket_id = 'totems')::text,
+  '0:0:0:0:0',
+  'P3 a banned user''s token reads no locations, meetups, members, crews or photos'
+);
+select throws_ok(
+  $$ select * from public.join_group('PPPPP2') $$,
+  'P0001', 'not_authenticated', 'P4 a banned user cannot (re)join a crew'
+);
+select throws_ok(
+  $$ select * from public.get_my_profile() $$,
+  'P0001', 'not_authenticated', 'P5 a banned user has no profile access'
+);
+
+select pg_temp.become('alice');
+select throws_ok(
+  $$ select * from public.prepare_account_ban('a0000000-0000-4000-8000-000000000024') $$,
+  '42501', null, 'P6 prepare_account_ban is service-role only'
+);
+select pg_temp.become('service_role');
+select is(
+  array(select storage_path from public.prepare_account_ban('a0000000-0000-4000-8000-000000000024') order by 1),
+  array['90000000-0000-4000-8000-00000000000a/e0000000-0000-4000-8000-000000000030/0b000000-0000-4000-8000-000000000030.jpg'],
+  'P7 prepare_account_ban returns the banned user''s photo paths'
+);
+select pg_temp.become('superuser');
+select ok(
+  (select invite_code <> 'PPPPP2' and invite_code_rotated_at = now()
+   from public.groups where id = '90000000-0000-4000-8000-00000000000a'),
+  'P8 crews the banned user was in get a new invite code'
+);
+select is(
+  array(select u.display_name || ':' || m.role from public.group_members m join public.users u on u.id = m.user_id
+        where m.group_id = '90000000-0000-4000-8000-00000000000a'),
+  array['Carol:admin'],
+  'P9 the banned user''s membership is gone, the admin stays'
+);
+select is(
+  (select array_agg(id::text order by id) from public.meetups where group_id = '90000000-0000-4000-8000-00000000000a')::text
+    || ':' || (select count(*)::int from public.location_shares where user_id = 'b0000000-0000-4000-8000-000000000024')::text,
+  '{e0000000-0000-4000-8000-000000000031}:0',
+  'P10 the banned user''s meetups and location rows are deleted; others'' meetups remain'
+);
+-- A friend's (or second) account that knows the old code cannot get back in.
+select pg_temp.become('jack');
+select is(
+  (select count(*)::int from public.join_group('PPPPP2')),
+  0,
+  'P11 the old invite code no longer works after a ban'
+);
+select pg_temp.become('carol');
+select is(
+  (select count(*)::int from public.join_group((select invite_code from public.groups where id = '90000000-0000-4000-8000-00000000000a'))),
+  1,
+  'P12 the new invite code works (control)'
 );
 
 select * from finish();

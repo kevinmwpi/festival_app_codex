@@ -44,7 +44,7 @@ function ArtistCard({
 }) {
   const isSelected = Boolean(row.selection_id);
   const timeRange = clock.range(row.start_time, row.end_time);
-  const day = clock.date(row.start_time, { weekday: 'short' });
+  const day = clock.day(row.start_time);
 
   return (
     <View style={styles.artistCard}>

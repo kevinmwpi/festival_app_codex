@@ -9,7 +9,7 @@ import React from 'react';
 import { Alert, AppState, ScrollView, StyleSheet, Text } from 'react-native';
 
 import { APP_VERSION_LABEL, SUPPORT_EMAIL, SUPPORT_URL } from '@/src/config/app-info';
-import { useLocationSharing, type LocationSharingStatus } from '@/src/location/LocationSharingProvider';
+import { STOP_NOT_CONFIRMED_MESSAGE, useLocationSharing, type LocationSharingStatus } from '@/src/location/LocationSharingProvider';
 import {
   openPrivacyPolicy,
   openSupportEmail,
@@ -54,7 +54,12 @@ function formatUntil(expiresAt: number): string {
   return sameDay ? `until ${time}` : `until ${end.toLocaleDateString([], { weekday: 'short' })} ${time}`;
 }
 
-function sharingCopy(status: LocationSharingStatus, crewName: string | null, expiresAt: number | null): { value: string; subtitle: string } {
+function sharingCopy(
+  status: LocationSharingStatus,
+  crewName: string | null,
+  expiresAt: number | null,
+  canAskAgain: boolean,
+): { value: string; subtitle: string } {
   const crew = crewName ?? 'your crew';
   switch (status) {
     case 'sharing':
@@ -62,7 +67,12 @@ function sharingCopy(status: LocationSharingStatus, crewName: string | null, exp
     case 'paused':
       return { value: 'Paused', subtitle: `Sharing with ${crew} resumes when you open Festie` };
     case 'permission_denied':
-      return { value: 'No access', subtitle: 'Allow location access for Festie in Settings to share with your crew' };
+      return {
+        value: 'No access',
+        subtitle: canAskAgain
+          ? 'Tap to allow location access again and keep sharing with your crew'
+          : 'Allow location access for Festie in Settings to share with your crew',
+      };
     default:
       return { value: 'Off', subtitle: "Turn it on from a crew's map when you want friends to find you" };
   }
@@ -85,7 +95,7 @@ export default function SettingsScreen() {
     },
     enabled: sharingGroupId !== null,
   });
-  const sharingText = sharingCopy(sharing.status, crewQuery.data ?? null, sharing.expiresAt);
+  const sharingText = sharingCopy(sharing.status, crewQuery.data ?? null, sharing.expiresAt, sharing.canAskAgain);
 
   const confirmStopSharing = React.useCallback(() => {
     Alert.alert('Stop sharing your location?', 'Your crew will no longer see where you are.', [
@@ -95,10 +105,11 @@ export default function SettingsScreen() {
         style: 'destructive',
         onPress: () => {
           setStoppingShare(true);
-          sharing
+          void sharing
             .stop()
-            .then(() => showToast('Location sharing stopped', 'success'))
-            .catch(() => showToast("Couldn't reach the server. Sharing stops on this phone; your last position expires within 15 minutes.", 'error'))
+            .then((removed) =>
+              removed ? showToast('Location sharing stopped', 'success') : showToast(STOP_NOT_CONFIRMED_MESSAGE, 'error'),
+            )
             .finally(() => setStoppingShare(false));
         },
       },
@@ -184,7 +195,13 @@ export default function SettingsScreen() {
           title="Location sharing"
           value={sharingText.value}
           subtitle={sharingText.subtitle}
-          onPress={sharing.status === 'permission_denied' ? openSystemSettings : undefined}
+          onPress={
+            sharing.status === 'permission_denied'
+              ? sharing.canAskAgain
+                ? () => void sharing.requestAccess()
+                : openSystemSettings
+              : undefined
+          }
         />
         {sharing.status !== 'off' ? (
           <ListRow title="Stop sharing location" destructive loading={stoppingShare} onPress={confirmStopSharing} />

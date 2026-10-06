@@ -54,7 +54,8 @@ export function describeBan(target: BanTarget): string {
   return [
     `ban auth user ${target.authUserId}${target.displayName ? ` ("${target.displayName}")` : ''} for ${BAN_DURATION}`,
     `remove ${target.memberships} group membership(s) with admin hand-off, and all location rows`,
-    'delete photos left behind in groups that become empty',
+    'give every crew the user was in a new invite code',
+    "delete the user's meetups and photos (reports keep their snapshot), and photos left in crews that become empty",
     target.profileId ? `mark open/reviewed reports about user ${target.profileId} as actioned` : 'no profile: no reports to update',
   ]
     .map((line) => `  - ${line}`)
@@ -62,11 +63,14 @@ export function describeBan(target: BanTarget): string {
 }
 
 /**
- * Bans the account (sign-in and token refresh fail), then removes its group
- * memberships and location rows through prepare_account_deletion (same admin
- * hand-off rules as leaving), deletes photos orphaned by groups that became
- * empty, and marks reports about the user as actioned. The profile and its
- * remaining content stay for moderation records.
+ * Bans the account first: GoTrue then refuses sign-in and token refresh, and
+ * the database refuses the banned user's still-valid access token
+ * (private.is_banned). Then prepare_account_ban removes the group memberships
+ * and location rows (same admin hand-off rules as leaving), rotates the invite
+ * codes of those crews so the person cannot rejoin from another account, and
+ * deletes the user's meetups; this removes every photo path it returns and
+ * marks reports about the user as actioned. The profile stays for moderation
+ * records, and reports keep their target_snapshot. Safe to re-run.
  */
 export async function banUser(client: SupabaseClient, target: BanTarget): Promise<{ removedObjects: number }> {
   const { error: banError } = await client.auth.admin.updateUserById(target.authUserId, { ban_duration: BAN_DURATION });
@@ -74,28 +78,21 @@ export async function banUser(client: SupabaseClient, target: BanTarget): Promis
     throw new Error(`Banning auth user ${target.authUserId} failed: ${banError.message}`);
   }
 
-  const paths = (
-    check(
-      await client.rpc('prepare_account_deletion', { p_auth_user_id: target.authUserId }),
-      'Removing memberships',
-    ) as Array<{ storage_path: string }> | null
-  )?.map((row) => row.storage_path) ?? [];
+  const paths = [
+    ...new Set(
+      (
+        check(
+          await client.rpc('prepare_account_ban', { p_auth_user_id: target.authUserId }),
+          'Removing memberships and content',
+        ) as Array<{ storage_path: string }> | null
+      )?.map((row) => row.storage_path) ?? [],
+    ),
+  ];
 
-  // Only delete objects whose meetup no longer exists (their group was deleted).
-  const meetupIds = [...new Set(paths.map((path) => path.split('/')[1]).filter(isUuid))];
-  let orphaned: string[] = [];
-  if (meetupIds.length > 0) {
-    const remaining = check(
-      await client.from('meetups').select('id').in('id', meetupIds),
-      'Reading meetups',
-    ) as Array<{ id: string }>;
-    const alive = new Set(remaining.map((row) => row.id));
-    orphaned = paths.filter((path) => !alive.has(path.split('/')[1]));
-  }
-  for (let index = 0; index < orphaned.length; index += 1000) {
-    const { error } = await client.storage.from('totems').remove(orphaned.slice(index, index + 1000));
+  for (let index = 0; index < paths.length; index += 1000) {
+    const { error } = await client.storage.from('totems').remove(paths.slice(index, index + 1000));
     if (error) {
-      throw new Error(`Removing orphaned photos failed: ${error.message}`);
+      throw new Error(`Removing photos failed (re-run users:ban to retry): ${error.message}`);
     }
   }
 
@@ -110,5 +107,5 @@ export async function banUser(client: SupabaseClient, target: BanTarget): Promis
       'Updating report status',
     );
   }
-  return { removedObjects: orphaned.length };
+  return { removedObjects: paths.length };
 }

@@ -367,7 +367,7 @@ export default function PersonalScheduleScreen() {
       <ActionSheet
         visible={actionRow !== null}
         title={actionRow?.artist_name}
-        message={actionRow ? `${actionRow.stage_name} · ${clock.date(actionRow.start_time)} · ${clock.range(actionRow.start_time, actionRow.end_time)}` : undefined}
+        message={actionRow ? `${actionRow.stage_name} · ${clock.day(actionRow.start_time, { weekday: 'short', month: 'short', day: 'numeric' })} · ${clock.range(actionRow.start_time, actionRow.end_time)}` : undefined}
         actions={
           actionRow
             ? [{ label: 'Remove from my schedule', destructive: true, onPress: () => void toggle(actionRow) }]

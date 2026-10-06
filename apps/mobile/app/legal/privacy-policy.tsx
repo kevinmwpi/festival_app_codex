@@ -377,7 +377,7 @@ const CONTENT: Block[] = [
     "spans": [
       {
         "kind": "text",
-        "text": "To work offline at a festival, Festie keeps your sign-in session, a copy of your schedule, crews and meetups, changes waiting to sync, your reminders and your settings in the app's private storage on your phone, which iOS protects with its standard data protection. Signing out or deleting your account removes your account data from the phone; deleting the app removes everything."
+        "text": "To work offline at a festival, Festie keeps your sign-in session, a copy of your schedule, crews and meetups, changes waiting to sync, your reminders and your settings in the app's private storage on your phone, which iOS protects with its standard data protection. Signing out or deleting your account in the app removes your account data from the phone. If you are signed out without doing it yourself (for example, your sign-in expires or you deleted your account on another device), Festie keeps that copy, including changes not yet synced, so nothing is lost: it cannot be viewed while you are signed out, and it is removed when you sign in again and then sign out, when a different account (including a new one after a deletion) signs in on the phone, or when you delete the app. Deleting the app removes everything."
       }
     ]
   },
@@ -584,7 +584,7 @@ const CONTENT: Block[] = [
     "spans": [
       {
         "kind": "text",
-        "text": "Members of a crew see your display name and avatar, your picks for that crew's festival, the meetups and totem photos you post in that crew and, while you share it with that crew, your location. If you block someone, or they block you, neither of you sees the other's location, meetups or picks."
+        "text": "Members of a crew see your display name and avatar, your picks for that crew's festival, the meetups and totem photos you post in that crew and, while you share it with that crew, your location. If you block someone, or they block you, neither of you sees the other's location, meetups (including their totem photos) or picks."
       }
     ]
   },
@@ -812,7 +812,7 @@ const CONTENT: Block[] = [
       },
       {
         "kind": "text",
-        "text": " if we ban an account for breaking our Terms of Use, we keep its profile, sign-in account and email address, and the content it posted that we have not removed, as a record of the ban and to stop it signing in again."
+        "text": " if we ban an account for breaking our Terms of Use, we remove it from every crew and delete its meetups, totem photos and shared location. We keep its profile, sign-in account and email address, and any other content it posted that we have not removed, as a record of the ban and to stop it signing in again."
       }
     ]
   },

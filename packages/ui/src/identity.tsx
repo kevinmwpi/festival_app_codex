@@ -198,7 +198,10 @@ const styles = StyleSheet.create({
   avatarGlyphMuted: { color: colors.textSecondary },
 
   picker: { gap: spacing.md },
-  emojiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  // Five 18%-wide cells per row; the remaining 10% is split between them. A fixed column gap would
+  // need a grid at least 400pt wide (0.9W + 4 × gap ≤ W) and wrap to four per row on every phone.
+  // AVATAR_EMOJIS has a multiple of five entries, so every row is full.
+  emojiGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
   emojiCell: {
     alignItems: 'center',
     backgroundColor: colors.surface,

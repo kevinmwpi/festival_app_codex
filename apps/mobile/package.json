@@ -13,7 +13,7 @@
     "web": "expo start --web",
     "prebuild": "npm run build:workspace-deps",
     "build": "tsc --noEmit",
-    "test": "node -e \"console.log('No mobile tests configured')\"",
+    "test": "vitest run",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

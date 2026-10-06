@@ -760,6 +760,7 @@ export type Database = {
           name: string
         }[]
       }
+      custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       get_group_locations: {
         Args: { p_group_id: string }
         Returns: {
@@ -794,6 +795,12 @@ export type Database = {
       }
       leave_group: { Args: { p_group_id: string }; Returns: undefined }
       prepare_account_deletion: {
+        Args: { p_auth_user_id: string }
+        Returns: {
+          storage_path: string
+        }[]
+      }
+      prepare_account_ban: {
         Args: { p_auth_user_id: string }
         Returns: {
           storage_path: string

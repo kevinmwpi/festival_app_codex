@@ -56,14 +56,13 @@ function FestivalCard({
   const dates = formatFestivalDateRange(festival);
   const meta = [festival.venue_name, dates].filter(Boolean).join(' • ');
 
+  const [pressed, setPressed] = React.useState(false);
+
+  // The card body and the follow toggle are sibling buttons: a toggle nested inside an accessible
+  // Pressable is one VoiceOver element with it and could never be focused or activated.
   return (
-    <Pressable
-      onPress={onSelect}
-      accessibilityRole="button"
-      accessibilityLabel={`${festival.name}${festival.is_demo ? ', sample festival' : ''}, ${meta}`}
-      accessibilityHint="Opens this festival's lineup"
-      accessibilityState={{ selected: isActive }}
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.card,
         // Card background = soft tint of the festival accent, as in the reference.
         { backgroundColor: accent.bgTint },
@@ -72,32 +71,40 @@ function FestivalCard({
       ]}
     >
       <View style={styles.cardInner}>
-        <View style={[styles.iconBox, { backgroundColor: accent.solid }]}>
-          <Ionicons name="flag" size={28} color={colors.textPrimary} />
-        </View>
+        <Pressable
+          onPress={onSelect}
+          onPressIn={() => setPressed(true)}
+          onPressOut={() => setPressed(false)}
+          accessibilityRole="button"
+          accessibilityLabel={`${festival.name}${festival.is_demo ? ', sample festival' : ''}, ${meta}${isFollowing ? ', following' : ''}`}
+          accessibilityHint="Opens this festival's lineup"
+          accessibilityState={{ selected: isActive }}
+          style={styles.cardBody}
+        >
+          <View style={[styles.iconBox, { backgroundColor: accent.solid }]}>
+            <Ionicons name="flag" size={28} color={colors.textPrimary} />
+          </View>
 
-        <View style={styles.cardText}>
-          {festival.is_demo ? <Badge label="Sample" tone="sample" /> : null}
-          <Text style={styles.festivalName} numberOfLines={2}>
-            {festival.name}
-          </Text>
-          <Text style={styles.festivalMeta}>{meta.toUpperCase()}</Text>
-        </View>
+          <View style={styles.cardText}>
+            {festival.is_demo ? <Badge label="Sample" tone="sample" /> : null}
+            <Text style={styles.festivalName} numberOfLines={2}>
+              {festival.name}
+            </Text>
+            <Text style={styles.festivalMeta}>{meta.toUpperCase()}</Text>
+          </View>
+        </Pressable>
 
         <Pressable
-          onPress={(event) => {
-            event.stopPropagation();
-            onToggle();
-          }}
+          onPress={onToggle}
           disabled={busy}
           accessibilityRole="button"
           accessibilityLabel={isFollowing ? `Unfollow ${festival.name}` : `Follow ${festival.name}`}
           accessibilityState={{ selected: isFollowing, busy }}
           hitSlop={4}
-          style={({ pressed }) => [
+          style={({ pressed: togglePressed }) => [
             styles.toggleButton,
             isFollowing ? styles.toggleFollowing : styles.toggleNotFollowing,
-            pressed && { transform: [{ scale: 0.88 }] },
+            togglePressed && { transform: [{ scale: 0.88 }] },
           ]}
         >
           {busy ? (
@@ -109,7 +116,7 @@ function FestivalCard({
           )}
         </Pressable>
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -305,8 +312,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.card,
     borderWidth: 2,
     borderColor: 'rgba(0,0,0,0.05)',
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.xl,
+    // Padding lives on the body button (and the toggle's margin) so the whole card stays tappable.
+    paddingRight: spacing.xl,
     shadowColor: '#000',
     shadowOpacity: 0.04,
     shadowRadius: 6,
@@ -323,6 +330,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+  },
+  cardBody: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingLeft: spacing.xl,
+    paddingVertical: spacing.lg,
   },
   iconBox: {
     width: 64,

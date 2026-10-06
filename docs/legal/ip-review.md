@@ -17,7 +17,7 @@ procedure):
 | **Sample festival is fictional.** "Festie Demo Fest" uses invented artist names, is marked `is_demo` and shown with a "Sample" badge | `seed-data/demo-festival.json`; app badge and sort order (§5.5 of the contract) |
 | **Real festivals are factual data from official public sources**: festival, stage and artist names, dates, set times. No descriptions, bios, editorial text or ticket information | Strict validator in `apps/admin-tools` (unknown fields are errors); there are no description or bio columns |
 | **Every published real festival records its source** (`source_url`, the organizer's public schedule page) | Validator refuses to publish without it; database check `festivals_published_requires_source` (`status = 'draft' or is_demo or source_url is not null`); migration 007 reset legacy rows without a source to draft |
-| **Names are used nominatively**, only to identify the festival, stages and artists, with a disclaimer of affiliation on every festival screen and in the Terms | `FESTIVAL_DISCLAIMER` in `apps/mobile/src/components/FestivalNotes.tsx`; Terms §8 |
+| **Names are used nominatively**, only to identify the festival, stages and artists, with a disclaimer of affiliation on the festival browsing screens, in Settings and in the Terms | `FESTIVAL_DISCLAIMER` (`apps/mobile/src/components/FestivalNotes.tsx`) on the Fests list, Lineup and the schedule browser (`schedule/browse`); a footer line in Settings; Terms §8 |
 | **No logos, wordmarks, posters, official maps, artwork or brand colours** | `image_url` and `map_asset_url` must be null (validator); artists have no image column in the seed format; accent colours are chosen by us and used only as pastel fills |
 | **No artist photos** unless licensed in writing; v1 shows none (artists are shown as monogram initials, `ArtistMonogram.tsx`) | No artist image field is accepted by `festival:seed` |
 | **Map data** comes from Mapbox tiles (OpenStreetMap-based) and coordinates from public map data, never from a festival's site map | Coordinates only (`latitude`/`longitude`/bounds); no map image upload path |
@@ -42,10 +42,11 @@ removed with `npm run admin -- reports:remove-content`. Copyright complaints go 
 - [ ] **Trademark search for "Festie"** in the classes for software and apps (Nice classes 9 and 42) in
       every country you launch in, using the official search tools (USPTO Trademark Search, EUIPO / TMview,
       UKIPO), plus an App Store search for similar names. Record the result here.
-- [ ] **App icon and splash: replace before submission.** `apps/mobile/assets/images/icon.png` (and the
-      splash and Android icons in the same folder) are still the Expo project-template artwork, which shows
-      Expo's logo. App Review rejects template icons, and the logo is Expo's mark. An original Festie icon
-      is required (owned by the mobile shell, `apps/mobile/app.json` assets).
+- [x] **App icon and splash are original.** `apps/mobile/assets/images/` (icon, splash, Android adaptive
+      icon layers, favicon) holds simple original Festie artwork made for this app (a tent with a yellow
+      flag on a pink gradient), replacing the Expo template artwork that showed Expo's logo. `app.config.ts`
+      (`releaseArtworkProblems`) fails preview and production builds if any template file returns. A
+      designer's version may still replace it; keep it original.
 - [ ] Store listing: no festival or artist names in the app name, subtitle or keywords; screenshots show
       the demo festival or real schedules without logos or artwork.
 - `com.kevin.festivalapp` and the `festivalapp://` scheme are generic identifiers in the developer's own
@@ -69,5 +70,5 @@ Verify before each release: `npx license-checker --production --summary` (or an 
 ## 5. Open items
 
 - [ ] Trademark search done and recorded (§3).
-- [ ] Original app icon and splash in place (§3).
+- [x] Original app icon and splash in place (§3); review the artwork before submission.
 - [ ] Each published real festival checked against its `source_url` with no copied artwork or text (§1).

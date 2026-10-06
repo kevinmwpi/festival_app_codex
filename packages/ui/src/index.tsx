@@ -198,15 +198,13 @@ export function SecondaryButton({
   );
 }
 
-/**
- * Inline text link (e.g. "I already have a code", "Terms of Use"). Uses `colors.link` and gets a
- * 44pt-tall hit area via hitSlop.
- */
 const TEXT_LINK_ALIGN_SELF = { start: 'flex-start', center: 'center', end: 'flex-end' } as const;
 
 /**
- * An underlined inline link, sized to its label. It sits at the start of its column unless `align`
- * says otherwise (a parent's `alignItems` does not move it, because it sets its own `alignSelf`).
+ * Inline text link (e.g. "I already have a code", "Terms of Use"), underlined in `colors.link`, sized
+ * to its label, with a 44pt-tall hit area via hitSlop. It sits at the start of its column unless
+ * `align` says otherwise: it sets its own `alignSelf`, so a parent's `alignItems` does not move it —
+ * pass `align="center"` to centre it.
  */
 export function TextLink({
   label, onPress, accessibilityLabel, align = 'start',
@@ -341,7 +339,10 @@ const styles = StyleSheet.create({
   fieldLabel: { color: colors.textSecondary, fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 2 },
   input: {
     backgroundColor: colors.surface,
+    // Fields sit on white cards and sheets: the outline is what shows where the field is.
+    borderColor: colors.inputBorder,
     borderRadius: radii.md + 4,
+    borderWidth: 1,
     color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '700',

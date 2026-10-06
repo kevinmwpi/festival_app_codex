@@ -283,7 +283,7 @@ const CONTENT: Block[] = [
     "spans": [
       {
         "kind": "text",
-        "text": "Block someone from their name in a crew. You will no longer see their location, meetups or picks, and they will not see your location, meetups or picks. They are not told. You can unblock them later in Settings."
+        "text": "Block someone from their name in a crew. You will no longer see their location, meetups (including their totem photos) or picks, and they will not see yours. They are not told. You can unblock them later in Settings."
       }
     ]
   },
@@ -301,7 +301,7 @@ const CONTENT: Block[] = [
     "spans": [
       {
         "kind": "text",
-        "text": "We may suspend or permanently ban accounts that break these Terms, without notice where needed to protect others."
+        "text": "We may suspend or permanently ban accounts that break these Terms, without notice where needed to protect others. A banned account loses access at once, is removed from every crew, and its meetups and photos are deleted."
       }
     ]
   },

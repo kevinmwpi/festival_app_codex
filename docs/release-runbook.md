@@ -173,6 +173,7 @@ In the dashboard SQL editor:
 select jobname, schedule, command from cron.job order by jobname;
 -- expect: purge-rate-limit-events  17 * * * *    select public.purge_rate_limit_events()
 --         purge-stale-locations    */5 * * * *   select public.purge_stale_locations()
+--         refresh-demo-crew        */5 * * * *   select private.refresh_demo_crew()
 
 select id, public, file_size_limit, allowed_mime_types from storage.buckets where id = 'totems';
 -- expect: totems | false | 5242880 | {image/jpeg}
@@ -182,7 +183,10 @@ select name, status, is_demo, source_url from public.festivals order by name;
 ```
 
 If `cron.job` is missing or empty, enable **pg_cron** (Database → Extensions) and run the block from
-[`v1-architecture.md`](./v1-architecture.md) §2.7 in the SQL editor. Retention does not depend on cron
+[`v1-architecture.md`](./v1-architecture.md) §2.7 in the SQL editor, plus
+`select cron.schedule('refresh-demo-crew', '*/5 * * * *', 'select private.refresh_demo_crew()');`
+(the full block is section 11 of `supabase/migrations/007_v1_security_overhaul.sql`). Without that job the
+demo crew still refreshes whenever the reviewer's map polls it. Retention does not depend on cron
 alone (the location RPCs purge too), but rate-limit records are only purged by the job.
 
 Then open **Advisors → Security Advisor**, click **Refresh** and resolve every **error** (for example a
@@ -209,7 +213,9 @@ limited, so App Review and real users would never receive a code. Configure your
 
 `supabase/config.toml` holds the reviewed settings: exposed API schemas `public, graphql_public` (no
 `storage`), email sign-up with 8-digit codes valid for 10 minutes, the two code-only email templates in
-`supabase/templates/`, rate limits (`email_sent = 200`, `token_verifications = 30`), refresh-token rotation,
+`supabase/templates/`, email confirmations on, the custom access token hook
+(`public.custom_access_token_hook` from migration 007, which refuses every token requested with a
+password), rate limits (`email_sent = 200`, `token_verifications = 30`), refresh-token rotation,
 anonymous sign-ins off, `site_url` placeholder (codes are typed, so no email links to it), redirect URL
 `festivalapp://`, storage file size limit 5 MiB.
 
@@ -237,18 +243,21 @@ The diff may contain only these changes (any of them may be absent if the hosted
 |---|---|
 | API | exposed schemas `public, graphql_public` (`storage` removed), `extra_search_path`, `max_rows = 1000` |
 | Auth general | `site_url`, redirect URLs `festivalapp://`, JWT expiry 3600, refresh-token rotation on with reuse interval 10, sign-ups on, anonymous sign-ins off, manual linking off |
-| Auth email | email sign-up on, confirmations off (autoconfirm), secure email change on, OTP length 8, OTP expiry 600, `smtp_max_frequency` 60 s (never 1 s), both templates with the subject "Your Festie sign-in code" |
+| Auth email | email sign-up on, confirmations **on** (no autoconfirm), secure email change on, OTP length 8, OTP expiry 600, `smtp_max_frequency` 60 s (never 1 s), both templates with the subject "Your Festie sign-in code" |
 | Auth rate limits | `email_sent` 200, `token_verifications` 30; `sign_in_sign_ups`, `token_refresh`, `anonymous_users`, `sms_sent`, `web3` at the template values (30, 150, 30, 30, 30), which match the hosted defaults |
+| Auth hooks | Customize Access Token (JWT) Claims on, Postgres function `public.custom_access_token_hook` |
 | Auth MFA, phone, providers | TOTP enroll/verify off; phone sign-up, phone MFA and every external, Web3 and third-party provider off |
 | Storage | file size limit 5 MiB |
 
 Answer **no** if the diff shows `smtp_max_frequency` (or the per-user email interval) at 1 s, changes the
 custom SMTP settings from §2.7 (`config.toml` has no `[auth.email.smtp]` block, so it should not touch
-them), turns on anything, or touches a setting not in the table. Then either fix `config.toml` (add the
+them), turns on anything other than the confirmations and the access token hook in the table, or
+touches a setting not in the table. Apply migrations 006–009 (§2.5) first: the hook names a function
+that 007 creates. Then either fix `config.toml` (add the
 missing key with the hosted value you want to keep) and run the push again, or skip `config push` entirely
 and set the values in the table by hand in the dashboard (Authentication → Sign In / Providers, Emails,
-Rate Limits, Multi-Factor; Project Settings → Data API; Storage → Settings) and copy the two templates
-from `supabase/templates/` into Authentication → Emails → Templates.
+Rate Limits, Multi-Factor, Hooks; Project Settings → Data API; Storage → Settings) and copy the two
+templates from `supabase/templates/` into Authentication → Emails → Templates.
 
 Afterwards check in the dashboard:
 
@@ -261,6 +270,24 @@ Afterwards check in the dashboard:
   the same address again within a few seconds: the app shows an error and no second email arrives. After
   60 seconds "Resend code" sends a new one.
 - Project Settings → Data API: exposed schemas `public` and `graphql_public` only.
+- Authentication → Sign In / Providers → Email: "Confirm email" is **on**.
+- Authentication → Hooks: "Customize Access Token (JWT) Claims" is enabled with the Postgres function
+  `public.custom_access_token_hook` (add it there if `config push` did not). Then prove passwords never
+  yield a session, with the anon key from Project Settings → API (use a throwaway address you control):
+
+  ```sh
+  curl -s -X POST "https://<ref>.supabase.co/auth/v1/signup" -H "apikey: <anon key>" \
+    -H "Content-Type: application/json" -d '{"email":"<throwaway address>","password":"Festie-test-123"}'
+  # expected: a user object with no access_token (confirmation pending)
+  curl -s -o /dev/null -w '%{http_code}\n' -X POST "https://<ref>.supabase.co/auth/v1/token?grant_type=password" \
+    -H "apikey: <anon key>" -H "Content-Type: application/json" \
+    -d '{"email":"<throwaway address>","password":"Festie-test-123"}'
+  # expected: 400 (email not confirmed) now; after you confirm that address with the emailed code in the
+  # app, run it again: expected 403 from the hook, never 200
+  ```
+
+  Then sign in normally with an emailed code on a development build: it must still work (the hook passes
+  code sign-ins and token refreshes through). Delete the throwaway user afterwards (Authentication → Users).
 
 **Sign-in audit log retention (privacy policy §5: at most 90 days).** Supabase Auth logs every sign-in,
 code request, token refresh, sign-out and account deletion with the email address and IP address. By
@@ -611,7 +638,11 @@ npx eas-cli@latest env:list --environment production
 `apps/mobile/app.config.ts` **fails the build** for the `preview` and `production` profiles when
 `EXPO_PUBLIC_SUPABASE_URL` (https), the anon key, `EXPO_PUBLIC_SUPPORT_EMAIL` (an email address),
 `EXPO_PUBLIC_PRIVACY_POLICY_URL` or `EXPO_PUBLIC_SUPPORT_URL` (https) is missing or malformed, and lists
-what is wrong. Development builds never fail; they show a configuration-error screen instead.
+what is wrong. It also fails those builds while the bundled legal screens (`apps/mobile/app/legal/*.tsx`)
+still contain a `__PLACEHOLDER__` token other than `__SUPPORT_EMAIL__` (do §4 first: the same tokens make
+`generate.mjs --release` fail), or while any file in `apps/mobile/assets/images/` is still the Expo
+template artwork or the icon is not a 1024×1024 PNG without alpha. Development builds never fail; they
+show a configuration-error screen instead.
 
 ### 5.2 Mapbox
 
@@ -683,18 +714,21 @@ The production profile auto-increments the build number (`appVersionSource: remo
    policy and [`legal/data-compliance.md`](./legal/data-compliance.md), regenerate (§4) and rebuild
    before you answer App Privacy.
 4. **Mapbox telemetry is really off.** The privacy policy (§2) and
-   [`app-store-privacy.md`](./app-store-privacy.md) say the map's optional telemetry is off, but on iOS
-   that is not yet proven. The app calls `Mapbox.setTelemetryEnabled(false)`
-   (`apps/mobile/src/providers/app-providers.tsx`); in `@rnmapbox/maps` 10.3.0 that only writes the legacy
-   `MGLMapboxMetricsEnabled` user default on iOS (`ios/RNMBX/RNMBXModule.swift`), and whether Mapbox Maps
-   SDK 11.18.2 still reads that key has not been checked. A privacy manifest lists declared types, not
-   what the SDK does at run time, so step 3 cannot catch this. Check the TestFlight build:
+   [`app-store-privacy.md`](./app-store-privacy.md) say the map's optional telemetry is off. The app calls
+   `Mapbox.setTelemetryEnabled(false)` (`apps/mobile/src/providers/app-providers.tsx`); in `@rnmapbox/maps`
+   10.3.0 that writes the `MGLMapboxMetricsEnabled` user default on iOS (`ios/RNMBX/RNMBXModule.swift`),
+   and Mapbox Maps SDK 11.18.2 observes that key and applies it to its events collection
+   ([`EventsManager.swift` at v11.18.2](https://github.com/mapbox/mapbox-maps-ios/blob/v11.18.2/Sources/MapboxMaps/Foundation/Events/EventsManager.swift)). That is the source, not the build: if
+   `RNMapboxMapsVersion` or `@rnmapbox/maps` changed, re-read `EventsManager.swift` at the new tag first.
+   A privacy manifest lists declared types, not what the SDK does at run time, so step 3 cannot catch a
+   regression. Check the TestFlight build:
    - Route one iPhone through an HTTPS-inspecting proxy on your Mac (Proxyman or Charles: install and
      trust its root certificate on the phone, enable SSL proxying for `*.mapbox.com`).
    - Fresh install, sign in, allow location when sharing asks for it, open the Map tab so your own dot
      shows, and keep the map on screen for 10 minutes, moving around a little.
    - Expected: style, tile and font requests to `api.mapbox.com`, and to `events.mapbox.com` at most the
-     billing events (the turnstile event `appUserTurnstile`, and map-load events). Nothing else: no
+     billing events (the turnstile event `appUserTurnstile`, and map-load events, which the opt-out does not
+     stop: [mapbox-maps-ios#1964](https://github.com/mapbox/mapbox-maps-ios/issues/1964)). Nothing else: no
      `location` events, no gesture or performance events, no repeated POSTs carrying coordinates.
    - If the proxy cannot decrypt `events.mapbox.com` (certificate pinning), count the requests instead:
      more than a few POSTs to `events.mapbox.com` during the 10 minutes means telemetry is on. Xcode's
@@ -784,9 +818,11 @@ Legal text is not legal advice; have it reviewed if you can.
       re-run after migration 007; demo dates shifted into the review window (§3.3).
 - [ ] Placeholders replaced, `supportEmail` set, legal pages regenerated, committed and hosted; URLs open
       on a phone (§4, §7.1).
-- [ ] **Original app icon and splash** replace the Expo template artwork in `apps/mobile/assets/images/`
-      (the current `icon.png` is the Expo logo; App Review rejects template icons, see
-      [`legal/ip-review.md`](./legal/ip-review.md) §3). Trademark search for "Festie" recorded there.
+- [ ] **App icon and splash reviewed.** `apps/mobile/assets/images/` holds original Festie artwork (a tent
+      with a flag on a pink gradient) in place of the Expo template, and `app.config.ts` fails preview and
+      production builds if template artwork comes back. Look at the icon at home-screen size and decide
+      whether to replace it with a designer's version (see [`legal/ip-review.md`](./legal/ip-review.md)
+      §3). Trademark search for "Festie" recorded there.
 - [ ] If the legal text changed materially since a build that testers accepted, `TERMS_VERSION` in
       `apps/mobile/src/config/app-info.ts` was bumped so everyone agrees again.
 - [ ] EAS environment variables set for production; the production build succeeded (§5.1–5.3).

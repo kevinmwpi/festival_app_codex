@@ -51,9 +51,9 @@ You agree not to:
 ## 6. Reports, blocks and enforcement
 
 - Report content or people with the Report options in the app. We review reports within 24 hours. When content breaks these Terms, we remove it and remove the people responsible from Festie.
-- Block someone from their name in a crew. You will no longer see their location, meetups or picks, and they will not see your location, meetups or picks. They are not told. You can unblock them later in Settings.
+- Block someone from their name in a crew. You will no longer see their location, meetups (including their totem photos) or picks, and they will not see yours. They are not told. You can unblock them later in Settings.
 - Crew admins can remove members from their crew.
-- We may suspend or permanently ban accounts that break these Terms, without notice where needed to protect others.
+- We may suspend or permanently ban accounts that break these Terms, without notice where needed to protect others. A banned account loses access at once, is removed from every crew, and its meetups and photos are deleted.
 
 ## 7. Location sharing
 

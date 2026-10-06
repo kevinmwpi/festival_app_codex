@@ -10,68 +10,64 @@ shifted so its sets are "now playing" during the review window. The email and co
 `DEMO_LOGIN_EMAIL` / `DEMO_LOGIN_CODE` Supabase function secrets; never commit them.
 
 Every tap below was checked against the v1 code (screen labels in quotes are the exact on-screen text).
-If you change a screen, update this file.
+If you change a screen, update this file. App Store Connect limits Notes to 4000 bytes; keep the text
+between the lines under about 3,700 bytes so the replaced placeholders still fit
+(`awk '/^---$/{n++; next} n==1' docs/app-review-notes.md | wc -c`).
 
 ---
 
-Festie helps groups of friends plan a music festival together: each person builds a schedule of the sets
-they want to see, sees which sets their crew picked, sets up meetups (with an optional "totem" photo so
-friends can spot the meeting point) and can choose to share their live location with their crew while the
+Festie helps friends plan a festival together: personal schedules, crew picks, meetups (with an
+optional "totem" photo of the meeting point) and optional live location sharing with the crew while the
 app is open.
 
 DEMO ACCOUNT
-Sign-in uses a one-time code sent by email. For review, use:
+Sign-in uses a one-time email code. For review, use:
 - Email: __DEMO_LOGIN_EMAIL__
 - Code: __DEMO_LOGIN_CODE__ (8 digits)
-On the first screen enter the email and tap "Enter Festival", then type the 8-digit code and tap "Verify".
-(The app may also email a code to that address; ignore it, the code above always works.) Then tick
-"I agree to the Terms of Use and Privacy Policy" and tap "Continue". The demo account is already a
-member of "Festie Demo Crew" for the sample festival "Festie Demo Fest" (fictional, marked "Sample"),
-with three demo members, a meetup with a totem photo and live demo locations. You can delete the demo
-account and sign in again with the same code at any time; it is recreated automatically.
+Enter the email, tap "Enter Festival", type the code and tap "Verify" (ignore any emailed code). Tick
+"I agree to the Terms of Use and Privacy Policy" and tap "Continue". The account is in "Festie Demo Crew"
+for the fictional festival "Festie Demo Fest" (marked "Sample") with three demo members, a meetup with a
+totem photo and live demo locations. If you leave the crew or block a demo member, sign out (Settings,
+"Sign out") and sign in again with the same code: the membership is restored and blocks are lifted. If
+you delete the account, signing in again recreates it.
 
-USER-GENERATED CONTENT: REPORT, BLOCK, REMOVE (Guideline 1.2)
+USER-GENERATED CONTENT (Guideline 1.2)
 Users must accept our Terms of Use (zero tolerance for objectionable content and abusive users) before
-seeing any crew content. Names, crew names and meetup text are checked against a disallowed-word filter.
-- Open the "Group" tab, then tap "Festie Demo Crew".
-- Report or block a person: tap a member (e.g. Maya) under Members, then "Report Maya" (choose a
-  reason, optionally add details, tap "Send report") or "Block Maya" (confirm with "Block"). Blocked
-  members' meetups, picks and location disappear; unblock in the same menu or in Settings, "Blocked users".
-- Report a meetup or photo: on Jordan's meetup tap the "⋯" button, then "Report meetup" or
-  "Report photo".
-- Report the crew: scroll down and tap "Report this crew". Leave it with "Leave crew".
-- Remove a member: crew admins see "Remove from crew" (and "Remove meetup") in the same menus. In the
-  demo crew the admin is the demo member Maya, so the demo account sees Report and Block only. To see the
-  admin actions, create a crew from the Group tab ("Create"); the creator is its admin and can
-  remove anyone who joins with its invite code.
-We review every report within 24 hours; offending content is removed and offending users are banned and
-removed from all crews.
+seeing any crew content. Names, crew names and meetup text pass a disallowed-word filter.
+- Open the "Group" tab, then "Festie Demo Crew".
+- Report or block a person: tap a member (e.g. Maya) under Members, then "Report Maya" (pick a reason,
+  tap "Send report") or "Block Maya" (confirm "Block"). A blocked member's meetups, picks and location
+  disappear; unblock in the same menu or in Settings, "Blocked users".
+- Report a meetup or photo: on Jordan's meetup tap "⋯", then "Report meetup" or "Report photo".
+- Report the crew: scroll down, tap "Report this crew". ("Leave crew" below it leaves the crew, which the
+  location steps need; try it last.)
+- Remove a member: crew admins see "Remove from crew" and "Remove meetup" in the same menus. The demo
+  crew's admin is the demo member Maya, so to see these create a crew ("Create" on the Group tab); its
+  creator is the admin and can remove anyone who joins with its invite code.
+Reports are reviewed within 24 hours; offending content is removed and offending users are banned.
 
 LOCATION SHARING
-Location is only used while the app is open; there is no background location. Open the "Map" tab and
-make sure "Festie Demo Crew" is selected: the demo members appear near the stages. Tap "Share
-location" (or "Share my location" on the list view shown when the map is unavailable), read the
-explanation, pick a duration (1, 4 or 8 hours, or "Until I stop", at most 24 hours) and tap "Start
-sharing"; iOS then asks for location permission ("While Using the App"). Only members of that crew see
-your position, and it is visible to your crew for at most 15 minutes after the last update, then deleted.
-To stop, tap "Sharing location" and then "Stop sharing my location", or use Settings, "Stop sharing
-location".
+Foreground only; there is no background location. The Map shows the crews of the selected festival, so
+on the "Fests" tab tap "Festie Demo Fest", then open "Map" with "Festie Demo Crew" selected: the demo
+members appear near the stages. Tap "Share location" ("Share my location" in the list view if the map is
+unavailable), pick a duration (1, 4 or 8 hours, or "Until I stop", at most 24 hours) and tap
+"Start sharing"; iOS then asks for permission ("While Using the App"). Only that crew sees your position,
+for at most 15 minutes after the last update, then it is deleted. To stop, tap "Sharing location", then
+"Stop sharing my location", or use Settings, "Stop sharing location".
 
 ACCOUNT DELETION (Guideline 5.1.1(v))
-On the "Fests" tab tap your avatar (top right) to open Settings, then "Delete account", type DELETE and
-tap "Delete my account". The account and its data are deleted on our server immediately.
+On "Fests" tap your avatar (top right) for Settings, then "Delete account", type DELETE and tap "Delete
+my account". The account and its data are deleted on our server immediately.
 
 FESTIVAL DATA
-Festie is an independent app and is not affiliated with or endorsed by any festival, organizer or
-artist; every festival screen says so. Real festival schedules are factual information (names, stages,
-set times) entered from the organizers' public official schedules, with the source recorded; no logos,
-artwork or photos are used. Published real festivals at submission: __REAL_FESTIVALS__. "Festie Demo
-Fest" is fictional sample data.
+Festie is independent and not affiliated with or endorsed by any festival, organizer or artist; the
+"Fests" list, "Lineup", the Schedule tab's "+" (add sets) screen, Settings and the Terms say so. Real
+schedules are factual (names, stages, set times), entered from organizers' public official schedules with
+the source recorded; no logos, artwork or photos. Published real festivals: __REAL_FESTIVALS__.
 
 PERMISSIONS
-Location (While Using): your position on the festival map and, only when you turn on sharing, for your
-crew. Camera and Photos: only when you add a totem photo to a meetup; location metadata is removed before
-upload. Notifications: optional local reminders for sets and meetups (no push server).
+Location (While Using): map position and, only while sharing, for your crew. Camera/Photos: only for a
+totem photo; location metadata is removed before upload. Notifications: optional local reminders.
 
 Contact: __SUPPORT_EMAIL__
 

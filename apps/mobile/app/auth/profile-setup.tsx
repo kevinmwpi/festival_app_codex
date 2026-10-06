@@ -1,4 +1,5 @@
 import { colors, InlineMessage, PrimaryButton, spacing, TextLink } from '@festival/ui';
+import { router } from 'expo-router';
 import React from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -63,7 +64,12 @@ export default function ProfileSetupScreen() {
             onPress={() => void handleSave()}
           />
           <View style={styles.signOutRow}>
-            <TextLink label={signingOut ? 'Signing out…' : 'Sign out'} onPress={signingOut ? () => undefined : handleSignOut} />
+            <TextLink align="center" label={signingOut ? 'Signing out…' : 'Sign out'} onPress={signingOut ? () => undefined : handleSignOut} />
+            <TextLink
+              align="center"
+              label="Delete my account"
+              onPress={signingOut ? () => undefined : () => router.push('/auth/delete-account')}
+            />
           </View>
         </View>
       </ScrollView>
@@ -102,5 +108,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  signOutRow: { alignItems: 'center' },
+  signOutRow: { alignItems: 'center', gap: spacing.sm },
 });
